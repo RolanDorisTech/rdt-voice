@@ -4,6 +4,8 @@
 
 No desktop app install. No account. No RDT cloud transcription. No build step.
 
+🚀 **[Try Live: https://rolandoristech.github.io/rdt-voice/rdt-voice.html](https://rolandoristech.github.io/rdt-voice/rdt-voice.html)**
+
 ⬇ **[Download rdt-voice.html](rdt-voice.html)**
 
 MIT · Single HTML · Local-first · OpenAI-compatible STT · MLX Ready

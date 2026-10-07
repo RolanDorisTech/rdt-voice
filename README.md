@@ -8,7 +8,7 @@ No desktop app install. No account. No RDT cloud transcription. No build step.
 
 ⬇ **[Download rdt-voice.html](rdt-voice.html)**
 
-MIT · Single HTML · Local-first · OpenAI-compatible STT · MLX Ready
+PolyForm Noncommercial • Source-Available • Single HTML • Local-first • OpenAI-compatible STT • MLX Ready
 
 ---
 
@@ -178,6 +178,14 @@ PRs welcome. Keep it single-file. No npm install. Test in Chrome, Safari, and Fi
 
 ### License
 
-MIT — Copyright (c) 2026 Rolan & Doris Tech. See LICENSE. If you share the file, keep the header that links back to this repo and to https://youtube.com/@RolanDorisTech
+**RDT Voice v0.1-alpha.1 and earlier:** MIT License - see [`LICENSE-MIT-v0.1`](LICENSE-MIT-v0.1)
 
-Built by Rolan & Doris Tech.
+**RDT Voice v0.2-rc.1 and later:** PolyForm Noncommercial License 1.0.0 - see [`LICENSE`](LICENSE)
+
+Source-available, free for noncommercial use (personal, research, education, hobby, nonprofit). Commercial use requires separate permission — contact woknewsbusiness@gmail.com — see [`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md).
+
+Full history: [`LICENSE_HISTORY.md`](LICENSE_HISTORY.md)
+
+**Third-party:** React (MIT), Tailwind CSS (MIT), Transformers.js (Apache 2.0), Whisper models © OpenAI / Hugging Face (their respective licenses). Audio stays on-device.
+
+Built by Rolan & Doris Tech. Contact: woknewsbusiness@gmail.com

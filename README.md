@@ -4,7 +4,7 @@
 
 - 🚀 **[Try RDT Voice](https://rolandoristech.github.io/rdt-voice/)**
 - ⬇ **[View the current app source](index.html)** · [Download the complete repository ZIP](https://github.com/RolanDorisTech/rdt-voice/archive/refs/heads/main.zip)
-- 🧰 **[Apple Silicon backend source](backend/server.py)** · [requirements](backend/requirements.txt)
+- 🧰 **[Apple Silicon backend setup guide](backend/apple/README.md)** · [server source](backend/apple/server.py) · [requirements](backend/apple/requirements.txt)
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
@@ -43,6 +43,14 @@ python3 -m http.server 5173
 Open `http://localhost:5173/`. The root `index.html` is the current app. The existing `rdt-voice.html` is intentionally retained unchanged as the earlier historical version. Do not double-click an HTML file and open it as a `file://` URL; browser permissions and origin behavior are less predictable that way.
 
 ## Run your own Whisper backend
+
+### Why run your own backend?
+
+For users with compatible hardware, running Whisper locally can make a **dramatic difference in transcription speed and reliability**, especially with longer recordings. In my testing on Apple Silicon, the local Whisper backend has been much faster and more consistent than browser-based EasyWhisper for some demanding recordings.
+
+Your results will depend on your hardware, selected model, audio quality, and language. EasyWhisper remains the easiest option when you don't want to install a separate backend.
+
+For Apple Silicon Macs, see the [Apple Silicon backend setup guide](backend/apple/README.md).
 
 ### Platform scope
 
@@ -189,7 +197,7 @@ The following are observations from development and real-device testing, not uni
 ### Recording and saved audio
 
 - **Private / incognito browsing:** in our testing, saving audio files did not work in at least one private-browsing environment. Other browsers may behave differently, and private sessions can also restrict storage or persistence. Use a normal browser profile for important recordings and verify the exported file before deleting the source.
-- **Background tabs:** some browsers or device configurations may pause/suspend recording or audio processing when you switch tabs, hide the page, or lock the device. Chrome allowed background use in some of our tests, but this is not consistent enough to promise. Keep RDT Voice visible and the device awake for important or long recordings; check the timer/status if you switch away.
+- **Switching tabs or desktops:** behavior varies by browser and device. In our Chrome desktop testing, audio continued recording while RDT Voice was hidden or on another desktop, but the on-screen timer stopped updating while the page was hidden, so elapsed time could be inaccurate until you returned. Safari on iOS appeared more likely to pause or suspend recording when the app lost the foreground. These are observed quirks, not guarantees. For important recordings, keep RDT Voice visible and the device awake, and verify the saved recording’s duration and playback before relying on it.
 - **Long recordings:** recordings beyond about **30 minutes have not been reliable in our testing**. This is an observed reliability limit, not a guaranteed hard-coded cutoff. Split important sessions into smaller recordings.
 - **Recovery if transcription fails:** the original audio may still be available under **Recordings** even when the first transcription attempt fails. Open Recordings and press **Transcribe** on the saved clip. Before retrying a long clip or one that has failed repeatedly, select a smaller EasyWhisper model—**Tiny is the safest starting point for recovery**. Download a copy of important audio before deleting or clearing storage.
 

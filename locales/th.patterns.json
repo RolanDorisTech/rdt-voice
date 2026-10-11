@@ -1,0 +1,727 @@
+[
+  {
+    "id": "p01",
+    "regex": "^About (\\d+) sec left$",
+    "en": "เหลือเวลาประมาณ $1 วินาที"
+  },
+  {
+    "id": "p02",
+    "regex": "^About (\\d+) min left$",
+    "en": "เหลือเวลาประมาณ $1 นาที"
+  },
+  {
+    "id": "p03",
+    "regex": "^(\\d+)s ago$",
+    "en": "$1 วินาทีที่แล้ว"
+  },
+  {
+    "id": "p04",
+    "regex": "^(\\d+)m ago$",
+    "en": "$1 นาทีที่แล้ว"
+  },
+  {
+    "id": "p05",
+    "regex": "^(\\d+)h (\\d+)m ago$",
+    "en": "$1 ชม. $2 นาทีที่แล้ว"
+  },
+  {
+    "id": "p06",
+    "regex": "^(\\d+)d ago$",
+    "en": "$1 วันที่แล้ว"
+  },
+  {
+    "id": "p07",
+    "regex": "^(\\d+)w ago$",
+    "en": "$1 สัปดาห์ที่แล้ว"
+  },
+  {
+    "id": "p08",
+    "regex": "^(\\d+)w • (\\d+) WPM • filler: (.+)$",
+    "en": "$1 คำ • $2 WPM • คำฟุ่มเฟือย: $3"
+  },
+  {
+    "id": "p09",
+    "regex": "^TRANSCRIBING( · \\d+ QUEUED)?$",
+    "en": "กำลังถอดเสียง$1"
+  },
+  {
+    "id": "p10",
+    "regex": "^(\\d+) QUEUED$",
+    "en": "$1 อยู่ในคิว"
+  },
+  {
+    "id": "p11",
+    "regex": "^(\\d+) selected$",
+    "en": "เลือกแล้ว $1 รายการ"
+  },
+  {
+    "id": "p12",
+    "regex": "^Copy selected \\((\\d+)\\)$",
+    "en": "คัดลอกที่เลือก ($1)"
+  },
+  {
+    "id": "p13",
+    "regex": "^Attachments \\((\\d+)\\)$",
+    "en": "ไฟล์แนบ ($1)"
+  },
+  {
+    "id": "p14",
+    "regex": "^Load (\\d+) selected$",
+    "en": "โหลดที่เลือก $1 รายการ"
+  },
+  {
+    "id": "p15",
+    "regex": "^Delete (\\d+) selected item(s?)\\?$",
+    "en": "ลบรายการที่เลือก $1 รายการ$2 หรือไม่"
+  },
+  {
+    "id": "p16",
+    "regex": "^Loaded (\\d+) item(s?)$",
+    "en": "โหลดแล้ว $1 รายการ$2"
+  },
+  {
+    "id": "p17",
+    "regex": "^Cleaned up (\\d+) old recording(s?)\\.$",
+    "en": "ล้างไฟล์บันทึกเก่าแล้ว: $1 รายการ"
+  },
+  {
+    "id": "p18",
+    "regex": "^Downloaded 1 ZIP containing (\\d+) attachment(s?)\\.$",
+    "en": "ดาวน์โหลด ZIP 1 ไฟล์ ซึ่งมีไฟล์แนบ $1 รายการ$2 แล้ว"
+  },
+  {
+    "id": "p19",
+    "regex": "^Queued (\\d+) audio file(s?) — they will transcribe in order\\.$",
+    "en": "เพิ่มไฟล์เสียง $1 ไฟล์$2 เข้าคิวแล้ว — จะถอดเสียงตามลำดับ"
+  },
+  {
+    "id": "p20",
+    "regex": "^(\\d+) audio file(s?) added to the paused queue\\.$",
+    "en": "เพิ่มไฟล์เสียง $1 ไฟล์$2 ลงในคิวที่พักไว้แล้ว"
+  },
+  {
+    "id": "p21",
+    "regex": "^(\\d+) non-audio file(s?) ignored\\.$",
+    "en": "ละเว้นไฟล์ที่ไม่ใช่เสียง $1 ไฟล์$2 แล้ว"
+  },
+  {
+    "id": "p22",
+    "regex": "^Audio queue paused after an error\\. (\\d+) file(s?) remain(s?) queued\\.$",
+    "en": "พักคิวเสียงหลังเกิดข้อผิดพลาด ยังมีไฟล์ $1 ไฟล์$2 ค้างในคิว$3"
+  },
+  {
+    "id": "p23",
+    "regex": "^Copied\\.( \\d+ images? included inline\\.)?( \\d+ files? remain attached here; nothing was downloaded\\.)?$",
+    "en": "คัดลอกแล้ว$1$2"
+  },
+  {
+    "id": "p24",
+    "regex": "^Transcribing: (.+)$",
+    "en": "กำลังถอดเสียง: $1"
+  },
+  {
+    "id": "p25",
+    "regex": "^Folder selected: (.+) — edit the field if your backend needs the full path\\.$",
+    "en": "เลือกโฟลเดอร์แล้ว: $1 — แก้ไขช่องหากแบ็กเอนด์ของคุณต้องการเส้นทางเต็ม"
+  },
+  {
+    "id": "p26",
+    "regex": "^Could not open folder: (.+)$",
+    "en": "ไม่สามารถเปิดโฟลเดอร์ได้: $1"
+  },
+  {
+    "id": "p28",
+    "regex": "^Backed up (\\d+) files \\((.+)\\)\\.$",
+    "en": "สำรองข้อมูลแล้ว $1 ไฟล์ ($2)"
+  },
+  {
+    "id": "p29",
+    "regex": "^Backup failed: (.+)$",
+    "en": "สำรองข้อมูลล้มเหลว: $1"
+  },
+  {
+    "id": "p30",
+    "regex": "^Restored (\\d+) files \\((.+)\\)\\. Reload to use\\.$",
+    "en": "กู้คืนแล้ว $1 ไฟล์ ($2) โหลดหน้าใหม่เพื่อใช้งาน"
+  },
+  {
+    "id": "p31",
+    "regex": "^Restore failed: (.+)$",
+    "en": "กู้คืนล้มเหลว: $1"
+  },
+  {
+    "id": "p32",
+    "regex": "^Export failed: (.+)$",
+    "en": "ส่งออกล้มเหลว: $1"
+  },
+  {
+    "id": "p33",
+    "regex": "^Could not start microphone: (.+)$",
+    "en": "ไม่สามารถเริ่มไมโครโฟนได้: $1"
+  },
+  {
+    "id": "p34",
+    "regex": "^Storage estimate failed: (.+)$",
+    "en": "การประเมินพื้นที่จัดเก็บล้มเหลว: $1"
+  },
+  {
+    "id": "p35",
+    "regex": "^EasyWhisper worker failed: (.+)$",
+    "en": "Worker ของ EasyWhisper ล้มเหลว: $1"
+  },
+  {
+    "id": "p36",
+    "regex": "^EasyWhisper error: (.+)$",
+    "en": "ข้อผิดพลาด EasyWhisper: $1"
+  },
+  {
+    "id": "p37",
+    "regex": "^LIVE chunk failed: (.+)$",
+    "en": "ชิ้นส่วน LIVE ล้มเหลว: $1"
+  },
+  {
+    "id": "p38",
+    "regex": "^Manifest unavailable: (.+)$",
+    "en": "Manifest ไม่พร้อมใช้งาน: $1"
+  },
+  {
+    "id": "p39",
+    "regex": "^Worker stalled for (\\d+)s without any progress message\\.$",
+    "en": "Worker ค้างเป็นเวลา $1 วินาทีโดยไม่มีข้อความความคืบหน้าใดๆ"
+  },
+  {
+    "id": "p40",
+    "regex": "^(.+) Your recording is kept — retry from the dialog or download it\\.$",
+    "en": "$1 การบันทึกของคุณยังคงอยู่ — ลองใหม่จากกล่องโต้ตอบหรือดาวน์โหลด"
+  },
+  {
+    "id": "p41",
+    "regex": "^(.+) — your audio is kept\\. Retry, or download it from the recordings list\\.$",
+    "en": "$1 — เก็บเสียงของคุณไว้ ลองใหม่ หรือดาวน์โหลดจากรายการการบันทึก"
+  },
+  {
+    "id": "p43",
+    "regex": "^([\\s\\S]+)\\n\\nTip: switch to Local Server in Settings if your backend is running\\.$",
+    "en": "$1\n\nเคล็ดลับ: เปลี่ยนเป็น Local Server ในการตั้งค่าหากแบ็กเอนด์ของคุณกำลังทำงานอยู่"
+  },
+  {
+    "id": "p46",
+    "regex": "^This browser/page cannot record audio \\(missing: (.+)\\)\\. Use HTTPS or localhost and a current browser\\.$",
+    "en": "เบราว์เซอร์/หน้านี้ไม่สามารถบันทึกเสียงได้ (ขาด: $1) ใช้ HTTPS หรือ localhost และเบราว์เซอร์รุ่นปัจจุบัน"
+  },
+  {
+    "id": "p47",
+    "regex": "^The browser reported (.+)\\. RDT Voice stopped instead of silently sending a partial recording\\.$",
+    "en": "เบราว์เซอร์รายงานว่า $1 RDT Voice หยุดแทนที่จะส่งการบันทึกบางส่วนไปโดยไม่แจ้ง"
+  },
+  {
+    "id": "p48",
+    "regex": "^RDT Voice expected about ([\\d.]+)s, but the captured audio is only about ([\\d.]+)s\\. We did NOT send this recording for transcription\\. The captured audio is kept here so you can retry or inspect it\\.$",
+    "en": "RDT Voice คาดว่าจะได้ประมาณ $1 วินาที แต่เสียงที่จับได้มีเพียงประมาณ $2 วินาที เราไม่ได้ส่งการบันทึกนี้เพื่อถอดเสียง เก็บเสียงที่จับได้ไว้ที่นี่เพื่อให้คุณลองใหม่หรือตรวจสอบ"
+  },
+  {
+    "id": "p49",
+    "regex": "^No audio data was captured \\(([\\d.]+)s elapsed but 0 bytes received\\)\\. RDT Voice did not send anything for transcription\\. Close other apps using the mic, then try again\\.$",
+    "en": "ไม่มีข้อมูลเสียงที่จับได้ ($1 วินาทีผ่านไปแต่ได้รับ 0 ไบต์) RDT Voice ไม่ได้ส่งสิ่งใดเพื่อถอดเสียง ปิดแอปอื่นที่ใช้ไมค์แล้วลองอีกครั้ง"
+  },
+  {
+    "id": "p50",
+    "regex": "^Model not in pinned manifest: (.+)$",
+    "en": "ไม่มีโมเดลใน manifest ที่ปักหมุด: $1"
+  },
+  {
+    "id": "p51",
+    "regex": "^RAM (.+) GB$",
+    "en": "RAM $1 GB"
+  },
+  {
+    "id": "p52",
+    "regex": "^CPU · (\\d+) threads reported$",
+    "en": "CPU · รายงาน $1 เธรด"
+  },
+  {
+    "id": "p53",
+    "regex": "^(\\d+) percent, (.+)$",
+    "en": "$1 เปอร์เซ็นต์, $2"
+  },
+  {
+    "id": "p54",
+    "regex": "^(\\d+)% · Downloading model$",
+    "en": "$1% · กำลังดาวน์โหลดโมเดล"
+  },
+  {
+    "id": "p55",
+    "regex": "^Segment (\\d+)$",
+    "en": "เซกเมนต์ $1"
+  },
+  {
+    "id": "p56",
+    "regex": "^Backend (\\d+)$",
+    "en": "แบ็กเอนด์ $1"
+  },
+  {
+    "id": "p57",
+    "regex": "^Ready • Model: (.+) • Port: (.+)$",
+    "en": "พร้อม • โมเดล: $1 • พอร์ต: $2"
+  },
+  {
+    "id": "p58",
+    "regex": "^Latency: (.+)ms$",
+    "en": "เวลาแฝง: $1ms"
+  },
+  {
+    "id": "p59",
+    "regex": "^Local: (.+)$",
+    "en": "ภายในเครื่อง: $1"
+  },
+  {
+    "id": "p60",
+    "regex": "^Remote → (.+)$",
+    "en": "ระยะไกล → $1"
+  },
+  {
+    "id": "p61",
+    "regex": "^model: (.+)$",
+    "en": "โมเดล: $1"
+  },
+  {
+    "id": "p62",
+    "regex": "^total: (.+)$",
+    "en": "ทั้งหมด: $1"
+  },
+  {
+    "id": "p63",
+    "regex": "^Model: (.+)$",
+    "en": "โมเดล: $1"
+  },
+  {
+    "id": "p64",
+    "regex": "^Size: (.+)$",
+    "en": "ขนาด: $1"
+  },
+  {
+    "id": "p65",
+    "regex": "^Length: (.+)$",
+    "en": "ความยาว: $1"
+  },
+  {
+    "id": "p66",
+    "regex": "^Selected: (.+)$",
+    "en": "เลือกแล้ว: $1"
+  },
+  {
+    "id": "p67",
+    "regex": "^Linked: (.+)$",
+    "en": "เชื่อมโยงแล้ว: $1"
+  },
+  {
+    "id": "p68",
+    "regex": "^Open Folder \\(:(\\d+)\\)$",
+    "en": "เปิดโฟลเดอร์ (:$1)"
+  },
+  {
+    "id": "p69",
+    "regex": "^Port (.+) • Latency (.+)ms( • Last .+)?$",
+    "en": "พอร์ต $1 • เวลาแฝง $2ms$3"
+  },
+  {
+    "id": "p70",
+    "regex": "^(\\d+) GB \\(custom\\)$",
+    "en": "$1 GB (กำหนดเอง)"
+  },
+  {
+    "id": "p71",
+    "regex": "^(\\d+) days \\(custom\\)$",
+    "en": "$1 วัน (กำหนดเอง)"
+  },
+  {
+    "id": "p72",
+    "regex": "^(-?\\d+) dBFS$",
+    "en": "$1 dBFS"
+  },
+  {
+    "id": "p73",
+    "regex": "^(\\d+) file(s?)$",
+    "en": "$1 ไฟล์$2"
+  },
+  {
+    "id": "p74",
+    "regex": "^⬇ LOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ โหลดโมเดลนี้ ($1)"
+  },
+  {
+    "id": "p75",
+    "regex": "^⬇ DOWNLOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ ดาวน์โหลดโมเดลนี้ ($1)"
+  },
+  {
+    "id": "p76",
+    "regex": "^✓ Backend OK · (\\d+)ms$",
+    "en": "✓ แบ็กเอนด์ใช้ได้ · $1ms"
+  },
+  {
+    "id": "p77",
+    "regex": "^✗ Backend HTTP (\\d+)$",
+    "en": "✗ HTTP แบ็กเอนด์ $1"
+  },
+  {
+    "id": "p78",
+    "regex": "^✗ Backend: (.+)$",
+    "en": "✗ แบ็กเอนด์: $1"
+  },
+  {
+    "id": "p81",
+    "regex": "^Couldn't check for updates: (.+)$",
+    "en": "ตรวจสอบอัปเดตไม่ได้: $1"
+  },
+  {
+    "id": "p82",
+    "regex": "^Latest (.+): (.+)$",
+    "en": "ล่าสุด $1: $2"
+  },
+  {
+    "id": "p83",
+    "regex": "^⚠ BATCH mode sends audio to (.+)\\. Audio leaves this device\\.$",
+    "en": "⚠ โหมด BATCH ส่งเสียงไปยัง $1 เสียงออกจากอุปกรณ์นี้"
+  },
+  {
+    "id": "p84",
+    "regex": "^(.+) is loaded into the browser\\. Future transcriptions will be instant\\.$",
+    "en": "$1 ถูกโหลดเข้าสู่เบราว์เซอร์แล้ว การถอดเสียงครั้งต่อไปจะทำได้ทันที"
+  },
+  {
+    "id": "p85",
+    "regex": "^The (.+) model hasn't been loaded into the browser\\. Load it now — this only needs to happen once\\.$",
+    "en": "ยังไม่ได้โหลดโมเดล $1 เข้าสู่เบราว์เซอร์ โหลดตอนนี้ — ต้องทำเพียงครั้งเดียว"
+  },
+  {
+    "id": "p86",
+    "regex": "^Loading (.+)$",
+    "en": "กำลังโหลด $1"
+  },
+  {
+    "id": "p87",
+    "regex": "^Open (.+)/health — you should see JSON\\.$",
+    "en": "เปิด $1/health — คุณควรเห็น JSON"
+  },
+  {
+    "id": "p88",
+    "regex": "^No file list – add GET /v1/recordings/list in server\\.py \\(port (\\d+)\\)$",
+    "en": "ไม่มีรายการไฟล์ – เพิ่ม GET /v1/recordings/list ใน server.py (พอร์ต $1)"
+  },
+  {
+    "id": "p89",
+    "regex": "^Preview cleanup would affect (\\d+) words • WPM (.+) • Reading time ~(.+) min$",
+    "en": "การล้างตัวอย่างจะกระทบคำ $1 คำ • WPM $2 • เวลาอ่าน ~$3 นาที"
+  },
+  {
+    "id": "p90",
+    "regex": "^Last: Length (.+) • Processing (.+) • (.+)x • Transcription (.+) words • Transcription WPM (.+) • (.+) chars • (.+) sentences • Peak (.+) tok/s • Model (.+)$",
+    "en": "ล่าสุด: ความยาว $1 • ประมวลผล $2 • $3x • ถอดเสียง $4 คำ • WPM $5 • $6 อักขระ • $7 ประโยค • สูงสุด $8 tok/s • โมเดล $9"
+  },
+  {
+    "id": "p91",
+    "regex": "^(.+) • (.+) tok/s • (.+)x(.*)$",
+    "en": "$1 • $2 tok/s • $3 เท่า$4"
+  },
+  {
+    "id": "p93",
+    "regex": "^(\\d+)h ago$",
+    "en": "$1 ชม.ที่แล้ว"
+  },
+  {
+    "id": "p94",
+    "regex": "^(\\d+)mo ago$",
+    "en": "$1 เดือนที่แล้ว"
+  },
+  {
+    "id": "p95",
+    "regex": "^About (\\d+) hr (\\d+) min left$",
+    "en": "เหลือเวลาประมาณ $1 ชม. $2 นาที"
+  },
+  {
+    "id": "p96",
+    "regex": "^LIVE speech is unavailable offline in this browser for (.+)\\. Connect to the internet or use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "เสียงพูด LIVE ไม่พร้อมใช้งานแบบออฟไลน์ในเบราว์เซอร์นี้สำหรับ $1 เชื่อมต่ออินเทอร์เน็ตหรือใช้ BATCH/EasyWhisper สำหรับการถอดเสียงออฟไลน์"
+  },
+  {
+    "id": "p97",
+    "regex": "^RAM ≥(\\d+) GB$",
+    "en": "RAM ≥$1 GB"
+  },
+  {
+    "id": "p98",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB \\(user\\)$",
+    "en": "RAM $1–$2 GB (ผู้ใช้)"
+  },
+  {
+    "id": "p99",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB$",
+    "en": "RAM $1–$2 GB"
+  },
+  {
+    "id": "p100",
+    "regex": "^RAM (\\d+)\\+ GB \\(user\\)$",
+    "en": "RAM $1+ GB (ผู้ใช้)"
+  },
+  {
+    "id": "p101",
+    "regex": "^RAM (\\d+) GB \\(user\\)$",
+    "en": "RAM $1 GB (ผู้ใช้)"
+  },
+  {
+    "id": "p102",
+    "regex": "^RAM (\\d+)\\+ GB$",
+    "en": "RAM $1+ GB"
+  },
+  {
+    "id": "p103",
+    "regex": "^Copied (\\d+) image(s?)\\. (\\d+) files still need Download All or ZIP\\.$",
+    "en": "คัดลอกรูปภาพ $1 รูป$2 แล้ว ยังมีไฟล์ $3 ไฟล์ที่ต้องใช้ Download All หรือ ZIP"
+  },
+  {
+    "id": "p104",
+    "regex": "^Copied (\\d+) image(s?)\\. No files were downloaded\\.$",
+    "en": "คัดลอกรูปภาพ $1 รูป$2 แล้ว ไม่มีไฟล์ถูกดาวน์โหลด"
+  },
+  {
+    "id": "p105",
+    "regex": "^Downloaded (\\d+) attachment(s?)\\.$",
+    "en": "ดาวน์โหลดไฟล์แนบ $1 รายการ$2 แล้ว"
+  },
+  {
+    "id": "p106",
+    "regex": "^(\\d+) recording(s?) deleted\\.$",
+    "en": "ลบไฟล์บันทึก $1 รายการ$2 แล้ว"
+  },
+  {
+    "id": "p107",
+    "regex": "^1 recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "ลบไฟล์บันทึก 1 รายการ ไม่สำเร็จ $1 รายการ"
+  },
+  {
+    "id": "p108",
+    "regex": "^(\\d+) model(s?) reset( · files purged)?$",
+    "en": "รีเซ็ตโมเดล $1 รายการ$2$3 แล้ว"
+  },
+  {
+    "id": "p109",
+    "regex": "^Live speech stopped unexpectedly( \\([^)]+\\)|\\.)$",
+    "en": "เสียงสดหยุดกะทันหัน$1"
+  },
+  {
+    "id": "p110",
+    "regex": "^Switched to (.+) — testing…$",
+    "en": "สลับไปที่ $1 แล้ว — กำลังทดสอบ…"
+  },
+  {
+    "id": "p111",
+    "regex": "^Could not switch: (.+)$",
+    "en": "สลับไม่ได้: $1"
+  },
+  {
+    "id": "p112",
+    "regex": "^Opened (.+)$",
+    "en": "เปิด $1 แล้ว"
+  },
+  {
+    "id": "p114",
+    "regex": "^DEV LAB • (.+) • EXPERIMENTAL$",
+    "en": "DEV LAB • $1 • ทดลอง"
+  },
+  {
+    "id": "p115",
+    "regex": "^Copied (\\d+) image(s?)\\. 1 file still need Download All or ZIP\\.$",
+    "en": "คัดลอกรูปภาพ $1 รูป$2 แล้ว ยังมีอีก 1 ไฟล์ที่ต้องใช้ Download All หรือ ZIP"
+  },
+  {
+    "id": "p116",
+    "regex": "^ADVANCED • RAW SEGMENTS \\((\\d+)\\)$",
+    "en": "ขั้นสูง • RAW SEGMENTS ($1)"
+  },
+  {
+    "id": "p117",
+    "regex": "^Long recording audio · (.+)$",
+    "en": "เสียงบันทึกยาว · $1"
+  },
+  {
+    "id": "p118",
+    "regex": "^(\\d+) selected · (\\d+) recordings$",
+    "en": "$1 รายการที่เลือก · ไฟล์บันทึก $2 รายการ"
+  },
+  {
+    "id": "p119",
+    "regex": "^((?:[2-9]|[1-9]\\d+)) recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "ลบไฟล์บันทึก $1 รายการ ไม่สำเร็จ $2 รายการ"
+  },
+  {
+    "id": "p120",
+    "regex": "^PLAYING · (.+)$",
+    "en": "กำลังเล่น · $1"
+  },
+  {
+    "id": "p121",
+    "regex": "^EasyWhisper · (.+)$",
+    "en": "EasyWhisper · $1"
+  },
+  {
+    "id": "p122",
+    "regex": "^• Spoken (.+) WPM • (.+)w$",
+    "en": "• ความเร็วพูด $1 WPM • $2 คำ"
+  },
+  {
+    "id": "p123",
+    "regex": "^Already connected( · \\d+ ms)?$",
+    "en": "เชื่อมต่อแล้ว$1"
+  },
+  {
+    "id": "p124",
+    "regex": "^Current status: (.+)$",
+    "en": "สถานะปัจจุบัน: $1"
+  },
+  {
+    "id": "p125",
+    "regex": "^Latest\\s+v(.+)$",
+    "en": "ล่าสุด v$1"
+  },
+  {
+    "id": "p126",
+    "regex": "^GPU renderer: (.+)$",
+    "en": "ตัวแสดงผล GPU: $1"
+  },
+  {
+    "id": "p127",
+    "regex": "^Worker OK\\. Empty result: \"([\\s\\S]+)\"$",
+    "en": "Worker ปกติ ผลลัพธ์ว่าง: \"$1\""
+  },
+  {
+    "id": "p128",
+    "regex": "^FAILED: ([\\s\\S]+)$",
+    "en": "ล้มเหลว: $1"
+  },
+  {
+    "id": "p129",
+    "regex": "^Cache keys: (.+)$",
+    "en": "คีย์แคช: $1"
+  },
+  {
+    "id": "p130",
+    "regex": "^Cache check failed: ([\\s\\S]+)$",
+    "en": "ตรวจสอบแคชไม่สำเร็จ: $1"
+  },
+  {
+    "id": "p131",
+    "regex": "^worker\\.js fetched \\((\\d+) bytes\\)\\. See console\\.$",
+    "en": "ดึง worker.js แล้ว ($1 ไบต์) โปรดดูคอนโซล"
+  },
+  {
+    "id": "p132",
+    "regex": "^worker\\.js fetch failed: ([\\s\\S]+)$",
+    "en": "ดึง worker.js ไม่สำเร็จ: $1"
+  },
+  {
+    "id": "p133",
+    "regex": "^Manifest fetch failed: ([\\s\\S]+)$",
+    "en": "ดึง manifest ไม่สำเร็จ: $1"
+  },
+  {
+    "id": "p134",
+    "regex": "^Assembling (\\d+(?:\\.\\d+)?) min of captured audio$",
+    "en": "กำลังรวมเสียงที่จับไว้ $1 นาที"
+  },
+  {
+    "id": "p135",
+    "regex": "^Assembling audio · (\\d+)%$",
+    "en": "กำลังรวมเสียง · $1%"
+  },
+  {
+    "id": "p136",
+    "regex": "^Decoding recorded audio \\(([\\d.]+) MB\\)$",
+    "en": "กำลังถอดรหัสเสียงที่บันทึกไว้ ($1 MB)"
+  },
+  {
+    "id": "p137",
+    "regex": "^Sending ([\\d.]+) min of audio to the transcription worker$",
+    "en": "กำลังส่งเสียง $1 นาทีไปยัง worker ถอดเสียง"
+  },
+  {
+    "id": "p138",
+    "regex": "^((?:🌐 )?)Display language — (.+) \\(([^()]+)\\)$",
+    "en": "$1 ภาษาที่แสดง — $2 ($3)"
+  },
+  {
+    "id": "p139",
+    "regex": "^A required model file could not be fetched\\. This is a network/CDN CORS failure, not a WebGPU placement warning\\. The app did not repeat the same fetch using WASM\\. Please retry later or test the same model download in another browser/network; the site cannot add missing CORS headers to Hugging Face's response\\. Details: ([\\s\\S]*)$",
+    "en": "ดึงไฟล์โมเดลที่จำเป็นไม่ได้ นี่เป็นข้อผิดพลาด CORS ของเครือข่าย/CDN ไม่ใช่คำเตือนการวางตำแหน่ง WebGPU แอปไม่ได้ลองดึงไฟล์เดิมซ้ำผ่าน WASM โปรดลองภายหลังหรือทดสอบดาวน์โหลดโมเดลเดียวกันด้วยเบราว์เซอร์/เครือข่ายอื่น เว็บไซต์ไม่สามารถเพิ่ม CORS header ที่ขาดในคำตอบจาก Hugging Face ได้ รายละเอียด: $1"
+  },
+  {
+    "id": "p141",
+    "regex": "^Permanently delete (\\d+) selected recording(s?)\\? This cannot be undone\\.$",
+    "en": "ลบไฟล์บันทึกที่เลือก $1 รายการ$2 อย่างถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้"
+  },
+  {
+    "id": "p142",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE preview needs an internet connection here\\. You can still use BATCH/EasyWhisper transcription offline\\.$",
+    "en": "เบราว์เซอร์นี้ยังไม่พร้อมใช้การรู้จำเสียงบนอุปกรณ์สำหรับ $1 การแสดงตัวอย่าง LIVE ต้องใช้อินเทอร์เน็ตที่นี่ แต่ยังถอดเสียงแบบออฟไลน์ด้วย BATCH/EasyWhisper ได้"
+  },
+  {
+    "id": "p143",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE needs an internet connection here\\. Use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "เบราว์เซอร์นี้ยังไม่พร้อมใช้การรู้จำเสียงบนอุปกรณ์สำหรับ $1 LIVE ต้องใช้อินเทอร์เน็ต ใช้ BATCH/EasyWhisper เพื่อถอดเสียงแบบออฟไลน์"
+  },
+  {
+    "id": "p144",
+    "regex": "^Your audio is safe\\. Save it now, then retry\\. Details: ([\\s\\S]*)$",
+    "en": "เสียงของคุณปลอดภัย บันทึกไว้ตอนนี้แล้วลองอีกครั้ง รายละเอียด: $1"
+  },
+  {
+    "id": "p145",
+    "regex": "^Duration: (.+)$",
+    "en": "ระยะเวลา: $1"
+  },
+  {
+    "id": "p146",
+    "regex": "^Segments: (\\d+)$",
+    "en": "เซกเมนต์: $1"
+  },
+  {
+    "id": "p147",
+    "regex": "^Total: (.+)$",
+    "en": "รวม: $1"
+  },
+  {
+    "id": "p148",
+    "regex": "^Base: (.+) • Format: (.+)$",
+    "en": "พื้นฐาน: $1 • รูปแบบ: $2"
+  },
+  {
+    "id": "p149",
+    "regex": "^Total fillers: (\\d+)$",
+    "en": "คำฟุ่มเฟือยทั้งหมด: $1"
+  },
+  {
+    "id": "p150",
+    "regex": "^(\\d+(?:\\.\\d+)?) (days|months|years)$",
+    "en": "$1 $2"
+  },
+  {
+    "id": "p151",
+    "regex": "^(\\d+) transcriptions • since (.+)$",
+    "en": "ถอดเสียง $1 ครั้ง • ตั้งแต่ $2"
+  },
+  {
+    "id": "p152",
+    "regex": "^(\\d+(?:\\.\\d+)?)([smh])$",
+    "en": "$1$2"
+  },
+  {
+    "id": "p153",
+    "regex": "^port: (.+)$",
+    "en": "พอร์ต: $1"
+  },
+  {
+    "id": "p154",
+    "regex": "^latency: (.+)$",
+    "en": "เวลาแฝง: $1"
+  }
+]

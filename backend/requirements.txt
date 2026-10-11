@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+mlx-whisper
+numpy
+python-multipart

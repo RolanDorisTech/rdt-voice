@@ -1,36 +1,21 @@
-# License History - RDT Voice
+# License History — RDT Voice
 
-This documents the licensing timeline for https://github.com/RolanDorisTech/rdt-voice
+This file summarizes the project's licensing records. The license accompanying a specific source snapshot or release is the best reference for that snapshot.
 
-## v0.1-alpha.1 and earlier - MIT License
+## Current source
 
-- All commits up to and including tag `v0.1-alpha.1` were released under MIT.
-- See `LICENSE-MIT-v0.1` for the full text.
-- GitHub tag `v0.1-alpha.1` remains MIT-licensed forever. You can check out that tag to get MIT code.
+The current repository's root `LICENSE` contains the PolyForm Noncommercial License 1.0.0 terms and the required RolanDorisTech copyright notice. Keep that file at the repository root. `COMMERCIAL_LICENSE.md` is a plain-language summary and does not replace the license text.
 
-Commit hash of v0.1-alpha.1: [INSERT YOUR COMMIT HASH AFTER YOU TAG - run `git rev-parse v0.1-alpha.1`]
+## Historical MIT license text
 
-## v0.2-rc.1 and later - PolyForm Noncommercial 1.0.0
+`licenses/historical/LICENSE-MIT-v0.1` preserves an MIT license text kept for historical reference.
 
-- Starting with `v0.2-rc.1`, the project is source-available under PolyForm Noncommercial License 1.0.0.
-- See `LICENSE` for full text.
-- Noncommercial use (personal, research, hobby, education, nonprofit) is free.
-- Commercial use requires separate permission - see `COMMERCIAL_LICENSE.md`.
+The local checkout did not resolve `v0.1-alpha.1` with `git rev-parse`, so this document does not claim that this tag exists or assign an unverified commit hash to it. The retained MIT license file by itself does not establish the exact commits, tags, or releases covered by that license. Verify a specific historical snapshot using its actual Git history and the license included with that snapshot before making version-specific claims.
 
-## Why the change?
+## Third-party software
 
-RDT Voice is built by a small team. To keep it sustainable while preventing direct commercial cloning before product-market fit, we moved to source-available noncommercial for v0.2+.
+Third-party libraries, runtime assets, fonts, and model files remain subject to their own licenses and notices; the RDT Voice license does not replace those terms. The acknowledgements in the main `README.md` are a summary, not a complete software bill of materials. When adding or redistributing a third-party dependency, retain the license and notices for the exact version actually included.
 
-## No contributor CLA needed
+## Commercial licensing
 
-All code up to this point was authored solely by RolanDorisTech. No external contributors need to sign off.
-
-## Third-party code
-
-- React, ReactDOM - MIT (Facebook)
-- Tailwind CSS - MIT
-- Hugging Face Transformers.js - Apache 2.0
-- Whisper models - by OpenAI / onnx-community under their own licenses
-- These retain their own licenses and are not covered by PolyForm.
-
-Contact for commercial licensing: woknewsbusiness@gmail.com
+The current project's license terms are in the root `LICENSE`. For questions about commercial permission, see `COMMERCIAL_LICENSE.md` or contact `woknewsbusiness@gmail.com`.

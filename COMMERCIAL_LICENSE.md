@@ -19,6 +19,6 @@ Pricing is TBD - early users will get favorable terms.
 
 ## Why not dual-license yet?
 
-We're pre-launch (v0.2-rc). Commercial terms will be finalized after we validate the product.
+We're pre-launch (v0.2). Commercial terms will be finalized after we validate the product.
 
 For now, if you're unsure, open an issue and ask.

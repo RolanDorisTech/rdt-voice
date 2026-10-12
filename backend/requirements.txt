@@ -3,4 +3,4 @@ uvicorn
 mlx-whisper
 numpy
 python-multipart
-qrcode
+qrcode>=7.4,<9

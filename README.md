@@ -10,7 +10,7 @@ RDT Voice — Browser transcription with EasyWhisper and your own Whisper backen
 **Record in your browser. Transcribe on your device or send audio to a Whisper backend you control. Export captions, transcripts, YouTube chapters, and description drafts.**
 
 - 🚀 **[Try RDT Voice](https://rolandoristech.github.io/rdt-voice/)**
-- ⬇  **[View the current app source](index.html)** · [Download the complete repository ZIP](https://github.com/RolanDorisTech/rdt-voice/archive/refs/heads/main.zip)
+- ⬇️ **[View the current app source](index.html)** · [Download the complete repository ZIP](https://github.com/RolanDorisTech/rdt-voice/archive/refs/heads/main.zip)
 - 🧰 **[Apple Silicon backend setup guide](backend/apple/README.md)** · [server source](backend/apple/server.py) · [requirements](backend/apple/requirements.txt)
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.

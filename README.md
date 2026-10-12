@@ -281,6 +281,7 @@ RDT Voice incorporates or loads third-party software and resources. Their licens
 - **ONNX Runtime Web** — [MIT License](https://github.com/microsoft/onnxruntime/blob/main/LICENSE); used as part of the browser inference stack.
 - **Google Fonts** — Inter and JetBrains Mono are served as web fonts under their respective upstream font licenses.
 - **Whisper model files and converted model assets** — governed by the terms of each upstream model repository. Check the specific model card and license rather than assuming all model files share one license.
+- * **OpenCC-JS 1.4.2** — MIT; bundled `opencc-data` dictionary data is Apache-2.0. See [`licenses/third-party/opencc-js/NOTICE.md`](licenses/third-party/opencc-js/NOTICE.md).
 
 This list is a practical summary, not a substitute for each upstream license. Preserve the existing repository license files and relevant notices when redistributing the project.
 

@@ -1,6 +1,6 @@
 # RDT Voice — Backend guide (shared remote-access and security instructions)
 
-This folder contains the optional Python backend for people who want to run Whisper on a computer they control. For r12 QR pairing, keep the supplied `index.html`, `worker.js`, `pcm-worklet.js`, `models.manifest.json`, and `locales/` directory beside `server.py`: the backend serves the static app from the same HTTPS origin so its HttpOnly browser session can authenticate API calls. The browser app can also run from GitHub Pages with EasyWhisper without installing a backend.
+This folder contains the optional Python backend for people who want to run Whisper on a computer they control. In this repository, `server.py` and `requirements.txt` belong in `backend/`; the frontend files (`index.html`, `worker.js`, `pcm-worklet.js`, `models.manifest.json`, and `locales/`) stay at the repository root beside the main README. The backend searches that parent folder automatically, so there is no need to duplicate the frontend bundle inside `backend/`. For r12 QR pairing, the backend serves the selected HTML and its companion assets from the same HTTPS origin so its HttpOnly browser session can authenticate API calls. The browser app can also run from GitHub Pages with EasyWhisper without installing a backend.
 
 ## Current platform support
 
@@ -123,7 +123,7 @@ If startup reports `ModuleNotFoundError: No module named 'qrcode'`, the Python e
 
 ## One-time QR pairing (experimental r12)
 
-The r12 backend adds an experimental browser-pairing flow. The backend still requires authentication; pairing exchanges a short-lived, single-use code for an HttpOnly browser-session cookie. The persistent bearer-token file remains on the backend computer unless an operator deliberately copies it into a browser as the fallback. Keep all the supplied frontend runtime assets beside `server.py` so the HTML, locale files, worker, model manifest, and API stay on the same origin.
+The r12 backend adds an experimental browser-pairing flow. The backend still requires authentication; pairing exchanges a short-lived, single-use code for an HttpOnly browser-session cookie. The persistent bearer-token file remains on the backend computer unless an operator deliberately copies it into a browser as the fallback. In this repository, keep the frontend runtime assets at the repository root and keep `server.py` inside `backend/`. The server locates the parent-folder HTML automatically; the worker, audio worklet, model manifest, and `locales/` folder should stay beside that HTML so they are served from the same origin. Do not maintain a second copy of the frontend inside `backend/`.
 
 ### Test from the backend computer
 

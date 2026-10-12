@@ -1583,17 +1583,25 @@ def _frontend_candidates():
     return ["index.html","rdt-voice.html"]
 
 def _find_frontend():
-    here=pathlib.Path(__file__).parent
-    search_dirs=[here,here/"frontend",pathlib.Path.cwd()]
+    here=pathlib.Path(__file__).resolve().parent
     env_override=os.getenv("RDT_VOICE_HTML","").strip()
     if env_override:
         p=pathlib.Path(env_override).expanduser()
-        if p.is_file(): return p
+        if p.is_file(): return p.resolve()
+    # Keep frontend files at the repository root while server.py lives in backend/.
+    # Also support a standalone backend/frontend folder and the legacy cwd layout.
+    search_dirs=[here,here/"frontend",here.parent,here.parent/"frontend",pathlib.Path.cwd()]
+    seen=set()
     for d in search_dirs:
-        if not d.is_dir(): continue
+        try:
+            d=d.resolve()
+            if d in seen or not d.is_dir(): continue
+            seen.add(d)
+        except OSError:
+            continue
         for n in _frontend_candidates():
             f=d/n
-            if f.is_file(): return f
+            if f.is_file(): return f.resolve()
     return None
 
 def _find_frontend_asset_dir() -> pathlib.Path:
@@ -1606,7 +1614,7 @@ def _serve_webui_root(host: Optional[str]=Header(None)):
     check_host(host)
     f=_find_frontend()
     if f: return FileResponse(str(f))
-    return {"status":"ok","model":MODEL_ID,"message":"Place RDT Voice HTML next to server.py or set RDT_VOICE_HTML"}
+    return {"status":"ok","model":MODEL_ID,"message":"Place RDT Voice HTML in the repository root or set RDT_VOICE_HTML"}
 
 @app.get("/rdt-voice")
 @app.get("/webui")

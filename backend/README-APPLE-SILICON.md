@@ -37,15 +37,33 @@ brew install python@3.12 ffmpeg
 
 FFmpeg is used to decode supported audio formats. This guide uses standard `pip` inside a virtual environment, so installing another package manager is not required. `uv` is a valid alternative for users who already use it, but it is not needed for this setup.
 
-## 3. Download and keep the complete backend folder
+## 3. Keep the repository layout intact
 
-Unzip the r12 test package and keep the contents of its `backend/` folder together in a dedicated directory on the Apple Silicon Mac, for example `~/dev/rdt-voice-backend`. Alongside `server.py` and `requirements.txt`, the r12 same-origin QR flow needs `index.html`, `worker.js`, `pcm-worklet.js`, `models.manifest.json`, and the complete `locales/` directory. Do not copy only `server.py` and `requirements.txt` if you want the QR-paired URL to serve the complete RDT Voice app.
+For a normal repository checkout, keep the folders arranged like this:
+
+```text
+rdt-voice/
+├── index.html
+├── worker.js
+├── pcm-worklet.js
+├── models.manifest.json
+├── locales/
+└── backend/
+    ├── server.py
+    ├── requirements.txt
+    ├── README.md
+    └── README-APPLE-SILICON.md
+```
+
+The frontend files stay at the repository root; `server.py` and `requirements.txt` stay in `backend/`. The backend searches the parent folder for `index.html`, then serves the worker, worklet, model manifest, and locales from that same frontend folder. Do not move or duplicate the frontend assets into `backend/`.
+
+If you deliberately deploy `backend/` separately from the frontend, keep the frontend folder beside it or set `RDT_VOICE_HTML` to the absolute path of your intended HTML. Its companion assets must remain beside that HTML.
 
 Do not put certificates, private keys, token files, recordings, or `.env` files into a public repository.
 
 ## 4. Create an isolated Python environment and install dependencies
 
-Run these commands from the directory containing `server.py` and `requirements.txt`:
+Run these commands from `backend/`, the directory containing `server.py` and `requirements.txt`:
 
 ```bash
 "$(brew --prefix python@3.12)/bin/python3.12" -m venv .venv

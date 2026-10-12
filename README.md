@@ -1,4 +1,11 @@
-# RDT Voice — Browser transcription with EasyWhisper and your own Whisper backend
+<p align="center">
+  <img src="assets/logo.png" alt="RDT Voice Logo" width="200">
+</p>
+
+<h1 align="center">RDT Voice</h1>
+<p align="center"><strong>Browser transcription with EasyWhisper and your own Whisper backend</strong></p>
+<hr>
+RDT Voice — Browser transcription with EasyWhisper and your own Whisper backend
 
 **Record in your browser. Transcribe on your device or send audio to a Whisper backend you control. Export captions, transcripts, YouTube chapters, and description drafts.**
 

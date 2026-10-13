@@ -1,6 +1,16 @@
-<p align="center">
-  <img src="assets/logo.png" alt="RDT Voice Logo" width="200">
-</p>
+[![RDT Voice - Try Now](https://img.shields.io/badge/RDT_Voice-Try_Now-brightgreen?style=for-the-badge&logo=github)](https://rolandoristech.github.io/rdt-voice/)
+
+## 🎥 See it in action
+
+Click either image below to try the live browser demo:
+
+<div align="center">
+  <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-ui.png" alt="RDT Voice Main Interface" width="100%"></a>
+  <br><br>
+  <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-EasySetup.png" alt="RDT Voice EasySetup" width="500"></a>
+</div>
+
+<p align="center">👉 <strong><a href="https://rolandoristech.github.io/rdt-voice/">Click here to try RDT Voice in your browser</a></strong></p>
 
 <h1 align="center">RDT Voice</h1>
 <p align="center"><strong>Browser transcription with EasyWhisper and your own Whisper backend</strong></p>
@@ -299,3 +309,7 @@ Third-party components and model weights remain under their respective licenses.
 PRs and focused bug reports are welcome. Keep the single-HTML application architecture and test changes in Chrome, Safari, and Firefox where possible. A useful bug report includes OS/browser version, processing mode (EasyWhisper or Local Server), model, approximate clip length, and the sanitized error message. **Do not attach private audio, bearer tokens, personal Tailscale hostnames, or unredacted diagnostic logs.**
 
 Contact: **woknewsbusiness@gmail.com**
+
+<p align="center">
+  <img src="assets/logo.png" alt="RDT Voice Logo" width="200">
+</p>

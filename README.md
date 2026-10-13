@@ -298,7 +298,7 @@ This list is a practical summary, not a substitute for each upstream license. Pr
 ## License
 
 - **RDT Voice v0.1-alpha.1 and earlier:** MIT License — see [`LICENSE-MIT-v0.1`](licenses/historical/LICENSE-MIT-v0.1).
-- **RDT Voice v0.2-rc.1 and later:** PolyForm Noncommercial License 1.0.0 — see [`LICENSE`](LICENSE).
+- **RDT Voice v0.2-alpha.1 and later:** PolyForm Noncommercial License 1.0.0 — see [`LICENSE`](LICENSE).
 - Commercial use requires separate permission; contact **woknewsbusiness@gmail.com** and see [`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md).
 - License history: [`LICENSE_HISTORY.md`](LICENSE_HISTORY.md).
 

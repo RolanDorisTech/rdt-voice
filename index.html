@@ -6055,6 +6055,48 @@ button:not(:disabled):active, [role="button"]:active { transform:none !important
 .mic-group-container .mic-main-btn { will-change:background-color,box-shadow; }
 
 </style>
+
+<style id="rdt-voice-hover-menu-fix-20261013">
+/* Prevent hover/active resets from removing transforms used to position these controls. */
+.mic-group-container .pause-btn,
+.mic-group-container .pause-btn:hover,
+.mic-group-container .pause-btn:focus-visible,
+.mic-group-container .pause-btn:active,
+.mic-group-container .cancel-btn,
+.mic-group-container .cancel-btn:hover,
+.mic-group-container .cancel-btn:focus-visible,
+.mic-group-container .cancel-btn:active {
+  transform: translate(-50%,-50%) !important;
+  transform-origin: center center !important;
+  transition-property: background-color,box-shadow,border-color,color,filter !important;
+}
+
+/* Live Preview intentionally has two positions: centered when OFF, left-shifted when ON.
+   Match its current state so hovering does not cancel its positioning/fly transition. */
+.rdt-live-preview-hover-zone > button.rdt-live-pill:not(.rdt-live-on):hover,
+.rdt-live-preview-hover-zone > button.rdt-live-pill:not(.rdt-live-on):focus-visible,
+.rdt-live-preview-hover-zone > button.rdt-live-pill:not(.rdt-live-on):active {
+  transform: translateX(-50%) !important;
+  transform-origin: center center !important;
+}
+.rdt-live-preview-hover-zone > button.rdt-live-pill.rdt-live-on:hover,
+.rdt-live-preview-hover-zone > button.rdt-live-pill.rdt-live-on:focus-visible,
+.rdt-live-preview-hover-zone > button.rdt-live-pill.rdt-live-on:active {
+  transform: translateX(0) !important;
+  transform-origin: center center !important;
+}
+
+/* The action row is near the bottom of the editor: always open its attachment menu upward. */
+.rdt-attachment-menu-wrap > .rdt-attachment-menu {
+  top: auto !important;
+  bottom: 100% !important;
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  max-height: min(205px, calc(100vh - 24px), calc(100dvh - 24px)) !important;
+  overflow-y: auto !important;
+  transform-origin: bottom right !important;
+}
+</style>
 </head>
 <body style="background:#2A2A2A;color:#EFEFEF;min-height:100vh;min-height:100dvh" class="select-none">
 <div id="root"></div>

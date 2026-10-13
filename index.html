@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2-DEV.8</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-4Rvp6LLzDnhi4+KXYknIK6YSoYn0C3lwnSbY/OEl1Fc=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-vxSmON68TrbGe1T1jz97aaXZ8/e5AfOcAncuqI2I/DY=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20x=%223%22%20y=%223%22%20width=%2258%22%20height=%2258%22%20rx=%2212%22%20fill=%22%23101318%22%20stroke=%22%2338BDF8%22%20stroke-width=%222.2%22/%3E%3Ctext%20x=%2231%22%20y=%2236%22%20text-anchor=%22middle%22%20font-family=%22Arial,sans-serif%22%20font-size=%2225%22%20font-weight=%22900%22%20fill=%22%23F8FAFC%22%3ERDT%3C/text%3E%3Ccircle%20cx=%2247%22%20cy=%2213%22%20r=%224.5%22%20fill=%22%23FACC15%22/%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -5951,6 +5951,76 @@ body{background-size:cover!important;}
     .rdt-recordings-toolbar .rdt-recordings-count { font-size: 8px !important; flex-basis: 46px !important; }
     .rdt-recordings-toolbar button { padding-left: 6px !important; padding-right: 6px !important; font-size: 8.5px !important; }
   }
+</style>
+<style id="rdt-dev8-recommended-badge-3d-r22">
+/* r22: give RECOMMENDED the same fine rim, top sheen, and grounded bevel as ADVANCED,
+   while keeping its existing green identity, type, spacing, and hover glow. */
+.rdt-easy-setup-swipe-panel .rdt-setup-badge-rec{
+  border:1px solid rgba(110,231,183,.72);
+  border-top-color:rgba(236,253,245,.82);
+  border-bottom-color:rgba(4,83,57,.82);
+  background-color:#10B981;
+  background-image:linear-gradient(180deg,
+    rgba(255,255,255,.30) 0%,
+    rgba(255,255,255,.12) 24%,
+    rgba(255,255,255,.025) 55%,
+    rgba(0,0,0,.13) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.54),
+             inset 0 -1px 0 rgba(2,26,16,.28),
+             0 2px 0 rgba(4,83,57,.58),
+             0 4px 8px rgba(0,0,0,.25);
+  background-clip:padding-box;
+  transition:transform 180ms cubic-bezier(.16,1,.3,1),
+             box-shadow 200ms ease,filter 200ms ease;
+}
+.rdt-easy-setup-swipe-panel .rdt-setup-badge-rec:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.045);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.62),
+             inset 0 -1px 0 rgba(2,26,16,.24),
+             0 3px 0 rgba(4,83,57,.60),
+             0 6px 11px rgba(0,0,0,.28);
+}
+@media(prefers-reduced-motion:reduce){
+  .rdt-easy-setup-swipe-panel .rdt-setup-badge-rec{transition:none!important;}
+}
+
+
+/* DEV.8 Alpha r23 — keep pointer hit targets stationary during hover. */
+button:hover:not(:disabled), a:hover, [role="button"]:hover,
+.rdt-attachment-menu button:not(:disabled):hover,
+.rdt-audio-queue-pill:hover, .rdt-folder-btn:not(:disabled):hover,
+.dev-card:hover, .rdt-timestamp-btn:hover,
+.mic-main-btn:not(.mic-recording):not(.mic-transcribing):hover,
+.rdt-clear-btn:hover, .rdt-delete-all-btn:hover,
+.rdt-attach-btn:hover, .rdt-builtby:hover, .rdt-hdr-btn:hover,
+.rdt-backend-pill:hover, .rdt-easysetup-row:hover, .rdt-model-pill:hover,
+.rdt-addcue-btn:hover, .rdt-mode-batch:not(:disabled):hover,
+.rdt-mode-live:not(:disabled):hover, .easy-copy-circle:hover,
+.rdt-pill-easy:hover, .rdt-pill-copy:hover, .rdt-pill-delete:hover,
+.pause-btn:not(:disabled):not(.easy-copy-grayed):hover,
+.cancel-btn:not(:disabled):not(.easy-copy-grayed):hover {
+  transform:none !important;
+}
+button:not(:disabled), a, [role="button"] { cursor:pointer; }
+button:not(:disabled):active, [role="button"]:active { transform:none !important; }
+
+
+/* The Easy Setup swipe panels use higher-specificity lift transforms. Keep their hit regions stationary too. */
+.rdt-easy-setup-swipe-panel .rdt-dev-pill:hover,
+.rdt-easy-setup-swipe-panel .rdt-setup-option:hover,
+.rdt-easy-setup-swipe-panel .rdt-test-btn:not([disabled]):hover,
+.rdt-easy-setup-swipe-panel .rdt-setup-back:hover,
+.rdt-easy-setup-swipe-panel .rdt-cascade-field:has(.rdt-easy-model-select-card):hover,
+.rdt-easy-setup-swipe-panel .rdt-cascade-field.rdt-model-card-selected:has(.rdt-easy-model-select-card):hover,
+.rdt-easy-setup-swipe-panel .rdt-setup-badge-rec:hover { transform:none !important; }
+.rdt-easy-setup-swipe-panel .rdt-dev-pill,
+.rdt-easy-setup-swipe-panel .rdt-setup-option,
+.rdt-easy-setup-swipe-panel .rdt-test-btn,
+.rdt-easy-setup-swipe-panel .rdt-setup-back,
+.rdt-easy-setup-swipe-panel .rdt-setup-notnow,
+.rdt-easy-setup-swipe-panel .rdt-cascade-field:has(.rdt-easy-model-select-card),
+.rdt-easy-setup-swipe-panel .rdt-setup-badge-rec { cursor:pointer; }
 </style>
 </head>
 <body style="background:#2A2A2A;color:#EFEFEF;min-height:100vh;min-height:100dvh" class="select-none">
@@ -17933,8 +18003,10 @@ async function consumeRdtConnectHandoff(){
     const u=new URL(backendUrl);
     const loopback=["127.0.0.1","localhost","[::1]","::1"].includes(u.hostname);
     const port=Number(u.port);
-    if(!loopback||u.protocol!=="http:"||port<1024||port>65535||u.username||u.password||u.search||u.hash)
+    if(!loopback||!(["http:","https:"].includes(u.protocol))||port<1024||port>65535||u.username||u.password||u.search||u.hash)
       throw new Error("RDT Connect supplied an invalid local server address. Open RDT Voice again from the desktop app.");
+    // HTTPS is accepted only when the local endpoint really speaks TLS and its
+    // certificate is trusted by this browser. This does not turn HTTP into TLS.
     const response=await fetch(u.origin+"/v1/browser-handoff/exchange",{
       method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:handoff}),
       cache:"no-store",credentials:"omit",mode:"cors",referrerPolicy:"no-referrer"

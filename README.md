@@ -311,5 +311,5 @@ PRs and focused bug reports are welcome. Keep the single-HTML application archit
 Contact: **woknewsbusiness@gmail.com**
 
 <p align="center">
-  <img src="assets/logo.png" alt="RDT Voice Logo" width="200">
+  <img src="assets/logo.png" alt="RDT Voice Logo" width="140">
 </p>

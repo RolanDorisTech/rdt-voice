@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2-DEV.8</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-LQliVlyrcli1zDGrZXNs0SHWpCN6zBn5M+9djJaIL40=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-dvKLK5y4NrWrdd80Pl/f9j2PUFPvr+QmvKeX04ADVJ4=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -6097,6 +6097,28 @@ button:not(:disabled):active, [role="button"]:active { transform:none !important
   transform-origin: bottom right !important;
 }
 </style>
+
+<style id="rdt-voice-hover-menu-fix-r2-20261013">
+/* R2 correction: the global hover reset has higher specificity than the first
+   patch. Match its :not() conditions and add .mic-group-container so the
+   positioning transform wins even while the pointer is over Pause or Cancel. */
+.mic-group-container .pause-btn:not(:disabled):not(.easy-copy-grayed):hover,
+.mic-group-container .pause-btn:not(:disabled):not(.easy-copy-grayed):focus-visible,
+.mic-group-container .pause-btn:not(:disabled):not(.easy-copy-grayed):active,
+.mic-group-container .cancel-btn:not(:disabled):not(.easy-copy-grayed):hover,
+.mic-group-container .cancel-btn:not(:disabled):not(.easy-copy-grayed):focus-visible,
+.mic-group-container .cancel-btn:not(:disabled):not(.easy-copy-grayed):active {
+  transform: translate(-50%,-50%) !important;
+  transform-origin: center center !important;
+  transition-property: background-color,box-shadow,border-color,color,filter !important;
+}
+
+/* Add exactly 3px to the explanatory note's existing top padding below Download ZIP. */
+.rdt-attachment-menu-wrap .rdt-attachment-menu > div:last-child {
+  padding-top: calc(0.5rem + 3px) !important;
+}
+</style>
+<!-- rdt-voice-localserver-auth-check-20261013-r1 -->
 </head>
 <body style="background:#2A2A2A;color:#EFEFEF;min-height:100vh;min-height:100dvh" class="select-none">
 <div id="root"></div>
@@ -9178,42 +9200,37 @@ function highlightText(text, search){
     setServerConnectionState("checking");
     async function check(){
       const t0=performance.now();
+      const ctrl=new AbortController();
+      const timeout=window.setTimeout(()=>ctrl.abort(),3500);
       try{
-          const r = await fetch(baseUrl+"/health",{headers:rdtAuthHeaders(backendToken)});
-        const t1=performance.now();
+        const checked=await rdtCheckServerConnection(baseUrl,ctrl.signal);
         if(!cancelled){
-          setLatencyMs(Math.round(t1-t0));
+          setLatencyMs(Math.round(performance.now()-t0));
           setServerLastCheck(Date.now());
-          if(r.ok){
-            const j=await r.json();
-            setHealthData(j);
-            setModelReady(true);
-            setServerConnectionState("connected");
-            if(j.model){
-              setRealModel(j.model);
-              if(transcriptionBackend==="server") setActiveModelName(j.model);
-              if(j.model!==model && (model.includes("turbo") || model===FALLBACK_MODEL || realModel==="")){
-                setModel(j.model);
-              }
-            }
-            return;
+          setHealthData(checked.healthData || null);
+          // Never show CONNECTED on /health alone. It is public; /v1/models must also accept this browser.
+          setModelReady(!!checked.ok);
+          setServerConnectionState(checked.ok?"connected":"offline");
+          if(checked.ok && checked.model){
+            setRealModel(checked.model);
+            setActiveModelName(checked.model);
+            if(checked.model!==model && (model.includes("turbo") || model===FALLBACK_MODEL || realModel==="")) setModel(checked.model);
+          }else if(transcriptionBackend==="server"){
+            setActiveModelName("");
           }
         }
-      }catch(e){}
-      try{
-          const r2=await fetch(baseUrl+"/v1/models",{headers:rdtAuthHeaders(backendToken)});
-        if(!cancelled){ setModelReady(r2.ok); setServerConnectionState(r2.ok?"connected":"offline"); setServerLastCheck(Date.now()); }
       }catch(e){
         if(!cancelled){
-          setModelReady(false); setHealthData(null); setServerConnectionState("offline"); setServerLastCheck(Date.now());
+          setLatencyMs(Math.round(performance.now()-t0));
+          setModelReady(false);setHealthData(null);setServerConnectionState("offline");setServerLastCheck(Date.now());
           if(transcriptionBackend==="server") setActiveModelName("");
         }
-      }
+      }finally{window.clearTimeout(timeout);}
     }
     check();
-    const id=setInterval(check, 3000);
-    return ()=>{ cancelled=true; clearInterval(id); };
-  },[baseUrl, model, realModel, transcriptionBackend]);
+    const id=setInterval(check,3000);
+    return ()=>{cancelled=true;clearInterval(id);};
+  },[baseUrl, model, realModel, transcriptionBackend, backendToken]);
 
   useEffect(()=>{
     if(!showEasySetup) return;
@@ -12239,6 +12256,39 @@ function highlightText(text, search){
       return true;
     }
 
+    // RDT Voice auth preflight fix r1: /health only proves reachability; /v1/models verifies this browser is authorized.
+    async function rdtCheckServerConnection(testedUrl, signal){
+      const headers = rdtAuthHeaders(backendToken);
+      const healthResponse = await fetch(testedUrl + "/health", {headers, cache:"no-store", signal});
+      const healthData = await healthResponse.json().catch(()=>({}));
+      if(!healthResponse.ok){
+        const detail = healthData && (healthData.detail || healthData.error);
+        return {ok:false, healthOk:false, apiOk:false, code:healthResponse.status, healthCode:healthResponse.status,
+          error:detail || ("Health check failed (HTTP " + healthResponse.status + ")."), model:"", healthData:null};
+      }
+
+      const apiResponse = await fetch(testedUrl + "/v1/models", {headers, cache:"no-store", signal});
+      const apiData = await apiResponse.json().catch(()=>({}));
+      if(apiResponse.status === 401 || apiResponse.status === 403){
+        const tokenPresent = !!String(backendToken || "").trim();
+        const error = tokenPresent
+          ? ("The server is reachable, but it rejected this browser's backend token (HTTP " + apiResponse.status + "). Update Settings → Backend token key, or pair this browser in RDT Connect.")
+          : ("The server is reachable, but this browser has no backend token (HTTP " + apiResponse.status + "). Add the token in Settings → Backend token key, or pair this browser in RDT Connect.");
+        return {ok:false, healthOk:true, apiOk:false, authFailure:true, tokenPresent, code:apiResponse.status,
+          healthCode:healthResponse.status, apiCode:apiResponse.status, error, model:healthData.model || "", healthData};
+      }
+      if(!apiResponse.ok){
+        const detail = apiData && (apiData.detail || apiData.error);
+        return {ok:false, healthOk:true, apiOk:false, apiFailure:true, code:apiResponse.status,
+          healthCode:healthResponse.status, apiCode:apiResponse.status,
+          error:detail || ("The server answered /health, but its authenticated /v1/models check failed (HTTP " + apiResponse.status + "). Confirm this is an RDT Voice backend and check its URL and server logs."),
+          model:healthData.model || "", healthData};
+      }
+      return {ok:true, healthOk:true, apiOk:true, authChecked:true, code:apiResponse.status,
+        healthCode:healthResponse.status, apiCode:apiResponse.status,
+        model:healthData.model || "", healthData};
+    }
+
     async function rdtPreflight(force=false){
       if(!force && (isRec || isTrans)) return null;
       if(transcriptionBackend === "easywhisper"){
@@ -12332,20 +12382,28 @@ function highlightText(text, search){
       const t0=performance.now();
       const ctrl=new AbortController();const timeout=window.setTimeout(()=>ctrl.abort(),5000);
       try{
-        const r=await fetch(testedUrl+"/health",{headers:rdtAuthHeaders(backendToken),signal:ctrl.signal});
-        const ms=Math.round(performance.now()-t0);const j=await r.json().catch(()=>({}));
-        const result=r.ok
-          ? {ok:true,model:j.model||"unknown",url:testedUrl,ms,code:r.status,mixedContent:false,checkedAt:Date.now()}
-          : {ok:false,error:(j&&(j.detail||j.error))||( "HTTP "+r.status+(r.statusText?" "+r.statusText:"")),code:r.status,url:testedUrl,ms,mixedContent:false,checkedAt:Date.now()};
+        const checked=await rdtCheckServerConnection(testedUrl,ctrl.signal);
+        const ms=Math.round(performance.now()-t0);
+        const {healthData,...checkFields}=checked;
+        const result={...checkFields,url:testedUrl,ms,mixedContent:false,checkedAt:Date.now()};
         setEasySetupTest(result);setBackendTestResult(result);setBackendTestNonce(n=>n+1);setLatencyMs(ms);setServerLastCheck(Date.now());
-        if(r.ok)setHealthData(j);return !!r.ok;
+        setHealthData(healthData || null);
+        if(normalizeRdtBackendUrl(baseUrl,"")===testedUrl){
+          setModelReady(!!result.ok);setServerConnectionState(result.ok?"connected":"offline");
+          if(result.ok && result.model) setActiveModelName(result.model);
+          else if(transcriptionBackend==="server") setActiveModelName("");
+        }
+        return !!result.ok;
       }catch(e){
         const ms=Math.round(performance.now()-t0);const mixedNow=rdtIsMixedContentRisk(testedUrl);
         const message=rdtConnectionFailureHint(e,testedUrl);
         const result={ok:false,error:message,rawError:String(e&&((e.name?e.name+": ":"")+e.message)||e||"").slice(0,300),url:testedUrl,ms,mixedContent:mixedNow,checkedAt:Date.now()};
-        setEasySetupTest(result);setBackendTestResult(result);setBackendTestNonce(n=>n+1);setLatencyMs(ms);setServerLastCheck(Date.now());return false;
+        setEasySetupTest(result);setBackendTestResult(result);setBackendTestNonce(n=>n+1);setLatencyMs(ms);setServerLastCheck(Date.now());
+        if(normalizeRdtBackendUrl(baseUrl,"")===testedUrl){setModelReady(false);setServerConnectionState("offline");if(transcriptionBackend==="server")setActiveModelName("");}
+        return false;
       }finally{window.clearTimeout(timeout);setBackendTesting(false);}
     }
+
     function setupServerChoice(){
       try{ localStorage.setItem("rdt_setup_last_path", "server"); }catch(e){}
       if(!easySetupTest || easySetupTest === "testing" || !easySetupTest.ok) return;
@@ -14168,7 +14226,7 @@ function highlightText(text, search){
     };
     const configuredSafe = safeUrl(configuredUrl);
     const testedSafe = result && result.url ? safeUrl(result.url) : "Not tested yet";
-    const endpoint = result ? (result.url && testedSafe !== "(invalid or unsupported URL)" ? testedSafe.replace(/\/+$/, "") + "/health" : result.url ? "Invalid URL; request was not sent" : "Not available") : (configuredSafe !== "(invalid or unsupported URL)" ? configuredSafe.replace(/\/+$/, "") + "/health" : "Not available until a valid server URL is entered");
+    const endpoint = result ? (result.url && testedSafe !== "(invalid or unsupported URL)" ? testedSafe.replace(/\/+$/, "") + " → /health + /v1/models" : result.url ? "Invalid URL; request was not sent" : "Not available") : (configuredSafe !== "(invalid or unsupported URL)" ? configuredSafe.replace(/\/+$/, "") + " → /health + /v1/models" : "Not available until a valid server URL is entered");
     const pageProtocolLabel = window.location.protocol === "https:" ? "HTTPS" : "HTTP";
     // This is the default local target that matches the page's scheme and current port.
     // The command is specifically for running on the computer that hosts the backend.
@@ -14179,33 +14237,35 @@ function highlightText(text, search){
     const testedBackendUrl = result && result.url ? result.url : configuredUrl;
     const httpLoopbackOnHttpsPage = window.location.protocol === "https:" && isHttpLoopbackUrl(testedBackendUrl);
     let nextStep = "No test has run in this session. Tap Test connection to check the configured server from this device. The default local URL for this "+pageProtocolLabel+" page is "+expectedLocalBase+".";
-    if (backendTesting) nextStep = "The browser request is in progress. This panel will update when the /health request finishes.";
+    if (backendTesting) nextStep = "The browser is checking /health and the authenticated /v1/models endpoint. This panel will update when both checks finish.";
     else if (result && result.mixedContent) nextStep = "This page uses HTTPS, but the tested remote backend uses HTTP. Browsers block that combination. Use the backend's actual HTTPS endpoint with a certificate trusted by this device; changing only the scheme or port is not enough. The default same-device URL for this page is "+expectedLocalBase+".";
     else if (result && !result.ok && !result.code && navigator.onLine && !/timed out|timeout/i.test(String(result.error || "")) && httpLoopbackOnHttpsPage) nextStep = "This HTTPS page tested a local backend URL that uses HTTP. Some browsers restrict HTTP loopback/local-network access from HTTPS pages. The default local URL matching this page is "+expectedLocalBase+". Use trusted HTTPS for the local backend, or open the app from an HTTP localhost origin for same-device development. For a phone or other device, use the backend computer's HTTPS Tailscale Serve hostname—not 127.0.0.1.";
     else if (result && !result.ok && /invalid or unsupported server url/i.test(String(result.error || ""))) nextStep = "This URL did not pass the app’s supported URL checks, so the network request was not sent. Check the scheme and hostname, then try a supported loopback or private-network hostname. This page's default local URL is "+expectedLocalBase+".";
     else if (result && !result.ok && /timed out|timeout/i.test(String(result.error || ""))) nextStep = "The connection test timed out before a response arrived. Confirm the server is running and reachable from this device, then retry. A timeout alone does not identify which network layer failed.";
     else if (result && !result.ok && !navigator.onLine) nextStep = "The browser reports that the device is offline. This signal is not a complete connectivity test; check Wi-Fi/cellular and any required private-network or VPN connection, then test again.";
-    else if (result && !result.ok && (result.code === 401 || result.code === 403)) nextStep = "The server responded, but denied the request. Check whether this backend requires a token and whether the token and server access policy are correct.";
+    else if (result && result.authFailure) nextStep = result.tokenPresent ? "The server is reachable, but rejected this browser’s backend token. Update Settings → Backend token key, or pair this browser in RDT Connect." : "The server is reachable, but this browser has no backend token. Add the token in Settings → Backend token key, or pair this browser in RDT Connect.";
+    else if (result && !result.ok && (result.code === 401 || result.code === 403)) nextStep = "The server responded, but denied the request. Check the backend token and server access policy.";
     else if (result && !result.ok && result.code === 404) nextStep = "The server responded, but /health returned 404. Confirm the base URL, port, any required path prefix, and that this server exposes /health.";
     else if (result && !result.ok && Number(result.code) >= 500) nextStep = "The server responded with a server-side error. Check the backend process logs for the matching time before changing browser or CORS settings.";
     else if (result && !result.ok && result.code) nextStep = "The server returned an HTTP error. The request reached an HTTP endpoint, but the health check did not succeed. Use the status and server logs to narrow it down.";
-    else if (result && result.ok && locationKey === "easy-setup" && easySetupServerAlreadyConnected) nextStep = "The browser received a successful /health response, and this Local Server is already active.";
-    else if (result && result.ok && locationKey === "easy-setup") nextStep = "The browser received a successful /health response. Press Connect to make this server the active transcription backend, then continue.";
-    else if (result && result.ok && activeServerIsConnected && normalizeRdtBackendUrl(baseUrl, "") === normalizedConfigured) nextStep = "The browser received a successful /health response, and this Local Server is already active.";
-    else if (result && result.ok) nextStep = "The browser received a successful /health response at the time shown. This confirms reachability for this check; it does not by itself select this backend for transcription.";
+    else if (result && result.ok && locationKey === "easy-setup" && easySetupServerAlreadyConnected) nextStep = "The browser reached /health and the authenticated /v1/models endpoint accepted this browser; this Local Server is already active.";
+    else if (result && result.ok && locationKey === "easy-setup") nextStep = "The browser reached /health and the authenticated /v1/models endpoint accepted this browser. Press Connect to make this server the active transcription backend, then continue.";
+    else if (result && result.ok && activeServerIsConnected && normalizeRdtBackendUrl(baseUrl, "") === normalizedConfigured) nextStep = "The browser reached /health and the authenticated /v1/models endpoint accepted this browser; this Local Server is already active.";
+    else if (result && result.ok) nextStep = "The browser reached /health and the authenticated /v1/models endpoint accepted this browser at the time shown. This does not by itself select this backend for transcription.";
     else if (result && !result.ok) nextStep = "No HTTP response was exposed to the page. A browser error such as ‘Load failed’ cannot reliably distinguish CORS, certificate trust, name resolution, private-network routing, local-network permission, or a stopped server. This page uses "+pageProtocolLabel+", so the default same-device URL is "+expectedLocalBase+". Run the terminal health-check command below on the computer running the backend; it intentionally checks that page-matched default, while custom and remote URLs remain unchanged. Verify HTTPS certificate trust when using HTTPS, allow this page's exact origin in RDT_ALLOWED_ORIGINS if needed, and inspect the server logs.";
-    const details = result && result.error ? String(result.error) : (result && result.ok ? "The /health endpoint returned a successful response." : result ? "The test failed without a server-provided error message." : "No result yet.");
+    const details = result && result.error ? String(result.error) : (result && result.ok ? "The /health endpoint responded and the authenticated /v1/models endpoint accepted this browser." : result ? "The test failed without a server-provided error message." : "No result yet.");
     const rawError = result && result.rawError ? String(result.rawError) : "Not reported by the browser";
     const model = result && result.ok && result.model ? String(result.model) : "Not reported by /health";
     const httpStatus = result && result.code ? String(result.code) : "No HTTP response";
-    const resultSummary = backendTesting ? "Checking /health…" : !result ? "No connection test yet" : result.ok ? ("HTTP " + (result.code || 200) + " · reachable") : result.code ? ("HTTP " + result.code + " · server responded") : "No HTTP response · connection failed";
+    const resultSummary = backendTesting ? "Checking /health + authenticated /v1/models…" : !result ? "No connection test yet" : result.authFailure ? ("HTTP " + result.code + " · token " + (result.tokenPresent ? "rejected" : "missing")) : result.ok ? ("HTTP " + (result.apiCode || result.code || 200) + " · reachable + authorized") : result.code ? ("HTTP " + result.code + " · check failed") : "No HTTP response · connection failed";
     const report = [
       "RDT Voice — Local Server Diagnostics",
       "Page origin (use this exact origin for RDT_ALLOWED_ORIGINS if needed): " + window.location.origin,
       "Page protocol: " + window.location.protocol,
       "Secure context: " + (window.isSecureContext ? "yes" : "no"),
       "Expected default local backend URL for this page's scheme: " + expectedLocalBase,
-      "Default local health endpoint: " + expectedLocalHealthUrl,
+      "Default local health endpoint (reachability only): " + expectedLocalHealthUrl,
+      "Default local authenticated API endpoint: " + expectedLocalBase + "/v1/models",
       "Terminal health check (run on the computer running the backend): " + localHealthCommand,
       "Note: this command uses the default local URL matched to the page scheme. Custom and remote backend URLs shown below are preserved as configured.",
       "Browser online flag: " + (navigator.onLine ? "online" : "offline (browser-reported; not definitive)"),
@@ -14249,7 +14309,7 @@ function highlightText(text, search){
           field("TERMINAL HEALTH CHECK · RUN ON SERVER COMPUTER",localHealthCommand),
           field("CONFIGURED URL · THIS SECTION",configuredSafe),
           field("URL FROM LATEST TEST",testedSafe),
-          field("HEALTH ENDPOINT TESTED",endpoint),
+          field("ENDPOINTS TESTED",endpoint),
           field("REQUEST RESULT",resultSummary),
           field("HTTP STATUS",httpStatus),
           field("LATENCY",backendTesting?"Testing…":latency),
@@ -16189,18 +16249,20 @@ function highlightText(text, search){
                                                                                                                 try{
                                                                                                                   const ctrl = new AbortController();
                                                                                                                   const to = setTimeout(()=>ctrl.abort(), 5000);
-                                                                                                                  const r = await fetch(testedUrl+"/health", { headers: rdtAuthHeaders(backendToken), signal: ctrl.signal });
+                                                                                                                  const checked=await rdtCheckServerConnection(testedUrl,ctrl.signal);
                                                                                                                   clearTimeout(to);
-                                                                                                                  const ms = Math.round(performance.now()-t0);
-                                                                                                                  const j = await r.json().catch(()=>({}));
-                                                                                                                   if(r.ok){
-                                                                                                                    const result={ok:true,ms,model:j.model||"",code:r.status,url:testedUrl,checkedAt:Date.now()};setBackendTestResult(result);setEasySetupBackendUrl(testedUrl);setEasySetupTest(result);setLatencyMs(ms);setServerLastCheck(Date.now());setHealthData(j);
-                                                                                                                    rdtToast("\u2713 Backend OK \u00b7 " + ms + "ms");
-                                                                                                                  } else {
-                                                                                                                    const detail=(j&&(j.detail||j.error))||( "HTTP "+r.status+(r.statusText?" "+r.statusText:""));
-                                                                                                                     const result={ok:false,error:detail,ms,code:r.status,url:testedUrl,checkedAt:Date.now()};setBackendTestResult(result);setEasySetupBackendUrl(testedUrl);setEasySetupTest(result);setLatencyMs(ms);setServerLastCheck(Date.now());
-                                                                                                                    rdtToast("\u2717 Backend HTTP " + r.status);
+                                                                                                                  const ms=Math.round(performance.now()-t0);
+                                                                                                                  const {healthData,...checkFields}=checked;
+                                                                                                                  const result={...checkFields,ms,url:testedUrl,checkedAt:Date.now()};
+                                                                                                                  setBackendTestResult(result);setEasySetupBackendUrl(testedUrl);setEasySetupTest(result);setLatencyMs(ms);setServerLastCheck(Date.now());setHealthData(healthData || null);
+                                                                                                                  if(normalizeRdtBackendUrl(baseUrl,"")===testedUrl){
+                                                                                                                    setModelReady(!!result.ok);setServerConnectionState(result.ok?"connected":"offline");
+                                                                                                                    if(result.ok && result.model) setActiveModelName(result.model);
+                                                                                                                    else if(transcriptionBackend==="server") setActiveModelName("");
                                                                                                                   }
+                                                                                                                  if(result.ok){rdtToast("✓ Backend reachable + authorized · "+ms+"ms");}
+                                                                                                                  else if(result.authFailure){rdtToast(result.tokenPresent?"Server reachable; backend token rejected.":"Server reachable; backend token missing.");}
+                                                                                                                  else{rdtToast("✗ Backend connection check failed. Open the result for details.");}
                                                                                                                 }catch(e){
                                                                                                                   const ms = Math.round(performance.now()-t0);
                                                   const isMixed = rdtIsMixedContentRisk(testedUrl);

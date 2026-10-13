@@ -128,9 +128,9 @@ async function rdtHfAwareFetch(input, init) {
 self.fetch = rdtHfAwareFetch;
 env.fetch = rdtHfAwareFetch;
 
-const WORKER_VERSION = "2026-10-11-v13-mobile-tiny-q4-variant-fix";
+const WORKER_VERSION = "2026-10-13-v14-webgpu-adapter-probe-fallback";
 
-if (RDT_DEBUG) console.log("[RDT worker] version", WORKER_VERSION);
+console.info("[RDT worker] version", WORKER_VERSION);
 
 let transcriber    = null;
 
@@ -143,6 +143,24 @@ let lastLoad       = null;
 // session. The next page/worker session can retry WebGPU; warnings alone never
 // change this set because ONNX Runtime may legitimately place some ops on CPU.
 const wasmPreferredModels = new Set();
+// Probe the browser's actual WebGPU adapter, not just the presence of navigator.gpu.
+// A null adapter is common in virtualized/unsupported graphics environments; remember
+// the result for this worker session so each model does not repeat a doomed GPU attempt.
+let webGPUAdapterAvailability = null;
+async function rdtHasUsableWebGPUAdapter() {
+  if (webGPUAdapterAvailability !== null) return webGPUAdapterAvailability;
+  try {
+    if (typeof navigator === "undefined" || !navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
+      webGPUAdapterAvailability = false;
+    } else {
+      const adapter = await navigator.gpu.requestAdapter();
+      webGPUAdapterAvailability = !!adapter;
+    }
+  } catch (_err) {
+    webGPUAdapterAvailability = false;
+  }
+  return webGPUAdapterAvailability;
+}
 function modelRevisionKey(modelId, revision) { return String(modelId || "") + "@" + String(revision || ""); }
 
 function rdtIsRemoteFetchFailure(err) {
@@ -480,7 +498,7 @@ async function handleLoad(id, payload) {
   const expected = payload.expected;
   const modelKey = modelRevisionKey(modelId, revision);
   const rememberedWasm = requestedDevice === "webgpu" && wasmPreferredModels.has(modelKey);
-  const effectiveDevice = rememberedWasm ? "wasm" : requestedDevice;
+  let effectiveDevice = rememberedWasm ? "wasm" : requestedDevice;
 
   if (!modelId) throw new Error("load: missing modelId");
 
@@ -488,6 +506,18 @@ async function handleLoad(id, payload) {
 
     throw new Error("load: pinned 40-hex revision required");
 
+  }
+
+  // Do this before cache/variant selection: a GPU-less VM needs the WASM model
+  // files, not the WebGPU precision pair. Do not try WebGPU first just because
+  // navigator.gpu exists; its requestAdapter() can still return null.
+  if (effectiveDevice === "webgpu") {
+    const adapterAvailable = await rdtHasUsableWebGPUAdapter();
+    if (!adapterAvailable) {
+      wasmPreferredModels.add(modelKey);
+      effectiveDevice = "wasm";
+      reply({ id, type: "progress", phase: "fallback", note: "No usable GPU adapter is available in this browser environment. Using CPU (WASM) instead; transcription may be slower." });
+    }
   }
 
   const cacheExpected = expectedFilesForVariant(modelId, effectiveDevice, variant, expected);

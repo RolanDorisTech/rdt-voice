@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2-DEV.8</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-RS+W0z/b57ZuaRkKTWNzJ9dqloEgSFOeL9tJ6u7auZM=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-U8XVrbxVDF6/9Rkcff4IEKNJq4x0bSpv+8whfRAIMdA=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -4232,6 +4232,29 @@ Built by Rolan & Doris Tech
   .rdt-backend-pill.rdt-connect-managed:focus-visible {
     outline:2px solid #7DD3FC;outline-offset:3px;
   }
+
+  /* Mobile browser choice: explicit and user initiated; never inventory installed apps. */
+  .rdt-mobile-browser-chooser{display:none;margin:8px auto 0;width:calc(100% - 20px);max-width:760px;border:1px solid #39434E;border-radius:12px;background:#171C22;color:#E2E8F0;padding:9px 11px;box-sizing:border-box}
+  .rdt-mobile-browser-chooser summary{cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.035em;color:#D6E0EA;padding:3px 0;outline-offset:4px}
+  .rdt-mobile-browser-copy,.rdt-mobile-browser-notice{font-size:10.5px;line-height:1.45;color:#A8B4C1;margin:8px 0}
+  .rdt-mobile-browser-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .rdt-mobile-browser-actions button{min-width:0;border:1px solid #3B4652;background:#232B34;color:#E5EDF3;border-radius:9px;padding:9px 8px;font-size:11px;font-weight:750;cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+  .rdt-mobile-browser-actions button:hover,.rdt-mobile-browser-actions button:focus-visible{background:#293947;border-color:#38BDF8;outline:2px solid rgba(56,189,248,.25);outline-offset:1px}
+  @media(max-width:768px){.rdt-mobile-browser-chooser{display:block}}
+
+
+/* 0B10 Companion disclosure: compact first glance, details on demand. */
+.rdt-connect-promo .rdt-connect-promo-title { margin-bottom:8px !important; }
+.rdt-connect-promo .rdt-connect-promo-download { display:flex !important; width:100% !important; margin:0 0 8px !important; justify-content:center; }
+.rdt-connect-promo > p { margin:0 0 7px !important; }
+.rdt-companion-details { margin-top:5px; border-top:1px solid rgba(148,163,184,.16); padding-top:7px; color:#A8AEB8; font-size:10.5px; line-height:1.5; }
+.rdt-companion-details > summary { cursor:pointer; display:flex; align-items:center; gap:7px; list-style:none; font-weight:750; color:#BCC6D1; }
+.rdt-companion-details > summary::-webkit-details-marker { display:none; }
+.rdt-companion-details > summary::before { content:"▸"; color:#9EACB8; transition:transform .18s ease; }
+.rdt-companion-details[open] > summary::before { transform:rotate(90deg); }
+.rdt-companion-details p { margin:7px 0; }
+.rdt-companion-details .rdt-connect-platform-note { display:block; margin-top:5px; }
+@media (prefers-reduced-motion:reduce) { .rdt-companion-details > summary::before { transition:none; } }
 </style>
 <style id="rdt-tailwind-static">
 /* Static replacement for the Tailwind Play CDN script (3.4.1): Tailwind preflight + only the utilities this file uses.
@@ -6873,12 +6896,62 @@ let RDT_RAM_OVERRIDE = 0;
 try { RDT_RAM_OVERRIDE = Number(localStorage.getItem("rdt_ram_override")) || 0; } catch {}
 const FALLBACK_PORT = "8888";
 const FALLBACK_MODEL = "mlx-community/whisper-large-v3-mlx";
+function rdtTailscaleOriginForThisPage(){
+  try{
+    const u = new URL(window.location.href);
+    const host = String(u.hostname || "").toLowerCase().replace(/\.$/, "");
+    if(u.protocol === "https:" && (host.endsWith(".ts.net") || host.endsWith(".tailscale.net"))) return u.origin;
+  }catch(e){}
+  return "";
+}
+const RDT_TAILSCALE_PAGE_ORIGIN = rdtTailscaleOriginForThisPage();
 function rdtDefaultLocalBackendUrl(port = FALLBACK_PORT){
+  // A phone opened from the Mac's Tailscale Serve page must use that Mac origin,
+  // not 127.0.0.1 (which points back to the phone itself).
+  if(RDT_TAILSCALE_PAGE_ORIGIN) return RDT_TAILSCALE_PAGE_ORIGIN;
   const scheme = (typeof window !== "undefined" && window.location.protocol === "https:") ? "https" : "http";
   return `${scheme}://127.0.0.1:${String(port || FALLBACK_PORT)}`;
 }
-const RDT_DEFAULT_BACKEND_URL = rdtDefaultLocalBackendUrl(FALLBACK_PORT); // Match the app page's HTTP/HTTPS scheme for loopback by default.
+const RDT_DEFAULT_BACKEND_URL = rdtDefaultLocalBackendUrl(FALLBACK_PORT);
 const RDT_LOOPBACK_HOSTS = ["127.0.0.1","localhost"]; // Keep aligned with CSP and server host checks.
+function rdtIsMobileBrowser(){
+  const ua = typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "";
+  return /Android|iPhone|iPad|iPod/i.test(ua) || (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+const RDT_IS_MOBILE_BROWSER = rdtIsMobileBrowser();
+function rdtChooseMobileBrowser(choice, setNotice){
+  const ua = String(navigator.userAgent || "");
+  const ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua);
+  // Deliberately omit search parameters and fragments: handoff codes must never be forwarded.
+  const target = window.location.origin + window.location.pathname;
+  const copyTarget = async (message) => {
+    try{
+      if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(target); setNotice(message + " Link copied."); return; }
+    }catch(e){}
+    setNotice(message + " Copy the page address from the browser's address bar.");
+  };
+  if(choice === "current") { setNotice("Continuing in this browser. The paired session remains attached to this browser."); return; }
+  if(choice === "safari"){
+    if(ios && /Safari/i.test(ua) && !/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo)/i.test(ua)){ setNotice("You're already using Safari."); return; }
+    copyTarget("To use Safari on iPhone or iPad, open the Share menu and choose an available Safari option. A webpage cannot reliably force Safari to launch from another browser.");
+    return;
+  }
+  if(choice === "copy"){ copyTarget("Use the copied link in your preferred installed browser."); return; }
+  let launch = "";
+  if(ios && choice === "chrome") launch = target.replace(/^https:/i, "googlechromes:").replace(/^http:/i, "googlechrome:");
+  else if(ios && choice === "firefox") launch = "firefox://open-url?url=" + encodeURIComponent(target);
+  else if(android && (choice === "chrome" || choice === "firefox")){
+    try{
+      const u = new URL(target);
+      const pkg = choice === "chrome" ? "com.android.chrome" : "org.mozilla.firefox";
+      launch = "intent://" + u.host + u.pathname + "#Intent;scheme=" + u.protocol.slice(0,-1) + ";package=" + pkg + ";end";
+    }catch(e){}
+  }
+  if(!launch){ copyTarget("This platform cannot reliably launch that browser from a webpage."); return; }
+  setNotice("Trying to open " + (choice === "chrome" ? "Chrome" : "Firefox") + ". If it isn't installed or the system blocks this link, use Copy link. Browser pairing is per browser, so approve the new browser again if prompted.");
+  try{ window.location.href = launch; }catch(e){ copyTarget("Could not open that browser."); }
+}
 
 // Tailscale CGNAT is 100.64.0.0/10 (100.64.x.x - 100.127.x.x), NOT all of 100/8.
 function detectChipFromGpu(gpu){
@@ -7260,6 +7333,10 @@ function highlightText(text, search){
   loadedModelForTabRef.current=easyWhisperLoadedModel;
         const [easyDownloadModelId,setEasyDownloadModelId]=useState("");
         const [easyDownloadPct,setEasyDownloadPct]=useState(0);
+        const easyDownloadProgressBaseRef=useRef(0);
+        const easyDownloadProgressFloorRef=useRef(0);
+        const easyDownloadFallbackCountRef=useRef(0);
+        const [easyDownloadRetryLabel,setEasyDownloadRetryLabel]=useState("");
         const [easyDownloadFile,setEasyDownloadFile]=useState("");
         const [easyDownloadLoadedBytes,setEasyDownloadLoadedBytes]=useState(0);
         const [easyDownloadTotalBytes,setEasyDownloadTotalBytes]=useState(0);
@@ -7339,10 +7416,26 @@ function highlightText(text, search){
   const [selectedHistoryIds,setSelectedHistoryIds]=useState(new Set());
   const lastSelectedHistoryIndexRef=useRef(-1);
   const [showSettings,setShowSettings]=useState(false);
+  // Native RDT Connect can open this page directly into the existing EasyWhisper
+  // model manager. The deletion dialog still requires a deliberate confirmation.
+  useEffect(()=>{
+    try{
+      const currentUrl = new URL(window.location.href);
+      if(currentUrl.searchParams.get("rdt_manage_easywhisper_models") !== "1") return;
+      setShowSettings(true);
+      setEasyCacheSelection({});
+      // The browser model cache is shared; require an explicit opt-in before purge.
+      setEasyPurgeDisk(false);
+      setShowEasyCacheModal(true);
+      currentUrl.searchParams.delete("rdt_manage_easywhisper_models");
+      window.history.replaceState(window.history.state, "", currentUrl.pathname + currentUrl.search + currentUrl.hash);
+    }catch(e){}
+  },[]);
   const [histClosing,setHistClosing]=useState(false);
   const [settingsClosing,setSettingsClosing]=useState(false);
   const [showDevPanel,setShowDevPanel]=useState(false);
   const [showHeaderMenu,setShowHeaderMenu]=useState(false);
+  const [mobileBrowserNotice,setMobileBrowserNotice]=useState("");
   const [hiddenEffectActive,setHiddenEffectActive]=useState(false);
   const [hiddenEffectMessageVisible,setHiddenEffectMessageVisible]=useState(false);
   const [hiddenEffectBursts,setHiddenEffectBursts]=useState([]);
@@ -7414,9 +7507,9 @@ function highlightText(text, search){
   // --- UX sprint: new state ---
   const [backendTestResult,setBackendTestResult]=useState(null);         // Latest shared Local Server /health result
   const [backendTesting,setBackendTesting]=useState(false);
-  // Each location owns its disclosure state; both remain collapsed on first render.
+  // Settings starts expanded so Local Server guidance is visible; Easy Setup remains compact.
   // The latest test result itself remains shared between Settings and Easy Setup.
-  const [settingsServerDiagnosticsExpanded,setSettingsServerDiagnosticsExpanded]=useState(false);
+  const [settingsServerDiagnosticsExpanded,setSettingsServerDiagnosticsExpanded]=useState(true);
   const [easySetupServerDiagnosticsExpanded,setEasySetupServerDiagnosticsExpanded]=useState(false);
   // Keep the visible copy confirmation local to the diagnostic panel that was tapped.
   const [diagnosticsCopyState,setDiagnosticsCopyState]=useState({});
@@ -8908,6 +9001,12 @@ function highlightText(text, search){
         const parsed=JSON.parse(b);
         if(Array.isArray(parsed) && parsed.length>0){
             const migratedRaw = parsed.filter(p=>p && typeof p==='object').map(p=>{
+            if(RDT_TAILSCALE_PAGE_ORIGIN && p && (p.id==="default" || p.id==="rdt-connect-local") && typeof p.url==="string"){
+              try{
+                const saved = new URL(p.url);
+                if(RDT_LOOPBACK_HOSTS.includes(saved.hostname)) return {...p,url:RDT_TAILSCALE_PAGE_ORIGIN,name:"RDT Connect · private"};
+              }catch(e){}
+            }
             if(p.id==="default"){
               try{
                 const u=new URL(p.url);
@@ -11999,6 +12098,32 @@ function highlightText(text, search){
       return pills;
     }
 
+    // Keep the browser download percentage monotonic even if a manifest estimate
+    // needs to grow or an automatic device-compatible variant is selected.
+    // A primary transfer uses 0–88%; a rare fallback uses the remaining range
+    // up to 96%; verification occupies 98%; only a successful inference reaches 100%.
+    function publishEasyDownloadProgress(rawPercent){
+      const raw=Math.min(100,Math.max(0,Number(rawPercent)||0));
+      const ceiling=easyDownloadFallbackCountRef.current>0?96:88;
+      const base=Math.min(ceiling,Math.max(0,easyDownloadProgressBaseRef.current||0));
+      const mapped=Math.floor(base+((ceiling-base)*(raw/100)));
+      const next=Math.max(easyDownloadProgressFloorRef.current,Math.min(ceiling,mapped));
+      easyDownloadProgressFloorRef.current=next;
+      setEasyDownloadPct(next);
+    }
+    function publishEasyDownloadVerifyingProgress(){
+      const next=Math.max(easyDownloadProgressFloorRef.current,98);
+      easyDownloadProgressFloorRef.current=next;
+      setEasyDownloadPct(next);
+    }
+    function resetEasyDownloadProgress(){
+      easyDownloadProgressBaseRef.current=0;
+      easyDownloadProgressFloorRef.current=0;
+      easyDownloadFallbackCountRef.current=0;
+      setEasyDownloadRetryLabel("");
+      setEasyDownloadPct(0);
+    }
+
     // Start (or resume) downloading a model in the background.
     // Progress is tracked in state and survives modal dismissal.
     async function startEasyDownload(modelId, opts){
@@ -12011,6 +12136,7 @@ function highlightText(text, search){
       if(easyWhisperLoadedModel === modelId){
         setEasyDownloadModelId(modelId);
         setEasyDownloadStatus("success");
+        easyDownloadProgressFloorRef.current=100;
         setEasyDownloadPct(100);
         if(autoOpen) setShowEasyDownloadModal(true);
         return;
@@ -12025,7 +12151,7 @@ function highlightText(text, search){
       }
       setEasyDownloadModelId(modelId);
       setEasyDownloadStatus("downloading");
-      setEasyDownloadPct(0);
+      resetEasyDownloadProgress();
       setEasyDownloadFile("");
       setEasyDownloadLoadedBytes(0);
       setEasyDownloadError("");
@@ -12084,12 +12210,16 @@ function highlightText(text, search){
             }else if(/switching to WASM/i.test(msg.note)){
               totalBytes=computeExpectedTotalBytes(entry,"wasm",modelId,null);
             }
-            // A failed variant's partial bytes are not part of the replacement download.
+            // The primary variant did not suit this device. Start a clearly labelled
+            // second stage without visually rewinding the user's overall progress.
+            easyDownloadFallbackCountRef.current += 1;
+            easyDownloadProgressBaseRef.current = easyDownloadProgressFloorRef.current;
+            setEasyDownloadRetryLabel("Compatible files");
             lastLoadedByFileRef.current={}; cumulativeLoadedRef.current=0;
             dlSamplesRef.current=[]; dlSpeedRef.current=0; dlEtaRef.current=null;
             setEasyDownloadLoadedBytes(0); setEasyDownloadTotalBytes(totalBytes);
-            setEasyDownloadSpeed(0); setEasyDownloadEta(null); setEasyDownloadPct(0);
-            setEasyDownloadFile(msg.note); setEasyDownloadPhase("preparing"); return;
+            setEasyDownloadSpeed(0); setEasyDownloadEta(null);
+            setEasyDownloadFile("Switching to compatible model files"); setEasyDownloadPhase("connecting"); return;
           }
           if(msg.phase === "progress" && msg.file){
             dlTickRef.current = now;
@@ -12129,11 +12259,13 @@ function highlightText(text, search){
             dlEtaRef.current = eta;
             setEasyDownloadSpeed(spd);
             setEasyDownloadEta(eta);
-            setEasyDownloadPct(Math.min(99, Math.floor(cum / totalBytes * 100)));
-            // All bytes in, model not ready yet: be honest that this is the setup step.
-            if(remaining < Math.max(1048576, totalBytes * 0.005)) setEasyDownloadPhase("preparing");
+            publishEasyDownloadProgress(Math.min(100, (cum / totalBytes) * 100));
+            // Stay in the download stage until the worker confirms every model file
+            // is ready; don't switch to the preparation animation based on an estimate.
           } else if(msg.phase === "ready"){
-            setEasyDownloadPct(100);
+            setEasyDownloadPhase("preparing");
+            setEasyDownloadFile("Verifying model and checking inference");
+            publishEasyDownloadVerifyingProgress();
           }
         }, 300000);
         // A real silent inference catches models that load but cannot execute.
@@ -12142,7 +12274,9 @@ function highlightText(text, search){
         await workerCall("run", {audio:new Float32Array(16000), language:"en"}, null, 120000);
         setEasyWhisperLoadedModel(modelId);
         setActiveModelName(modelId);
+        easyDownloadProgressFloorRef.current=100;
         setEasyDownloadPct(100);
+        setEasyDownloadRetryLabel("");
         setEasyDownloadStatus("success");
         setEasyWhisperConsent(prev => ({ ...prev, [modelId]: true }));
         try{
@@ -12256,7 +12390,8 @@ function highlightText(text, search){
 
     function easyDlStepLabel(){
       if(easyDownloadStatus === "loading-cached") return "Preparing cached model in memory\u2026";
-      if(easyDownloadPhase === "preparing") return easyDownloadFile || "Setting up on your device\u2026";
+      if(easyDownloadPhase === "connecting" && easyDownloadRetryLabel) return "Switching to compatible model files\u2026";
+      if(easyDownloadPhase === "preparing") return "Verifying model and preparing it on your device\u2026";
       if(easyDownloadPhase === "downloading") return "Downloading model";
       return "Connecting to Hugging Face";
     }
@@ -12267,11 +12402,12 @@ function highlightText(text, search){
       const compact = mode === "compact";
       const cached = easyDownloadStatus === "loading-cached";
       const preparing = easyDownloadPhase === "preparing";
-      const known = !preparing && !cached && easyDownloadTotalBytes > 0 && easyDownloadLoadedBytes > 0;
-      const pct = Math.min(100, Math.max(0, easyDownloadPct));
-      const stalled = easyDownloadStalled && known;
       const connecting = easyDownloadPhase === "connecting";
-      const etaTxt = cached ? "Preparing cached model in memory" : stalled ? "Connection paused \u2014 still trying\u2026" : preparing ? (easyDownloadFile || "Setting up on your device") : connecting ? "Connecting to Hugging Face" : fmtDlEta(easyDownloadEta);
+      const switchingVariant = connecting && Boolean(easyDownloadRetryLabel) && easyDownloadProgressFloorRef.current > 0;
+      const known = !preparing && !cached && easyDownloadTotalBytes > 0 && (easyDownloadLoadedBytes > 0 || switchingVariant);
+      const pct = Math.max(easyDownloadProgressFloorRef.current, Math.min(100, Math.max(0, easyDownloadPct)));
+      const stalled = easyDownloadStalled && known && !switchingVariant;
+      const etaTxt = cached ? "Preparing cached model in memory" : switchingVariant ? "Switching to compatible files\u2026" : stalled ? "Connection paused \u2014 still trying\u2026" : preparing ? "Verifying model and preparing\u2026" : connecting ? "Connecting to Hugging Face" : fmtDlEta(easyDownloadEta);
       return h("div", {className:"rdt-dl" + (compact ? " rdt-dl-compact" : "") + (stalled ? " rdt-dl-stalled" : "")},
         h("div", {className:"rdt-dl-row"},
           h("span", {className:"rdt-dl-pct"}, known ? pct + "%" : cached ? "Cached" : preparing ? "Preparing\u2026" : connecting ? h("span", {className:"rdt-connecting-dots"}, "Connecting") : "Starting\u2026"),
@@ -12282,8 +12418,8 @@ function highlightText(text, search){
           : preparing ? h("div", {className:"rdt-dl-big-fill rdt-dl-prep", style:{width:"100%"}})
           : h("div", {className:"rdt-dl-big-indeterminate" + (connecting ? " rdt-dl-connecting" : "")})
         ),
-        known && h("div", {className:"rdt-dl-row rdt-dl-meta"},
-          h("span", null, fmtDlBytes(easyDownloadLoadedBytes) + " of " + fmtDlBytes(easyDownloadTotalBytes)),
+        known && !connecting && h("div", {className:"rdt-dl-row rdt-dl-meta"},
+          h("span", null, (easyDownloadRetryLabel ? "Compatible files · " : "") + fmtDlBytes(easyDownloadLoadedBytes) + " of ~" + fmtDlBytes(easyDownloadTotalBytes)),
           h("span", null, (easyDownloadSpeed > 20480 && !stalled) ? fmtDlBytes(easyDownloadSpeed) + "/s" : "")
         ),
         !compact && h("div", {className:"rdt-dl-step"}, easyDlStepLabel())
@@ -12294,7 +12430,7 @@ function highlightText(text, search){
       setShowEasyDownloadModal(false);
       setEasyDownloadStatus("idle");
       setEasyDownloadModelId("");
-      setEasyDownloadPct(0);
+      resetEasyDownloadProgress();
       setEasyDownloadFile("");
       setEasyDownloadLoadedBytes(0);
       setEasyDownloadTotalBytes(0);
@@ -13338,7 +13474,7 @@ function highlightText(text, search){
         setShowEasyDownloadModal(false);
         setEasyDownloadStatus("idle");
         setEasyDownloadModelId("");
-        setEasyDownloadPct(0);
+        resetEasyDownloadProgress();
         setEasyDownloadFile("");
         setEasyDownloadLoadedBytes(0);
         setEasyDownloadTotalBytes(0);
@@ -14306,6 +14442,7 @@ function highlightText(text, search){
     const normalizedConfigured = normalizeRdtBackendUrl(configuredUrl, "");
     const normalizedTested = result && result.url ? normalizeRdtBackendUrl(result.url, "") : "";
     const sameUrl = !!(normalizedConfigured && normalizedTested && normalizedConfigured === normalizedTested);
+    const pairedSessionVerified = !!(!backendToken && RDT_TAILSCALE_PAGE_ORIGIN && normalizedConfigured === RDT_TAILSCALE_PAGE_ORIGIN && sameUrl && result && result.ok);
     const statusLabel = connectionCheckInProgress ? "CHECKING" : !result ? "NOT TESTED" : result.ok ? (result.automatic ? "TESTED" : "PASSED") : "FAILED";
     const statusColor = connectionCheckInProgress ? "#7DD3FC" : !result ? "#CBD5E1" : result.ok ? "#6EE7B7" : "#FCA5A5";
     const checkedAt = result && result.checkedAt ? new Date(result.checkedAt).toLocaleString() : "Not run yet";
@@ -14377,7 +14514,8 @@ function highlightText(text, search){
       "Server model: " + model,
       "Failure details: " + details,
       "Raw browser error: " + rawError,
-      "Backend token configured: " + (backendToken ? "yes (value not included)" : "no"),
+      "Backend token key entered: " + (backendToken ? "yes (value not included)" : "no"),
+      "Secure paired browser session: " + (pairedSessionVerified ? "verified; the HttpOnly session authorizes this same-origin browser, so no token key is needed" : "not confirmed by this result"),
       "Privacy: this report omits the full page URL, query strings, browser user-agent, and token value. It includes this page's origin and a sanitized backend URL; review those before sharing."
     ].join("\n");
     const field = (label, value) => React.createElement("div", {className:"min-w-0 rounded-lg p-2", style:{background:"rgba(0,0,0,.20)",border:"1px solid rgba(148,163,184,.15)"}},
@@ -14414,7 +14552,7 @@ function highlightText(text, search){
           field("SERVER MODEL",model),
           field("LAST CHECK",checkedAt),
           field("DEVICE NETWORK SIGNAL",navigator.onLine?"Browser reports online":"Browser reports offline (not definitive)"),
-          field("BACKEND TOKEN",backendToken?"Configured · value never shown":"Not configured")
+          field("AUTHENTICATION",backendToken?"Bearer token configured · value never shown":pairedSessionVerified?"Securely paired via HttpOnly session · no token key needed":"No token key; paired session not confirmed")
         ),
         React.createElement("div", {className:"mt-2 rounded-lg p-2",style:{background:result&&result.ok?"rgba(16,185,129,.08)":result?"rgba(127,29,29,.16)":"rgba(148,163,184,.07)",border:"1px solid "+(result&&result.ok?"rgba(16,185,129,.3)":result?"rgba(248,113,113,.3)":"rgba(148,163,184,.15)")}},
           React.createElement("div", {style:{fontSize:"10px",fontWeight:800,color:result&&result.ok?"#6EE7B7":result?"#FCA5A5":"#CBD5E1",marginBottom:"4px"}},"WHAT THE RESULT MEANS"),
@@ -14431,6 +14569,7 @@ function highlightText(text, search){
     );
   }
   const easySetupServerAlreadyConnected = !!(activeServerIsConnected && normalizeRdtBackendUrl(easySetupBackendUrl,"") === normalizeRdtBackendUrl(baseUrl,""));
+  const easySetupPairedSessionReady = !!(!backendToken && RDT_TAILSCALE_PAGE_ORIGIN && backendTestResult && backendTestResult.ok && normalizeRdtBackendUrl(backendTestResult.url || easySetupBackendUrl, "") === RDT_TAILSCALE_PAGE_ORIGIN);
   const cancelAvailable = !!(isRec || isTrans || recordingHandoff || isMicStarting);
 
   return React.createElement("div", {className:"min-h-screen w-full flex flex-col"+(waveHoverEnabled?"":" rdt-calm-mode"), style:{background:"#2A2A2A",color:"#F5F5F5"}},
@@ -14547,6 +14686,19 @@ function highlightText(text, search){
           )
         )
       ),
+    ),
+    RDT_IS_MOBILE_BROWSER && React.createElement("section", {className:"rdt-mobile-browser-chooser",role:"region","aria-label":"Mobile browser choice"},
+      React.createElement("details", null,
+        React.createElement("summary", null, "Choose browser · Safari / Chrome / Firefox"),
+        React.createElement("p", {className:"rdt-mobile-browser-copy"}, "Try a browser on this device. The operating system may ignore a browser-specific link if that browser is not installed or the link is unsupported. Switching browsers does not transfer this browser's paired session; approve the new browser in RDT Connect if asked."),
+        React.createElement("div", {className:"rdt-mobile-browser-actions"},
+          React.createElement("button", {type:"button",onClick:()=>rdtChooseMobileBrowser("safari",setMobileBrowserNotice)}, "Safari"),
+          React.createElement("button", {type:"button",onClick:()=>rdtChooseMobileBrowser("chrome",setMobileBrowserNotice)}, "Try Chrome"),
+          React.createElement("button", {type:"button",onClick:()=>rdtChooseMobileBrowser("firefox",setMobileBrowserNotice)}, "Try Firefox"),
+          React.createElement("button", {type:"button",onClick:()=>rdtChooseMobileBrowser("copy",setMobileBrowserNotice)}, "Copy link")
+        ),
+        mobileBrowserNotice && React.createElement("p", {className:"rdt-mobile-browser-notice",role:"status","aria-live":"polite"}, mobileBrowserNotice)
+      )
     ),
     React.createElement("main", {className:"flex-1 w-full mx-auto px-5 md:px-7 flex flex-col items-center one-glance-main"},
       React.createElement("div", {className:"w-full flex justify-center items-center stack-gap",style:{height:"34px",marginTop:"120px",paddingTop:"4px"}},
@@ -16095,11 +16247,15 @@ function highlightText(text, search){
 
                                 transcriptionBackend === "server" && React.createElement("div", {className:"rdt-connect-promo", role:"note"},
                                   React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
-                                  React.createElement("p", null, "Recommended for Mac users: manage a private local MLX server and open RDT Voice with secure handoff. RDT Voice remains usable without it."),
-                                  React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"RDT Connect is currently available for macOS only. Windows support is coming soon."},
+                                  React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"The official release URL and secure app-link handling are not configured yet. Windows support is also coming soon."},
                                     React.createElement("span", null, "Download for Mac · Coming soon"),
                                     React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
-                                  React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon. Official download/open links will be enabled after the release URL and secure app-link handling are configured.")
+                                  React.createElement("p", null, "Optional for Mac users who want to manage a private local MLX server and open RDT Voice with secure handoff."),
+                                  React.createElement("details", {className:"rdt-companion-details"},
+                                    React.createElement("summary", null, "What does the Mac Companion do?"),
+                                    React.createElement("p", null, "RDT Connect manages the local Whisper server, keeps the access key on the Mac, and can pass a short-lived handoff to the browser. You can still use RDT Voice with your own server without installing the companion."),
+                                    React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon. The download remains disabled until the official release URL and secure app-link handling are ready.")
+                                  )
                                 ),
                                 // --- EasyWhisper model dropdown (only when that backend is active) ---
                                                   transcriptionBackend==="easywhisper" && React.createElement(React.Fragment, null,
@@ -17573,7 +17729,7 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                                      }),
                                      React.createElement("div", {style:{fontSize:"11px"}},
                                        React.createElement("div", {className:"font-bold"}, "Also delete downloaded files from browser storage"),
-                                       React.createElement("div", {className:"opacity-60 mt-0.5"}, "Frees disk space and forces a fresh download. If unchecked, only the \"ready\" flag is reset — files stay cached.")
+                                       React.createElement("div", {className:"opacity-60 mt-0.5"}, "This clears the shared browser model cache and may remove other cached ML models. Leave unchecked to reset the selected EasyWhisper choices without deleting files.")
                                      )
                                    )
                                  ),
@@ -17994,14 +18150,6 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
               )
             ),
 
-            easySetupChoice === "server" && React.createElement("div", {className:"rdt-connect-promo rdt-connect-promo-welcome", role:"note"},
-              React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
-              React.createElement("p", null, "Recommended for Mac users who want a managed local MLX server and secure browser handoff. RDT Voice can also connect to your own server without the app."),
-              React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"RDT Connect is currently available for macOS only. Windows support is coming soon."},
-                React.createElement("span", null, "Download for Mac · Coming soon"),
-                React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
-              React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon.")
-            ),
             // Continue button — disabled until a choice is made
             React.createElement("button", {
               onClick:()=>{ if(easySetupChoice) setEasySetupPath(easySetupChoice); },
@@ -18124,7 +18272,11 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                   setEasyDownloadFile("Loading from browser cache\u2026");
                   setEasyDownloadLoadedBytes(0);
                   setEasyDownloadTotalBytes(0);
-                  setEasyDownloadPct(100);
+                  easyDownloadProgressBaseRef.current=0;
+                  easyDownloadProgressFloorRef.current=0;
+                  easyDownloadFallbackCountRef.current=0;
+                  setEasyDownloadRetryLabel("");
+                  setEasyDownloadPct(0);
                   setEasyDownloadStatus("loading-cached");
                   setShowEasyDownloadModal(true);
                   setTimeout(()=>{ startEasyDownload(mid, { openModal: false }); }, 1000);
@@ -18155,11 +18307,15 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
             React.createElement("p", {className:"rdt-server-cascade-description", style:{fontSize:"12px", color:"#A8AEB8", lineHeight:"1.55", marginTop:"6px", maxWidth:"340px", marginLeft:"auto", marginRight:"auto"}}, "RDT Voice posts audio to the URL below."),
             React.createElement("div", {className:"rdt-connect-promo rdt-connect-promo-compact", role:"note"},
               React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
-              React.createElement("p", null, "Use the desktop app to manage a private local MLX server and pass a secure one-time handoff to this browser. You can also connect to your own server without the app."),
-              React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"RDT Connect is currently available for macOS only. Windows support is coming soon."},
+              React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"The official release URL and secure app-link handling are not configured yet. Windows support is also coming soon."},
                 React.createElement("span", null, "Download for Mac · Coming soon"),
                 React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
-              React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon.")
+              React.createElement("p", null, "Optional: manage your private local MLX server and open RDT Voice with a secure handoff."),
+              React.createElement("details", {className:"rdt-companion-details"},
+                React.createElement("summary", null, "What does the Mac Companion do?"),
+                React.createElement("p", null, "RDT Connect manages the local Whisper server and keeps its access key on your Mac. When you choose to open RDT Voice, it can pass a short-lived handoff to the browser. You can also connect to your own server without installing the app."),
+                React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon. The download remains disabled until the official release URL and secure app-link handling are ready.")
+              )
             ),
                                                             React.createElement("div", {className:"rdt-server-cascade-url", style:{width:"100%"}},
                 React.createElement("div", {className:"rdt-server-cascade-url-label", style:{marginTop:"16px", textAlign:"left", fontFamily:"JetBrains Mono, monospace", fontSize:"10px", letterSpacing:"0.10em", color:"#8A909B"}}, "BACKEND URL"),
@@ -18183,6 +18339,10 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                 )
               ),
               React.createElement("div", {className:"rdt-server-cascade-token",style:{width:"100%",marginTop:"12px",textAlign:"left"}},
+                easySetupPairedSessionReady && React.createElement("div", {role:"status",style:{fontSize:"11px",lineHeight:"1.45",color:"#86EFAC",background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.28)",borderRadius:"9px",padding:"8px 10px",marginBottom:"8px"}}, "✓ Securely paired. This browser's private session authenticates the server; no Access Token Key is needed."),
+                React.createElement("details", {className:"rdt-access-token-disclosure",style:{border:"1px solid #30353D",borderRadius:"10px",padding:"8px 10px"}},
+                  React.createElement("summary", {style:{cursor:"pointer",fontSize:"11px",fontWeight:750,color:"#A8AEB8",fontFamily:"JetBrains Mono, monospace",letterSpacing:"0.04em"}}, "ACCESS TOKEN KEY · optional when paired"),
+                  React.createElement("div", {style:{paddingTop:"8px"}},
                 React.createElement("label", {htmlFor:"rdt-easy-setup-token", style:{display:"block",fontFamily:"JetBrains Mono, monospace",fontSize:"10px",letterSpacing:"0.10em",color:"#8A909B"}}, "ACCESS TOKEN KEY"),
                 React.createElement("div", {className:"rdt-backend-token-row flex gap-2",style:{marginTop:"6px",display:"flex",gap:"8px",alignItems:"stretch",minWidth:0}},
                   React.createElement("input", {
@@ -18199,6 +18359,8 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                 React.createElement("label", {className:"flex items-center gap-2 mt-2 cursor-pointer opacity-70",style:{fontSize:"11px",color:"#A8AEB8"}},
                   React.createElement("input", {type:"checkbox",checked:rememberToken,onChange:e=>setRememberToken(e.target.checked)}),
                   "Remember on this device (stored unencrypted in this browser)"
+                )
+                  )
                 )
               ),
               React.createElement("details", {className:"rdt-server-cascade-help", style:{marginTop:"10px", textAlign:"left"}},

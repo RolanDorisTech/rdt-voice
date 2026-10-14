@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2-DEV.8</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-dvKLK5y4NrWrdd80Pl/f9j2PUFPvr+QmvKeX04ADVJ4=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-bmbMgEmwGFW8WTk3iUkaYkKyzJjDrgXQ4XIVeQ7//5c=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -14169,7 +14169,35 @@ function highlightText(text, search){
   const activeServerIsConnected = transcriptionBackend === "server" && serverConnectionState === "connected";
   const settingsServerConnectionIsCurrent = !!((backendTestResult && backendTestResult.ok && backendTestResult.url === baseUrl) || activeServerIsConnected);
   function renderLocalServerDiagnostics(configuredUrl, locationKey){
-    const result = backendTestResult;
+    // RDT_BROWSER_LIVE_STATUS_R2: the active browser poll is a real readiness test,
+    // not the native app's result. The current poll only sets "connected" after
+    // /health and authenticated /v1/models both succeed (guarded by this installer).
+    const autoConfiguredUrl = normalizeRdtBackendUrl(configuredUrl, "");
+    const autoActiveUrl = normalizeRdtBackendUrl(baseUrl, "");
+    const autoCheckApplies = transcriptionBackend === "server" && !!autoConfiguredUrl && autoConfiguredUrl === autoActiveUrl;
+    const autoCheckInProgress = autoCheckApplies && (serverConnectionState === "checking" || serverConnectionState === "idle");
+    let result = backendTestResult;
+    if (autoCheckApplies) {
+      if (serverConnectionState === "connected" && serverLastCheck) {
+        result = {
+          ok: true, automatic: true, authenticated: true,
+          url: autoActiveUrl,
+          ms: (latencyMs != null && Number.isFinite(Number(latencyMs))) ? Number(latencyMs) : undefined,
+          code: 200, checkedAt: serverLastCheck,
+          model: (healthData && (healthData.model || healthData.model_id)) || activeModelName || ""
+        };
+      } else if (autoCheckInProgress) {
+        result = {ok:false, automatic:true, checking:true, url:autoActiveUrl, error:"Checking browser health and authenticated API access…"};
+      } else if (serverConnectionState === "offline") {
+        result = {
+          ok:false, automatic:true, url:autoActiveUrl,
+          ms: (latencyMs != null && Number.isFinite(Number(latencyMs))) ? Number(latencyMs) : undefined,
+          checkedAt: serverLastCheck || undefined,
+          error:"The latest automatic browser check did not confirm both /health and authenticated /v1/models. This connection is not ready."
+        };
+      }
+    }
+    const connectionCheckInProgress = backendTesting || !!(result && result.checking);
     const copyFeedback = diagnosticsCopyState[locationKey] || "";
     const copyDiagnostics = async () => {
       let copied = false;
@@ -14212,8 +14240,8 @@ function highlightText(text, search){
     const normalizedConfigured = normalizeRdtBackendUrl(configuredUrl, "");
     const normalizedTested = result && result.url ? normalizeRdtBackendUrl(result.url, "") : "";
     const sameUrl = !!(normalizedConfigured && normalizedTested && normalizedConfigured === normalizedTested);
-    const statusLabel = backendTesting ? "TESTING" : !result ? "NOT TESTED" : result.ok ? "PASSED" : "FAILED";
-    const statusColor = backendTesting ? "#7DD3FC" : !result ? "#CBD5E1" : result.ok ? "#6EE7B7" : "#FCA5A5";
+    const statusLabel = connectionCheckInProgress ? "CHECKING" : !result ? "NOT TESTED" : result.ok ? (result.automatic ? "TESTED" : "PASSED") : "FAILED";
+    const statusColor = connectionCheckInProgress ? "#7DD3FC" : !result ? "#CBD5E1" : result.ok ? "#6EE7B7" : "#FCA5A5";
     const checkedAt = result && result.checkedAt ? new Date(result.checkedAt).toLocaleString() : "Not run yet";
     const latency = result && Number.isFinite(Number(result.ms)) ? Number(result.ms) + " ms" : "Not available";
     const safeUrl = value => {
@@ -14237,7 +14265,9 @@ function highlightText(text, search){
     const testedBackendUrl = result && result.url ? result.url : configuredUrl;
     const httpLoopbackOnHttpsPage = window.location.protocol === "https:" && isHttpLoopbackUrl(testedBackendUrl);
     let nextStep = "No test has run in this session. Tap Test connection to check the configured server from this device. The default local URL for this "+pageProtocolLabel+" page is "+expectedLocalBase+".";
-    if (backendTesting) nextStep = "The browser is checking /health and the authenticated /v1/models endpoint. This panel will update when both checks finish.";
+    if (connectionCheckInProgress) nextStep = "The browser is checking /health and authenticated /v1/models now. This connection is not marked ready until both succeed.";
+    else if (result && result.automatic && result.ok) nextStep = "TEST PASSED: this browser verified /health and authenticated /v1/models for the active connection.";
+    else if (result && result.automatic && !result.ok) nextStep = "The latest automatic browser check did not confirm health and authenticated API access. Do not record until the connection passes; run Test connection for more detail.";
     else if (result && result.mixedContent) nextStep = "This page uses HTTPS, but the tested remote backend uses HTTP. Browsers block that combination. Use the backend's actual HTTPS endpoint with a certificate trusted by this device; changing only the scheme or port is not enough. The default same-device URL for this page is "+expectedLocalBase+".";
     else if (result && !result.ok && !result.code && navigator.onLine && !/timed out|timeout/i.test(String(result.error || "")) && httpLoopbackOnHttpsPage) nextStep = "This HTTPS page tested a local backend URL that uses HTTP. Some browsers restrict HTTP loopback/local-network access from HTTPS pages. The default local URL matching this page is "+expectedLocalBase+". Use trusted HTTPS for the local backend, or open the app from an HTTP localhost origin for same-device development. For a phone or other device, use the backend computer's HTTPS Tailscale Serve hostname—not 127.0.0.1.";
     else if (result && !result.ok && /invalid or unsupported server url/i.test(String(result.error || ""))) nextStep = "This URL did not pass the app’s supported URL checks, so the network request was not sent. Check the scheme and hostname, then try a supported loopback or private-network hostname. This page's default local URL is "+expectedLocalBase+".";
@@ -14253,11 +14283,11 @@ function highlightText(text, search){
     else if (result && result.ok && activeServerIsConnected && normalizeRdtBackendUrl(baseUrl, "") === normalizedConfigured) nextStep = "The browser reached /health and the authenticated /v1/models endpoint accepted this browser; this Local Server is already active.";
     else if (result && result.ok) nextStep = "The browser reached /health and the authenticated /v1/models endpoint accepted this browser at the time shown. This does not by itself select this backend for transcription.";
     else if (result && !result.ok) nextStep = "No HTTP response was exposed to the page. A browser error such as ‘Load failed’ cannot reliably distinguish CORS, certificate trust, name resolution, private-network routing, local-network permission, or a stopped server. This page uses "+pageProtocolLabel+", so the default same-device URL is "+expectedLocalBase+". Run the terminal health-check command below on the computer running the backend; it intentionally checks that page-matched default, while custom and remote URLs remain unchanged. Verify HTTPS certificate trust when using HTTPS, allow this page's exact origin in RDT_ALLOWED_ORIGINS if needed, and inspect the server logs.";
-    const details = result && result.error ? String(result.error) : (result && result.ok ? "The /health endpoint responded and the authenticated /v1/models endpoint accepted this browser." : result ? "The test failed without a server-provided error message." : "No result yet.");
+    const details = result && result.automatic ? (result.ok ? "The browser automatically verified /health and authenticated /v1/models. This connection is tested and authorized." : result.checking ? "Checking /health and authenticated /v1/models from this browser now." : String(result.error || "The automatic browser check failed. This connection is not ready.")) : (result && result.error ? String(result.error) : (result && result.ok ? "The /health endpoint responded and the authenticated /v1/models endpoint accepted this browser." : result ? "The test failed without a server-provided error message." : "No result yet."));
     const rawError = result && result.rawError ? String(result.rawError) : "Not reported by the browser";
     const model = result && result.ok && result.model ? String(result.model) : "Not reported by /health";
     const httpStatus = result && result.code ? String(result.code) : "No HTTP response";
-    const resultSummary = backendTesting ? "Checking /health + authenticated /v1/models…" : !result ? "No connection test yet" : result.authFailure ? ("HTTP " + result.code + " · token " + (result.tokenPresent ? "rejected" : "missing")) : result.ok ? ("HTTP " + (result.apiCode || result.code || 200) + " · reachable + authorized") : result.code ? ("HTTP " + result.code + " · check failed") : "No HTTP response · connection failed";
+    const resultSummary = connectionCheckInProgress ? "Checking /health + authenticated API…" : result && result.automatic && result.ok ? "HTTP 200 · reachable + authorized" : !result ? "No connection test yet" : result.ok ? ("HTTP " + (result.code || 200) + " · reachable") : result.code ? ("HTTP " + result.code + " · server responded") : "No HTTP response · connection failed";
     const report = [
       "RDT Voice — Local Server Diagnostics",
       "Page origin (use this exact origin for RDT_ALLOWED_ORIGINS if needed): " + window.location.origin,
@@ -14273,6 +14303,7 @@ function highlightText(text, search){
       "URL from latest test: " + testedSafe,
       "Health endpoint tested: " + (result && result.url && testedSafe !== "(invalid or unsupported URL)" ? testedSafe.replace(/\/+$/, "") + "/health" : "not tested"),
       "Latest test status: " + statusLabel,
+      "Authenticated API check: " + (result && result.automatic ? (result.checking ? "in progress" : result.ok ? "GET /v1/models passed" : "not confirmed") : (result && result.authenticated ? "passed" : "not separately recorded in this result")),
       "Latest test matches this section's URL: " + (sameUrl ? "yes" : result ? "no" : "not applicable"),
       "HTTP status: " + httpStatus,
       "Latency: " + latency,
@@ -14292,11 +14323,11 @@ function highlightText(text, search){
           React.createElement("span", {"aria-hidden":true,style:{fontSize:"16px",lineHeight:1,color:"#A8B4C1",flexShrink:0}},diagnosticsExpanded?"▾":"▸"),
           React.createElement("span", {style:{display:"flex",flexDirection:"column",gap:"3px",minWidth:0}},
             React.createElement("span", {style:{fontSize:"10.5px",fontWeight:900,letterSpacing:".08em",color:"#D6E0EA"}},"LOCAL SERVER DIAGNOSTICS"),
-            React.createElement("span", {style:{fontSize:"10px",lineHeight:"1.4",color:"#94A3B8"}},!result&&!backendTesting?"Connection details stay tucked away here":backendTesting?"Latest check is running":"Latest /health check"+(result&&Number.isFinite(Number(result.ms))?" · "+Number(result.ms)+" ms":""))
+            React.createElement("span", {style:{fontSize:"10px",lineHeight:"1.4",color:"#94A3B8"}},!result&&!connectionCheckInProgress?"Connection details stay tucked away here":connectionCheckInProgress?"Browser readiness check is running":result&&result.automatic&&result.ok?"Browser check · reachable + authorized":"Latest check"+(result&&Number.isFinite(Number(result.ms))?" · "+Number(result.ms)+" ms":""))
           )
         ),
         React.createElement("span", {style:{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:"6px",flexShrink:0}},
-          result && !backendTesting && !sameUrl && React.createElement("span", {style:{fontSize:"9px",fontWeight:800,color:"#FBBF24"}},"OTHER URL"),
+          result && !connectionCheckInProgress && !sameUrl && React.createElement("span", {style:{fontSize:"9px",fontWeight:800,color:"#FBBF24"}},"OTHER URL"),
           React.createElement("span", {style:{fontSize:"9px",fontWeight:900,letterSpacing:".04em",padding:"4px 7px",borderRadius:"999px",border:"1px solid "+statusColor,color:statusColor,background:"rgba(0,0,0,.18)"}},statusLabel)
         )
       ),
@@ -14310,6 +14341,7 @@ function highlightText(text, search){
           field("CONFIGURED URL · THIS SECTION",configuredSafe),
           field("URL FROM LATEST TEST",testedSafe),
           field("ENDPOINTS TESTED",endpoint),
+          field("AUTHENTICATED API",result && result.automatic ? (result.checking ? "Checking GET /v1/models…" : result.ok ? "GET /v1/models · PASSED" : "GET /v1/models · NOT CONFIRMED") : (result && result.authenticated ? "GET /v1/models · PASSED" : "See the latest test result")),
           field("REQUEST RESULT",resultSummary),
           field("HTTP STATUS",httpStatus),
           field("LATENCY",backendTesting?"Testing…":latency),

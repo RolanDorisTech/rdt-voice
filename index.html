@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2-DEV.8</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-bmbMgEmwGFW8WTk3iUkaYkKyzJjDrgXQ4XIVeQ7//5c=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-RS+W0z/b57ZuaRkKTWNzJ9dqloEgSFOeL9tJ6u7auZM=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -6117,8 +6117,67 @@ button:not(:disabled):active, [role="button"]:active { transform:none !important
 .rdt-attachment-menu-wrap .rdt-attachment-menu > div:last-child {
   padding-top: calc(0.5rem + 3px) !important;
 }
+
+/* RDT Connect companion promotion — Alpha only; disabled until official app/deep-link destinations exist. */
+.rdt-connect-promo{box-sizing:border-box!important;display:block!important;width:100%!important;margin:13px 0 0!important;padding:13px 15px!important;border:1px solid rgba(91,185,220,.34)!important;border-radius:13px!important;background:linear-gradient(130deg,rgba(10,48,67,.94),rgba(18,29,42,.97))!important;box-shadow:0 8px 26px rgba(0,0,0,.15),inset 0 1px 0 rgba(210,240,255,.04)!important;color:#e4edf4!important;text-align:left!important}
+.rdt-connect-promo-title{font-size:12px!important;font-weight:850!important;letter-spacing:.015em!important;color:#dff5ff!important}
+.rdt-connect-promo p{font-size:11px!important;line-height:1.55!important;color:#b7c8d5!important;margin:5px 0 9px!important}
+.rdt-connect-promo button{display:inline-flex!important;align-items:center!important;min-height:30px!important;padding:7px 10px!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:8px!important;background:rgba(50,61,72,.55)!important;color:#aebbc6!important;font-size:10.5px!important;font-weight:800!important;cursor:not-allowed!important;opacity:.82!important}
+.rdt-connect-promo small{display:block!important;margin-top:6px!important;color:#8fa1af!important;font-size:9px!important;line-height:1.45!important}
+.rdt-connect-promo-welcome{max-width:560px!important;margin:14px auto 0!important}
+.rdt-connect-promo-compact{margin:12px 0!important;padding:10px 12px!important}
 </style>
 <!-- rdt-voice-localserver-auth-check-20261013-r1 -->
+
+<style id="rdt-connect-release-0b05">
+/* B05: responsive, low-profile clear controls; preserve the existing app visual language. */
+.rdt-connect-promo-title{color:#f4d58b!important;text-shadow:0 1px 0 rgba(0,0,0,.55),0 0 10px rgba(244,213,139,.12)!important;}
+.rdt-connect-promo button.rdt-connect-promo-download{display:inline-flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-width:205px!important;max-width:100%!important;padding:7px 11px!important;border-color:rgba(240,203,112,.32)!important;background:linear-gradient(180deg,rgba(72,63,42,.62),rgba(40,39,35,.74))!important;color:#e1d4ad!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(0,0,0,.2)!important;}
+.rdt-promo-star{color:#f4c95f!important;font-size:15px!important;line-height:1!important;text-shadow:0 1px 0 rgba(0,0,0,.4),0 0 7px rgba(244,201,95,.28)!important;}
+.rdt-connect-platform-note{color:#9aabb7!important;}
+.rdt-field-clear{box-sizing:border-box!important;flex:0 0 auto!important;min-height:28px!important;padding:5px 8px!important;border:1px solid rgba(148,163,184,.22)!important;border-radius:7px!important;background:rgba(39,45,52,.8)!important;color:#aab6c1!important;font:800 9px/1 -apple-system,BlinkMacSystemFont,sans-serif!important;letter-spacing:.045em!important;cursor:pointer!important;white-space:nowrap!important;transition:color .16s ease,border-color .16s ease,background .16s ease,transform .16s ease!important;}
+.rdt-field-clear:hover{color:#f3d88e!important;border-color:rgba(243,216,142,.5)!important;background:rgba(67,57,37,.58)!important;transform:translateY(-1px);}
+.rdt-server-url-input-row{display:flex;align-items:stretch;gap:7px;width:100%;min-width:0;}
+.rdt-server-url-input-row .rdt-server-cascade-url-input{flex:1 1 0!important;min-width:0!important;width:0!important;}
+.rdt-backend-url-entry{display:flex;align-items:center;gap:5px;width:100%;min-width:0;}
+.rdt-backend-url-entry input{flex:1 1 0!important;width:0!important;min-width:0!important;}
+#rdt-settings-panel .rdt-backend-url-entry .rdt-field-clear{min-height:24px!important;padding:4px 6px!important;}
+.rdt-backend-token-row{display:flex;align-items:stretch;flex-wrap:wrap;gap:6px!important;min-width:0;}
+.rdt-backend-token-row input{flex:1 1 130px!important;min-width:0!important;width:0!important;}
+.rdt-backend-token-row .rdt-field-clear{flex:0 0 auto!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-back,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-heading,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-description,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-connect-promo-compact,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-url,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-token,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-help,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-local-server-diagnostics,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-easy-setup-actions{animation:rdtCascadeInUp 300ms cubic-bezier(.16,1,.3,1) both!important;transform-origin:center center!important;will-change:transform,opacity;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-back{animation-delay:24ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-heading{animation-delay:60ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-description{animation-delay:96ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-connect-promo-compact{animation-delay:132ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-url{animation-delay:168ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-token{animation-delay:204ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-help{animation-delay:240ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-local-server-diagnostics{animation-delay:276ms!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-easy-setup-actions{animation-delay:312ms!important;}
+@media(max-width:420px){.rdt-connect-promo button.rdt-connect-promo-download{min-width:0!important;width:100%!important;}.rdt-backend-token-row{flex-wrap:wrap!important;}.rdt-backend-token-row input{flex-basis:130px!important;}}
+@media(prefers-reduced-motion:reduce){
+.rdt-field-clear,.rdt-field-clear:hover{transition:none!important;transform:none!important;}
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-back,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-heading,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-description,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-connect-promo-compact,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-url,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-token,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-help,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-local-server-diagnostics,
+.rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-easy-setup-actions{animation:none!important;transform:none!important;filter:none!important;will-change:auto!important;}
+}
+</style>
+<!-- RDT_CONNECT_RELEASE_0B05_CLEAR_INPUTS_AND_CASCADE -->
 </head>
 <body style="background:#2A2A2A;color:#EFEFEF;min-height:100vh;min-height:100dvh" class="select-none">
 <div id="root"></div>
@@ -7319,7 +7378,7 @@ function highlightText(text, search){
   const [selectedId,setSelectedId]=useState("default");
   const [backendToken,setBackendToken]=useState(()=>{ try { const sessionToken=sessionStorage.getItem("rdt_token"); if(sessionToken!==null) return sessionToken; return localStorage.getItem("rdt_token_remember")==="1" ? (localStorage.getItem("rdt_token")||"") : ""; } catch(e) { return ""; } });
   const serverAuthPreflightRef=useRef({url:"",token:"",at:0});
-  const [rememberToken,setRememberToken]=useState(false);   // false = token lives in sessionStorage only
+  const [rememberToken,setRememberToken]=useState(()=>{ try{return localStorage.getItem("rdt_token_remember")==="1";}catch(e){return false;} });   // persistent storage is active only after explicit opt-in
   const [audioCachePath,setAudioCachePath]=useState("");
   // --- Audio cache limits (client-side prefs; server enforcement is out of scope) ---
   const [audioCacheLimitGB,setAudioCacheLimitGB]=useState(0);                     // 0 = off
@@ -7363,6 +7422,13 @@ function highlightText(text, search){
   const [diagnosticsCopyState,setDiagnosticsCopyState]=useState({});
   const [showBackendToken,setShowBackendToken]=useState(false);
   const [backendTestNonce,setBackendTestNonce]=useState(0);
+  function clearBackendTokenFromBrowser(){
+    setBackendToken(""); setRememberToken(false); setShowBackendToken(false);
+    try{ sessionStorage.removeItem("rdt_token"); sessionStorage.removeItem("rdt_token_remember"); localStorage.removeItem("rdt_token"); localStorage.removeItem("rdt_token_remember"); }catch(e){}
+    setEasySetupTest(null); setBackendTestResult(null); setBackendTestNonce(n=>n+1);
+    setServerConnectionState("offline"); setModelReady(false); setShowPreflight(null); setHealthData(null); setActiveModelName("");
+    rdtToast("Backend token cleared from this browser.");
+  }
   const [saveStatus,setSaveStatus]=useState("saved");                    // permanent reassurance pill; "dirty" while editing, "error" if persistence fails
   const saveStatusTimerRef=useRef(null);
   const [showShortcuts,setShowShortcuts]=useState(false);
@@ -9016,7 +9082,7 @@ function highlightText(text, search){
   useEffect(()=>{ try{ localStorage.setItem("rdt_backends_v1a9", JSON.stringify(backends)); }catch(e){} },[backends]);
   useEffect(()=>{ try{ localStorage.setItem("rdt_selected_backend", selectedId); }catch(e){} },[selectedId]);
   useEffect(()=>{
-    try{ sessionStorage.setItem("rdt_token", backendToken); }catch(e){}
+    try{ if(backendToken) sessionStorage.setItem("rdt_token", backendToken); else sessionStorage.removeItem("rdt_token"); }catch(e){}
     try{
       if(rememberToken){ localStorage.setItem("rdt_token", backendToken); localStorage.setItem("rdt_token_remember","1"); }
       else { localStorage.removeItem("rdt_token"); localStorage.removeItem("rdt_token_remember"); }
@@ -16026,6 +16092,15 @@ function highlightText(text, search){
                                                                                           )
                                                     )
                                                   ),
+
+                                transcriptionBackend === "server" && React.createElement("div", {className:"rdt-connect-promo", role:"note"},
+                                  React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
+                                  React.createElement("p", null, "Recommended for Mac users: manage a private local MLX server and open RDT Voice with secure handoff. RDT Voice remains usable without it."),
+                                  React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"RDT Connect is currently available for macOS only. Windows support is coming soon."},
+                                    React.createElement("span", null, "Download for Mac · Coming soon"),
+                                    React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
+                                  React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon. Official download/open links will be enabled after the release URL and secure app-link handling are configured.")
+                                ),
                                 // --- EasyWhisper model dropdown (only when that backend is active) ---
                                                   transcriptionBackend==="easywhisper" && React.createElement(React.Fragment, null,
                                                     React.createElement("div", {className:"rdt-whisper-model-divider",style:{height:"1px", background:"#4A4A4A", marginLeft:"14px", marginRight:"14px", marginTop:"14px", marginBottom:"10px"}}),
@@ -16342,16 +16417,20 @@ React.createElement("div", {className:"space-y-2"},
                                                         React.createElement("button", {onClick:()=>selectBackend(b.id),className:"w-4 h-4 rounded-full border flex items-center justify-center shrink-0",style:{borderColor:b.id===selectedId? (waveHoverEnabled ? "#38BDF8" : "#4A98C2") : "#555",background:b.id===selectedId? (waveHoverEnabled ? "#38BDF8" : "#4A98C2") : "transparent"}}, b.id===selectedId && React.createElement("span", {className:"w-1.5 h-1.5 rounded-full bg-black"})),
                                                         React.createElement("div", {className:"flex-1 min-w-0"},
                                                           React.createElement("input", {value:b.name,name:"rdt-backend-name-"+b.id,autoComplete:"off",autoCapitalize:"off",spellCheck:false,"data-form-type":"other",onChange:e=>setBackends(prev=>prev.map(x=>x.id===b.id?{...x,name:e.target.value}:x)),className:"w-full bg-transparent outline-none font-bold truncate", style:{fontSize:"12px"}}),
-                                                          React.createElement("input", {value:b.url,name:"rdt-backend-url-"+b.id,autoComplete:"url",autoCapitalize:"off",spellCheck:false,"data-form-type":"other",onChange:e=>setBackends(prev=>prev.map(x=>x.id===b.id?{...x,url:e.target.value}:x)),className:"w-full bg-transparent outline-none opacity-60 truncate", style:{fontSize:"11px"},
+                                                          React.createElement("div", {className:"rdt-backend-url-entry"},
+                                                          React.createElement("input", {value:b.url,name:"rdt-backend-url-"+b.id,autoComplete:"url",autoCapitalize:"off",spellCheck:false,"data-form-type":"other",onChange:e=>{setBackends(prev=>prev.map(x=>x.id===b.id?{...x,url:e.target.value}:x));setBackendTestResult(null);setEasySetupTest(null);setBackendTestNonce(n=>n+1);if(b.id===selectedId){setServerConnectionState("offline");setModelReady(false);setHealthData(null);setActiveModelName("");}},className:"w-full bg-transparent outline-none opacity-60 truncate", style:{fontSize:"11px",minWidth:0},
                                                             onBlur:()=>{
                                                               if(b.id==="default") return;
                                                               const v=String(b.url||"").trim();
+                                                              if(!v) return;
                                                               if(isAllowedBackendUrl(v)){ setBackends(prev=>prev.map(x=>x.id===b.id?{...x,url:v.replace(/\/$/,"")}:x)); }
                                                               else {
                                                                 setConfirm({action:"alert",title:"⚠️ Backend URL not allowed",desc:"Direct 100.x.x.x addresses are not supported by this page network policy. Use your HTTPS Tailscale MagicDNS hostname instead. The URL was reset to local."});
                                                                 setBackends(prev=>prev.map(x=>x.id===b.id?{...x,url:rdtDefaultLocalBackendUrl(port)}:x));
                                                               }
-                                                            }})
+                                                            }}),
+                                                          React.createElement("button", {type:"button",className:"rdt-field-clear",title:"Clear this backend URL","aria-label":"Clear this backend URL",onClick:()=>{setBackends(prev=>prev.map(x=>x.id===b.id?{...x,url:""}:x));setBackendTestResult(null);setEasySetupTest(null);setBackendTestNonce(n=>n+1);if(b.id===selectedId){setServerConnectionState("offline");setModelReady(false);setHealthData(null);setActiveModelName("");}}},"Clear")
+                                                        )
                                                         ),
                                                         React.createElement("button", {onClick:()=>deleteBackend(b.id),className:"w-6 h-6 rounded-full bg-[#333] hover:bg-[#444] flex items-center justify-center shrink-0", style:{fontSize:"11px"}}, "✕")
                                                       )
@@ -16407,7 +16486,8 @@ React.createElement("div", {className:"space-y-2"},
                                                                           className:"px-3 rounded-xl bg-[#2A2A2A] border border-[#3A3A3A] hover:border-[#38BDF8] transition-colors",
                                                                           title:"Copy token key",
                                                                           style:{fontSize:"11px"}
-                                                                        }, "\u{1F4CB}")
+                                                                        }, "\u{1F4CB}"),
+                                                                        React.createElement("button", {type:"button",onClick:clearBackendTokenFromBrowser,className:"rdt-field-clear",title:"Clear backend token","aria-label":"Clear backend token"},"Clear")
                                                                       ),
                                                     React.createElement("label", {className:"flex items-center gap-2 mt-2 cursor-pointer opacity-70", style:{fontSize:"11px"}},
                                                       React.createElement("input", {type:"checkbox", checked:rememberToken, onChange:e=>setRememberToken(e.target.checked)}),
@@ -17914,6 +17994,14 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
               )
             ),
 
+            easySetupChoice === "server" && React.createElement("div", {className:"rdt-connect-promo rdt-connect-promo-welcome", role:"note"},
+              React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
+              React.createElement("p", null, "Recommended for Mac users who want a managed local MLX server and secure browser handoff. RDT Voice can also connect to your own server without the app."),
+              React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"RDT Connect is currently available for macOS only. Windows support is coming soon."},
+                React.createElement("span", null, "Download for Mac · Coming soon"),
+                React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
+              React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon.")
+            ),
             // Continue button — disabled until a choice is made
             React.createElement("button", {
               onClick:()=>{ if(easySetupChoice) setEasySetupPath(easySetupChoice); },
@@ -18065,23 +18153,53 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                                                             React.createElement("button", {onClick:()=>{ setEasySetupPath(null); }, className:"rdt-setup-back rdt-server-cascade-back", style:{marginBottom:"10px"}}, "\u2190 Back"),
                                                             React.createElement("h3", {className:"rdt-server-cascade-heading", style:{fontSize:"18px", fontWeight:750, letterSpacing:"0.01em", margin:0}}, "Connect to your server"),
             React.createElement("p", {className:"rdt-server-cascade-description", style:{fontSize:"12px", color:"#A8AEB8", lineHeight:"1.55", marginTop:"6px", maxWidth:"340px", marginLeft:"auto", marginRight:"auto"}}, "RDT Voice posts audio to the URL below."),
+            React.createElement("div", {className:"rdt-connect-promo rdt-connect-promo-compact", role:"note"},
+              React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
+              React.createElement("p", null, "Use the desktop app to manage a private local MLX server and pass a secure one-time handoff to this browser. You can also connect to your own server without the app."),
+              React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"RDT Connect is currently available for macOS only. Windows support is coming soon."},
+                React.createElement("span", null, "Download for Mac · Coming soon"),
+                React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
+              React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon.")
+            ),
                                                             React.createElement("div", {className:"rdt-server-cascade-url", style:{width:"100%"}},
                 React.createElement("div", {className:"rdt-server-cascade-url-label", style:{marginTop:"16px", textAlign:"left", fontFamily:"JetBrains Mono, monospace", fontSize:"10px", letterSpacing:"0.10em", color:"#8A909B"}}, "BACKEND URL"),
-              React.createElement("input", {
-                className:"rdt-server-cascade-url-input",
-                value:easySetupBackendUrl,
-                onChange:e=>{ setEasySetupBackendUrl(e.target.value); },
-                placeholder:RDT_DEFAULT_BACKEND_URL,
-                onMouseEnter:(e)=>{ e.currentTarget.style.borderColor="#4A6A82"; e.currentTarget.style.boxShadow="0 0 0 2px rgba(56,189,248,0.18)"; },
-                onMouseLeave:(e)=>{ e.currentTarget.style.borderColor="#2F3340"; e.currentTarget.style.boxShadow="none"; },
-                style:{
-                  width:"100%", padding:"11px 14px", borderRadius:"12px",
-                  background:"#14161A", color:"#F0F0F0",
-                  border:"1px solid #2F3340", outline:"none",
-                  fontSize:"12.5px", boxSizing:"border-box", marginTop:"6px",
-                  transition:"border-color 180ms ease, box-shadow 180ms ease"
-                }
-              })
+                React.createElement("div", {className:"rdt-server-url-input-row",style:{marginTop:"6px"}},
+                  React.createElement("input", {
+                    className:"rdt-server-cascade-url-input",
+                    value:easySetupBackendUrl,
+                    onChange:e=>{ setEasySetupBackendUrl(e.target.value); setEasySetupTest(null); setBackendTestResult(null); setBackendTestNonce(n=>n+1); setServerConnectionState("offline"); setModelReady(false); setShowPreflight(null); },
+                    placeholder:RDT_DEFAULT_BACKEND_URL,
+                    onMouseEnter:(e)=>{ e.currentTarget.style.borderColor="#4A6A82"; e.currentTarget.style.boxShadow="0 0 0 2px rgba(56,189,248,0.18)"; },
+                    onMouseLeave:(e)=>{ e.currentTarget.style.borderColor="#2F3340"; e.currentTarget.style.boxShadow="none"; },
+                    style:{
+                      flex:"1 1 0", minWidth:0, width:0, padding:"11px 14px", borderRadius:"12px",
+                      background:"#14161A", color:"#F0F0F0",
+                      border:"1px solid #2F3340", outline:"none",
+                      fontSize:"12.5px", boxSizing:"border-box",
+                      transition:"border-color 180ms ease, box-shadow 180ms ease"
+                    }
+                  }),
+                  React.createElement("button", {type:"button",className:"rdt-field-clear",title:"Clear backend URL","aria-label":"Clear backend URL",onClick:()=>{setEasySetupBackendUrl("");setEasySetupTest(null);setBackendTestResult(null);setBackendTestNonce(n=>n+1);setServerConnectionState("offline");setModelReady(false);setShowPreflight(null);}}, "Clear")
+                )
+              ),
+              React.createElement("div", {className:"rdt-server-cascade-token",style:{width:"100%",marginTop:"12px",textAlign:"left"}},
+                React.createElement("label", {htmlFor:"rdt-easy-setup-token", style:{display:"block",fontFamily:"JetBrains Mono, monospace",fontSize:"10px",letterSpacing:"0.10em",color:"#8A909B"}}, "ACCESS TOKEN KEY"),
+                React.createElement("div", {className:"rdt-backend-token-row flex gap-2",style:{marginTop:"6px",display:"flex",gap:"8px",alignItems:"stretch",minWidth:0}},
+                  React.createElement("input", {
+                    id:"rdt-easy-setup-token",type:showBackendToken?"text":"password",value:backendToken,
+                    onChange:e=>{setBackendToken(e.target.value);setEasySetupTest(null);setBackendTestResult(null);setBackendTestNonce(n=>n+1);},placeholder:"Paste your server access token",
+                    autoComplete:"off",spellCheck:false,autoCapitalize:"off","data-form-type":"other",
+                    className:"flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-[#1E1E1E] border border-[#444] outline-none focus:border-[#38BDF8]",
+                    style:{fontSize:"12px",boxSizing:"border-box",minWidth:0,flex:"1 1 0",width:0}
+                  }),
+                  React.createElement("button", {type:"button",onClick:()=>setShowBackendToken(v=>!v),className:"px-3 rounded-xl bg-[#2A2A2A] border border-[#3A3A3A] hover:border-[#38BDF8] transition-colors",title:showBackendToken?"Hide backend token":"Show backend token","aria-label":showBackendToken?"Hide backend token":"Show backend token",style:{fontSize:"10px",fontWeight:800,flex:"0 0 auto"}},showBackendToken?"HIDE":"SHOW"),
+                  React.createElement("button", {type:"button",onClick:clearBackendTokenFromBrowser,className:"rdt-field-clear",title:"Clear backend token","aria-label":"Clear backend token"},"Clear")
+                ),
+                React.createElement("p", {style:{fontSize:"10px",lineHeight:"1.45",color:"#8A909B",marginTop:"5px"}}, "Used for authenticated server checks. It stays in this browser session by default; enabling Remember stores it unencrypted in this browser."),
+                React.createElement("label", {className:"flex items-center gap-2 mt-2 cursor-pointer opacity-70",style:{fontSize:"11px",color:"#A8AEB8"}},
+                  React.createElement("input", {type:"checkbox",checked:rememberToken,onChange:e=>setRememberToken(e.target.checked)}),
+                  "Remember on this device (stored unencrypted in this browser)"
+                )
               ),
               React.createElement("details", {className:"rdt-server-cascade-help", style:{marginTop:"10px", textAlign:"left"}},
                 React.createElement("summary", {

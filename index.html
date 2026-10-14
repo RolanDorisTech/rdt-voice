@@ -6201,6 +6201,27 @@ button:not(:disabled):active, [role="button"]:active { transform:none !important
 }
 </style>
 <!-- RDT_CONNECT_RELEASE_0B05_CLEAR_INPUTS_AND_CASCADE -->
+
+<style id="rdt-connect-server-release-polish-0c08">
+.rdt-mac-companion-disclosure{padding:9px 12px!important}
+.rdt-mac-companion-disclosure>summary{display:flex!important;align-items:center;gap:8px;min-width:0;list-style:none;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10.5px!important;line-height:1.35!important;color:#f4d58b!important}
+.rdt-mac-companion-disclosure>summary::-webkit-details-marker{display:none}
+.rdt-mac-companion-disclosure>summary::before{content:"▸";display:inline-block;flex:0 0 auto;color:#f4d58b;font-size:12px}
+.rdt-mac-companion-disclosure[open]>summary::before{content:"▾"}
+.rdt-mac-companion-content{padding-top:5px;min-width:0}
+.rdt-mac-companion-content p{margin-top:5px!important}
+.rdt-server-setup-diagnostics-group{margin-top:10px;border:1px solid rgba(148,163,184,.19);border-radius:11px;background:rgba(8,12,17,.20);overflow:hidden}
+.rdt-server-setup-diagnostics-group>summary{display:flex;align-items:center;gap:8px;min-height:39px;padding:10px 12px;cursor:pointer;list-style:none;color:#c9d8e4;font-size:11px;font-weight:800;letter-spacing:.02em;line-height:1.35}
+.rdt-server-setup-diagnostics-group>summary::-webkit-details-marker{display:none}
+.rdt-server-setup-diagnostics-group>summary::before{content:"▸";font-size:12px;color:#9fc8df;flex:0 0 auto}
+.rdt-server-setup-diagnostics-group[open]>summary::before{content:"▾"}
+.rdt-server-setup-diagnostics-content{padding:0 10px 10px;border-top:1px solid rgba(148,163,184,.12)}
+.rdt-server-setup-diagnostics-content>.rdt-server-cascade-help{margin-top:9px!important}
+.rdt-server-setup-diagnostics-content>.rdt-local-server-diagnostics{margin-top:9px!important}
+.rdt-easy-setup-swipe-panel:has(.rdt-cascade-dir-up.rdt-cascade-server){touch-action:pan-y}
+@media(max-width:360px){.rdt-mac-companion-disclosure>summary{font-size:9.5px!important;letter-spacing:0!important}}
+@media(prefers-reduced-motion:reduce){.rdt-mac-companion-disclosure,.rdt-server-setup-diagnostics-group{scroll-behavior:auto!important}}
+</style>
 </head>
 <body style="background:#2A2A2A;color:#EFEFEF;min-height:100vh;min-height:100dvh" class="select-none">
 <div id="root"></div>
@@ -14117,6 +14138,7 @@ function highlightText(text, search){
       if(!e.touches||e.touches.length!==1) return;
       const panel=e.target&&e.target.closest?e.target.closest(".rdt-panel-in, .rdt-dev-panel, .rdt-easy-setup-swipe-panel"):null;
       if(!panel){drag=null;return;}
+      if(panel.classList.contains("rdt-easy-setup-swipe-panel") && panel.querySelector(".rdt-cascade-dir-up.rdt-cascade-server")){drag=null;return;}
       const r=panel.getBoundingClientRect();
       drag={x:e.touches[0].clientX,y:e.touches[0].clientY,panel,width:r.width,settings:!!panel.closest("#rdt-settings-panel"),dev:panel.classList.contains("rdt-dev-panel"),easy:panel.classList.contains("rdt-easy-setup-swipe-panel"),active:false,
         orig:{transition:panel.style.transition,transform:panel.style.transform,opacity:panel.style.opacity,animation:panel.style.animation}};
@@ -18151,6 +18173,19 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
             ),
 
             // Continue button — disabled until a choice is made
+            easySetupChoice === "server" && React.createElement("div", {className:"rdt-connect-promo rdt-connect-promo-welcome rdt-easy-setup-token-welcome", role:"group", "aria-label":"Server access token key"},
+              React.createElement("label", {htmlFor:"rdt-easy-setup-welcome-token", className:"rdt-connect-promo-title", style:{display:"block",marginBottom:"7px"}}, "Server access token key"),
+              React.createElement("div", {style:{display:"flex",gap:"8px",alignItems:"stretch",minWidth:0}},
+                React.createElement("input", {
+                  id:"rdt-easy-setup-welcome-token", type:showBackendToken?"text":"password", value:backendToken,
+                  onChange:e=>{setBackendToken(e.target.value);setEasySetupTest(null);setBackendTestResult(null);setBackendTestNonce(n=>n+1);setServerConnectionState("offline");setModelReady(false);setShowPreflight(null);},
+                  placeholder:"Paste your server access token key", autoComplete:"off", spellCheck:false, autoCapitalize:"off", "data-form-type":"other",
+                  style:{boxSizing:"border-box",minWidth:0,flex:"1 1 0",width:0,padding:"10px 11px",border:"1px solid rgba(148,163,184,.35)",borderRadius:"9px",background:"rgba(8,12,17,.8)",color:"#f4f5f8",fontSize:"12px",outline:"none"}
+                }),
+                React.createElement("button", {type:"button", onClick:()=>setShowBackendToken(v=>!v), style:{flex:"0 0 auto",padding:"8px 11px",border:"1px solid rgba(148,163,184,.25)",borderRadius:"9px",background:"rgba(39,45,52,.86)",color:"#d8e3ed",fontSize:"11px",fontWeight:800,cursor:"pointer"}}, showBackendToken?"Hide":"Show")
+              ),
+              React.createElement("small", {style:{display:"block",marginTop:"7px",color:"#9aabb7",fontSize:"10px",lineHeight:1.5}}, "For authenticated servers, enter the key now; it carries into Connect to your server. The key is not sent to RDT Connect. Do not share it publicly.")
+            ),
             React.createElement("button", {
               onClick:()=>{ if(easySetupChoice) setEasySetupPath(easySetupChoice); },
               disabled: !easySetupChoice,
@@ -18304,9 +18339,10 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
           easySetupPath === "server" && React.createElement(React.Fragment, null,
                                                             React.createElement("button", {onClick:()=>{ setEasySetupPath(null); }, className:"rdt-setup-back rdt-server-cascade-back", style:{marginBottom:"10px"}}, "\u2190 Back"),
                                                             React.createElement("h3", {className:"rdt-server-cascade-heading", style:{fontSize:"18px", fontWeight:750, letterSpacing:"0.01em", margin:0}}, "Connect to your server"),
-            React.createElement("p", {className:"rdt-server-cascade-description", style:{fontSize:"12px", color:"#A8AEB8", lineHeight:"1.55", marginTop:"6px", maxWidth:"340px", marginLeft:"auto", marginRight:"auto"}}, "RDT Voice posts audio to the URL below."),
-            React.createElement("div", {className:"rdt-connect-promo rdt-connect-promo-compact", role:"note"},
-              React.createElement("div", {className:"rdt-connect-promo-title"}, "Optional Mac Companion · RDT Connect"),
+            
+            React.createElement("details", {className:"rdt-connect-promo rdt-connect-promo-compact rdt-mac-companion-disclosure", role:"group"},
+              React.createElement("summary", {className:"rdt-connect-promo-title", title:"Optional: manage your private local MLX server and open RDT Voice with a secure handoff."}, "Optional · Private local MLX server & secure browser handoff"),
+              React.createElement("div", {className:"rdt-mac-companion-content"},
               React.createElement("button", {type:"button", disabled:true, className:"rdt-connect-promo-download", title:"The official release URL and secure app-link handling are not configured yet. Windows support is also coming soon."},
                 React.createElement("span", null, "Download for Mac · Coming soon"),
                 React.createElement("span", {className:"rdt-promo-star", "aria-hidden":"true"}, "★")),
@@ -18316,7 +18352,7 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                 React.createElement("p", null, "RDT Connect manages the local Whisper server and keeps its access key on your Mac. When you choose to open RDT Voice, it can pass a short-lived handoff to the browser. You can also connect to your own server without installing the app."),
                 React.createElement("small", {className:"rdt-connect-platform-note"}, "Currently available for macOS only · Windows support is coming soon. The download remains disabled until the official release URL and secure app-link handling are ready.")
               )
-            ),
+            )),
                                                             React.createElement("div", {className:"rdt-server-cascade-url", style:{width:"100%"}},
                 React.createElement("div", {className:"rdt-server-cascade-url-label", style:{marginTop:"16px", textAlign:"left", fontFamily:"JetBrains Mono, monospace", fontSize:"10px", letterSpacing:"0.10em", color:"#8A909B"}}, "BACKEND URL"),
                 React.createElement("div", {className:"rdt-server-url-input-row",style:{marginTop:"6px"}},
@@ -18363,7 +18399,10 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                   )
                 )
               ),
-              React.createElement("details", {className:"rdt-server-cascade-help", style:{marginTop:"10px", textAlign:"left"}},
+              React.createElement("details", {className:"rdt-server-setup-diagnostics-group", style:{marginTop:"10px", textAlign:"left"}},
+                React.createElement("summary", {className:"rdt-server-setup-diagnostics-heading", title:"Backend setup instructions, connection checks, and diagnostics"}, "Testing, Diagnostics & Setup Help"),
+                React.createElement("div", {className:"rdt-server-setup-diagnostics-content"},
+                  React.createElement("details", {className:"rdt-server-cascade-help", style:{marginTop:"10px", textAlign:"left"}},
                 React.createElement("summary", {
                   onMouseEnter:(e)=>{ e.currentTarget.style.color="#38BDF8"; e.currentTarget.style.textShadow="0 0 8px rgba(56,189,248,0.55)"; },
                   onMouseLeave:(e)=>{ e.currentTarget.style.color="#8A909B"; e.currentTarget.style.textShadow="none"; },
@@ -18388,7 +18427,7 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                   )
                 ),
               ),
-            renderLocalServerDiagnostics(easySetupBackendUrl, "easy-setup"),
+            renderLocalServerDiagnostics(easySetupBackendUrl, "easy-setup"))),
             React.createElement("div", {className:"rdt-easy-setup-actions", style:{marginTop:"16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px"}},
               React.createElement("button", {onClick:dismissEasySetup, className:"rdt-setup-notnow"}, "Not now"),
               React.createElement("div", {style:{display:"flex", gap:"8px"}},

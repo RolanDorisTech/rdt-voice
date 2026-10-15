@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RDT Connect",
+  "version": "0.2.0-dev.9",
+  "identifier": "com.rolandoristech.rdtconnect",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "RDT Connect",
+        "width": 1040,
+        "height": 800,
+        "minWidth": 760,
+        "minHeight": 640,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
+    "resources": {
+      "resources/rdt_voice_backend": "rdt_voice_backend",
+      "resources/rdt_voice_web": "rdt_voice_web",
+      "resources/third_party_notices": "third_party_notices"
+    },
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "infoPlist": "Info.plist",
+      "signingIdentity": "-"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "requireSignedVersion": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMzQUNFQTdDMUU4MDgyMjYKUldRbWdvQWVmT3Fzdy9JdDhoa1N5YThLNTYxcXA5aGNyRk8yeGtwKzNlVHRRTmgwVWxSdTd1ZUgK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/RolanDorisTech/rdt-voice/main/rdt_connect/updates/dev/latest.json"
+      ],
+      "dangerousInsecureTransportProtocol": false
+    }
+  }
+}

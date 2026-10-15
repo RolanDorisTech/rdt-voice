@@ -1,0 +1,10 @@
+# macOS Finder metadata
+.DS_Store
+
+# Local backup files and historical patch snapshots
+*.bak
+.backup-*/
+.rdt-connect-backups/
+
+# Dated backup snapshots
+*.backup-*

@@ -25,6 +25,19 @@ RDT Voice — Browser transcription with EasyWhisper and your own Whisper backen
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
+## Desktop companion — RDT Connect
+
+RDT Connect is the native desktop companion for RDT Voice. It brings the RDT Voice interface together with controls for managing a local transcription backend, selecting models, configuring secure local access, and pairing devices for private remote use.
+
+- **Desktop documentation:** [RDT Connect setup and release notes](rdt_connect/README.md)
+- **Downloads:** [RDT Connect releases on GitHub](https://github.com/RolanDorisTech/rdt-voice/releases)
+
+**Current platform:** The development desktop package targets macOS on Apple Silicon. The bundled MLX Whisper backend is not a Windows implementation; Windows support requires a compatible backend and separate testing.
+
+**macOS security:** The zero-cost development package is not Apple-notarized. macOS may display a security warning on first launch. Read the desktop documentation before installing, and follow Apple's supported security guidance rather than disabling Gatekeeper globally.
+
+The browser version of RDT Voice remains available independently. You do not need RDT Connect to use the hosted browser application.
+
 > **Current build:** `v0.2-DEV.6` / HTML build `dev6-release-candidate-r8-20261011`. This is a development candidate, not a claim that every browser, device, and model combination has been exhaustively tested.
 
 > **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.

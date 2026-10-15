@@ -25,19 +25,6 @@ RDT Voice — Browser transcription with EasyWhisper and your own Whisper backen
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
-## Desktop companion — RDT Connect
-
-RDT Connect is the native desktop companion for RDT Voice. It brings the RDT Voice interface together with controls for managing a local transcription backend, selecting models, configuring secure local access, and pairing devices for private remote use.
-
-- **Desktop documentation:** [RDT Connect setup and release notes](rdt_connect/README.md)
-- **Downloads:** [RDT Connect releases on GitHub](https://github.com/RolanDorisTech/rdt-voice/releases)
-
-**Current platform:** The development desktop package targets macOS on Apple Silicon. The bundled MLX Whisper backend is not a Windows implementation; Windows support requires a compatible backend and separate testing.
-
-**macOS security:** The zero-cost development package is not Apple-notarized. macOS may display a security warning on first launch. Read the desktop documentation before installing, and follow Apple's supported security guidance rather than disabling Gatekeeper globally.
-
-The browser version of RDT Voice remains available independently. You do not need RDT Connect to use the hosted browser application.
-
 > **Current build:** `v0.2-DEV.6` / HTML build `dev6-release-candidate-r8-20261011`. This is a development candidate, not a claim that every browser, device, and model combination has been exhaustively tested.
 
 > **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.
@@ -72,9 +59,7 @@ python3 -m http.server 5173
 
 Open `http://localhost:5173/`. The root `index.html` is the current app. The existing `rdt-voice.html` is intentionally retained unchanged as the earlier historical version. Do not double-click an HTML file and open it as a `file://` URL; browser permissions and origin behavior are less predictable that way.
 
-## Optional desktop companion: RDT Connect
-
-Prefer a simpler way to manage your local Whisper server on a Mac? RDT Connect is an optional desktop companion for RDT Voice. Choose a model, start your server, and open RDT Voice from one app.
+### Option C — use RDT Connect (optional desktop app)
 
 **1. Choose a model.**
 
@@ -83,6 +68,15 @@ Prefer a simpler way to manage your local Whisper server on a Mac? RDT Connect i
 **2. Start the server.**
 
 [![RDT Connect with the server running and Open RDT Voice button](assets/rdt-connect-server-running.png)](#rdt-connect-downloads)
+
+Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional companion for **macOS on Apple Silicon**. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
+
+1. Open RDT Connect.
+2. Choose a Whisper model.
+3. Click **Start Server**.
+4. Click **Open RDT Voice**.
+
+RDT Connect is optional — you can continue using RDT Voice directly in your browser without installing it.
 
 **3. Open RDT Voice.**
 

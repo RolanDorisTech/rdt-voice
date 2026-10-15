@@ -85,11 +85,15 @@ RDT Connect is optional — you can continue using RDT Voice directly in your br
 ## RDT Connect Downloads
 
 | Platform | Installer | Availability |
-|---|---|---|
-| macOS (Apple Silicon) | DMG (`.dmg`) | [View releases](https://github.com/RolanDorisTech/rdt-voice/releases) |
-| Windows | Installer (`.exe`) | Coming later |
+|:---:|:---:|:---:|
+| macOS (Apple Silicon) | [**Download RDT Connect (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/v0.2-dev.9/RDT.Connect_0.2.0-dev.9_aarch64.dmg) | Development prerelease |
+| Windows | Installer (.exe) | Coming later |
 
-RDT Connect is optional. You can use the hosted RDT Voice browser app without installing it.
+RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.
+
+**macOS note:** This development build is not notarized by Apple, so macOS may show a security warning on first launch. Read the [release notes and first-launch guidance](https://github.com/RolanDorisTech/rdt-voice/releases/tag/v0.2-dev.9).
+
+See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
 
 **macOS note:** The current development package is not Apple-notarized. See the [RDT Connect documentation](rdt_connect/README.md) for first-launch security guidance.
 

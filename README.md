@@ -59,6 +59,40 @@ python3 -m http.server 5173
 
 Open `http://localhost:5173/`. The root `index.html` is the current app. The existing `rdt-voice.html` is intentionally retained unchanged as the earlier historical version. Do not double-click an HTML file and open it as a `file://` URL; browser permissions and origin behavior are less predictable that way.
 
+### Option C — use RDT Connect (optional desktop app)
+
+**1. Choose a model.**
+
+[![RDT Connect with the server stopped and Start Server button](assets/rdt-connect-server-stopped.png)](#rdt-connect-downloads)
+
+**2. Start the server.**
+
+[![RDT Connect with the server running and Open RDT Voice button](assets/rdt-connect-server-running.png)](#rdt-connect-downloads)
+
+Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional companion for **macOS on Apple Silicon**. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
+
+1. Open RDT Connect.
+2. Choose a Whisper model.
+3. Click **Start Server**.
+4. Click **Open RDT Voice**.
+
+RDT Connect is optional — you can continue using RDT Voice directly in your browser without installing it.
+
+**3. Open RDT Voice.**
+
+*Click either screenshot to jump to the desktop downloads.*
+
+## RDT Connect Downloads
+
+| Platform | Installer | Availability |
+|---|---|---|
+| macOS (Apple Silicon) | DMG (`.dmg`) | [View releases](https://github.com/RolanDorisTech/rdt-voice/releases) |
+| Windows | Installer (`.exe`) | Coming later |
+
+RDT Connect is optional. You can use the hosted RDT Voice browser app without installing it.
+
+**macOS note:** The current development package is not Apple-notarized. See the [RDT Connect documentation](rdt_connect/README.md) for first-launch security guidance.
+
 ## Run your own Whisper backend
 
 ### Why run your own backend?

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/resources/rdt_voice_backend/
+src-tauri/resources/rdt_voice_web/
+src-tauri/resources/third_party_notices/
+
+# Generated macOS bundle resources and branding assets
+build/
+public/rdt-brand-icon.webp
+src-tauri/icons/icon.icns

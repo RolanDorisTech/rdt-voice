@@ -1,0 +1,176 @@
+{
+  "catalog": "src/locales/en.json",
+  "status": "V10 REMEDIATION CANDIDATE — independent audit required before translation",
+  "translationGate": "BLOCKED_PENDING_V10_INDEPENDENT_AUDIT",
+  "previousCatalogSha256": "a002bdd910dd8cf5633eb17b0cceae75d82624a20d5336f06e31f400839c9612",
+  "sourceHashesBefore": {
+    "index.html": "be06fcbf1a435325f0e05d60f2f6061e3786847243011073b38f32df5da5f019",
+    "src/main.ts": "492dfbbe0bd80bf19c9bbf120604bd1ac7f766f4b9ada2df7a2fdb7c074db002",
+    "src/style.css": "76a8fdd06fc71d7d512e7c2e7bb7d57ee39def413454cc7522c414306baf913b",
+    "src-tauri/src/main.rs": "8484c2153ebb60779ddf77b10374f655ce1163f0dcdac4908dace076d33f44ef"
+  },
+  "sourceHashesAfter": {
+    "index.html": "ead0588364189f49b69c25a306fdfcb01268863643c3dda622f824f6df613f3b",
+    "src/main.ts": "174e141d40eec7da86be7612ad9b62b153e69e8067f14003559a066a79d63ff8",
+    "src/style.css": "76a8fdd06fc71d7d512e7c2e7bb7d57ee39def413454cc7522c414306baf913b",
+    "src-tauri/src/main.rs": "add00ee69b4372fa175c4b6ff7d31bdea9e0bb4318eebcef403d36397f2e6fe5"
+  },
+  "messageCount": 881,
+  "classificationCounts": {
+    "KEEP_ENGLISH": 122,
+    "TRANSLATE": 759
+  },
+  "messagesWithNamedPlaceholders": 298,
+  "distinctPlaceholderNames": 126,
+  "additionalPlaceholderContextFixes": [
+    "msg.cli_candidate_checks_join.303fbf3d: {join} renamed to {candidateChecksSummary} after source inspection.",
+    "msg.pid_pid_port_unknown_description.bdfadb5c: {unknown} renamed to {port} after source inspection."
+  ],
+  "excludedImplementationKeys": [
+    "msg.empty_row.322cc613",
+    "msg.enter.dc8659db",
+    "msg.http.e0603c49",
+    "msg.https.3e194352",
+    "msg.ies.388f91ea",
+    "msg.list_details.b8c578ec",
+    "msg.list_title.c92c8b5f",
+    "msg.mini_button.660e4ad0",
+    "msg.mini_button_approve.db083bf1",
+    "msg.mini_button_deny.470184b1",
+    "msg.model_storage_path.fe6cba2f",
+    "msg.model_storage_priority.38069bbd",
+    "msg.pass.3c29833a",
+    "msg.slice.9bca2154",
+    "msg.unsaved.9c80e833",
+    "msg.y.a1fce436"
+  ],
+  "placeholderNormalization": {
+    "msg.json_parsed.90041cb5": "; JSON {jsonParseStatus}",
+    "msg.keys_join.02d8dc5d": "; keys: {rootKeys}",
+    "msg.cli_candidate_checks_join.303fbf3d": "CLI candidate checks: {candidateChecksSummary}",
+    "msg.pid_pid_port_unknown_description.bdfadb5c": "PID {pid} · port {port} · {description}",
+    "msg.active_backend_upstream_unknown_on_port_unkn.76e56155": "Active backend upstream: {transport} on port {backendPort}; Serve route: {route}{route_https_port}",
+    "msg.diagnostics_could_not_complete_redacted.14a83a85": "Diagnostics could not complete: {error}",
+    "msg.found_unknown_version.ee0775c9": "FOUND ({source}){version}",
+    "msg.generated_toisostring.6f0c6a0a": "Generated: {timestamp}",
+    "msg.read_only_unknown_tailscale_configuration_ch.a25b07eb": "Read-only: {readOnlyStatus}; Tailscale configuration changed: {configurationChangedStatus}",
+    "msg.tailscale_cli_candidate.9fe786cf": "Tailscale CLI: {candidateSummary}",
+    "msg.tailscale_online_unknown_dns_name_present_un.5c7d340e": "Tailscale online: {onlineStatus}; DNS name present: {dnsNameStatus}; expected suffix valid: {suffixValidStatus}",
+    "msg.candidate_unknown_exit_a_elapsed_ms_ms_stdou.48ab7c29": "{candidateSource}={candidateState} (exit {exitCode}; {elapsed_ms} ms; stdout {stdout_bytes} B; stderr {stderr_bytes} B; JSON {jsonParseStatus})",
+    "msg.fail_checked_message.c15aeec8": "Server check: {serverCheckStatus} · Access check: {accessCheckStatus} · {message}",
+    "msg.tofixed_gb.bfeeb8ae": "{amount} GB",
+    "msg.tofixed_kb.3960b85b": "{amount} KB",
+    "msg.tofixed_mb.f8238dda": "{amount} MB",
+    "msg.tolocaletimestring_touppercase_message.aade41ca": "{time} [{level}] {message}"
+  },
+  "retiredFragmentKeys": [
+    "msg.certificates_must_be_unexpired_match_the_key.c27e9cae",
+    "msg.choose_a_hugging_face_cache_home_its.b45d5132",
+    "msg.folder_contains_the.f36f5a68",
+    "msg.folders_up_to_20_locations_are_supported_sto.a5412e3e",
+    "msg.for_existing_files_first_choose_the_certific.3e9356de",
+    "msg.in_subject_alternative_name_rdt_connect_uses.3eaf28c9",
+    "msg.install_tailscale_for_macos_from.a14d6df3",
+    "msg.requires_tailscale_or_another_vpn_private_ne.a810bde1",
+    "msg.that_lets_your_phone_securely_reach_this_mac.aac7b965",
+    "msg.then_if_it_uses_a_private_ca_choose_that_sel.4931870e"
+  ],
+  "newCompleteMessageKeys": [
+    "remoteAccess.installTailscale",
+    "remoteAccess.vpnRequirement",
+    "settings.language.activeStatus",
+    "settings.modelStorage.cacheHomeHelp",
+    "settings.security.existingCertificateHelp"
+  ],
+  "resolvedMissingSourceRows": [
+    "src/main.ts:171 replaced by settings.language.activeStatus; obsolete HTML selector title removed."
+  ],
+  "nearDuplicates": "Retained separately where UI/ARIA/platform context may differ; contextual style review remains in the inventory.",
+  "notes": [
+    "The current source still has the language selector intentionally disabled pending translation integration. This seed defines the correct replacement status template but does not itself enable multilingual runtime behavior.",
+    "The four data-l10n-rich elements identify complete translation units. data-l10n-slot names are named placeholders and must be rendered as safe existing DOM nodes, never injected with innerHTML.",
+    "Existing v4 keys are retained for unchanged messages and intentionally retained for the two corrected cache-cleanup messages. Do not regenerate keys from English values.",
+    "Raw diagnostics and selected developer-facing messages may remain English according to the inventory classification.",
+    "Sixteen original catalog entries are excluded: fifteen implementation-only values plus one dynamic user-agent truncation extraction artifact.",
+    "The original sixteen placeholder-review records plus two additional source-context placeholder cases were reviewed; method-name artifacts are replaced with semantic placeholders and raw diagnostic templates remain KEEP_ENGLISH as classified.",
+    "The native RDT Voice resource folder and ~/dev/rdt-voice browser project are outside this patch scope.",
+    "V10 consistency correction: keyMigrationReportSha256 is recalculated from the exact packaged key_migration_report.json; validator and installer cross-check all four catalog metadata hashes."
+  ],
+  "englishCatalogSha256": "ee4833815b195b3e83450bac29ae0cd0ada9457219f2cc878d729466fc36ef42",
+  "inventorySha256": "8ddb7729770d02e21405c5e6eacb695e20ca86aa3746627020937289e52da8d0",
+  "sourceMapSha256": "a7ef8e75ec4c9599f80663a04ff7d0b3e304c9f3c9ebc7a48f3d83a4d909ec6d",
+  "v6SemanticPlaceholderFixes": {
+    "msg.tcp_port_listener_pid_s_arg1_arg2.41f3d3b1": "TCP {port} listener process IDs: {listener_pids}. Port owner details: {port_owner_details}",
+    "msg.backend_pid_stopped_pid_was_stopped_but_port.9c4659af": "Backend PID {stopped_pid} was stopped, but port {port} is still occupied by these listener process IDs: {listener_pids}. RDT Connect did not stop any other processes. {port_owner_details}",
+    "msg.stop_could_not_verify_port_port_is_free_list.5fded1ba": "Stop could not verify that port {port} is free. Listener process IDs: {listener_pids}. Port owner details: {port_owner_details}",
+    "msg.stop_did_not_complete_verified_rdt_connect_b.c114a91c": "Stop did not complete. Remaining verified RDT Connect backend activity: {detail}. The app has not reported the server as stopped.",
+    "msg.phase_backend_candidate_pid_arg1_ppid_arg2_p.f19f073f": "{phase} BACKEND CANDIDATE: PID={pid} PPID={parent_pid} PGID={process_group_id} STAT={process_state} VERIFIED_EXPECTED_EXECUTABLE={verified_expected_executable} COMMAND={command}",
+    "msg.phase_backend_candidate_arg1_additional_cand.87545f12": "{phase} BACKEND CANDIDATE: omitted additional candidate records={candidate_count} (bounded report limit reached)."
+  },
+  "v6PlaceholderNotesAdded": 115,
+  "v6DiagnosticClassificationChanges": [
+    "msg.phase_backend_candidate_arg1_additional_cand.87545f12",
+    "msg.phase_backend_candidate_pid_arg1_ppid_arg2_p.f19f073f",
+    "msg.phase_manager_process_pid_arg1_ppid_arg2_pgi.fb87c089",
+    "msg.phase_port_port_listeners_arg1_safety.fce5d4d0",
+    "msg.phase_snapshot_manager_pid_arg1_requested_ba.954482f0"
+  ],
+  "v6RollbackHardening": [
+    "fixed file allowlist only",
+    "reject path traversal and path escapes",
+    "verify backup before-hashes",
+    "refuse if installed target hash differs from recorded payload hash",
+    "verify complete manifest key sets before writing"
+  ],
+  "v6PackageValidation": {
+    "englishCatalogValidator": "PASS — 881 entries, inventory parity and classification totals 759 TRANSLATE / 122 KEEP_ENGLISH.",
+    "installerDryRun": "PASS on a disposable project recreated from the exact source snapshot hashes; no working user project was touched.",
+    "installerApplyAndRollback": "PASS on a disposable project; restored original three source files matched original SHA-256 values and removed all newly created localization targets.",
+    "rollbackPathTraversalRefusal": "PASS — rollback refused a tampered manifest containing a path-traversal entry before changing files.",
+    "rollbackChangedTargetRefusal": "PASS — rollback refused to overwrite a target modified after apply.",
+    "zipAndPayloadChecksums": "PASS — both ZIP CRC checks and all listed payload/helper SHA-256 checks verified.",
+    "rustTauriBuild": "NOT RUN in this environment; must be validated with a native macOS build after the guarded patch is applied."
+  },
+  "v8SemanticDiagnosticPlaceholderFixes": {
+    "msg.phase_snapshot_manager_pid_arg1_requested_ba.954482f0": {
+      "english": "{phase} SNAPSHOT: manager PID={manager_pid}; requested backend PID={requested_backend_pid}.",
+      "notes": "{phase}: diagnostic phase label; {manager_pid}: process ID of the RDT Connect manager; {requested_backend_pid}: requested backend PID or the literal none-selected marker. Raw developer diagnostic; keep English.",
+      "stableKeyPreserved": true
+    },
+    "msg.phase_manager_process_pid_arg1_ppid_arg2_pgi.fb87c089": {
+      "english": "{phase} MANAGER PROCESS: PID={manager_pid} PPID={parent_pid} PGID={process_group_id} STAT={process_state} COMMAND={command}",
+      "notes": "{phase}: diagnostic phase label; {manager_pid}: manager process ID; {parent_pid}: parent process ID (PPID); {process_group_id}: process-group ID (PGID); {process_state}: operating-system process state (STAT); {command}: sanitized process command. Raw developer diagnostic; keep English.",
+      "stableKeyPreserved": true
+    },
+    "msg.phase_manager_process_pid_arg1_not_found_in.dd6c1a15": {
+      "english": "{phase} MANAGER PROCESS: PID {manager_pid} not found in /bin/ps snapshot.",
+      "notes": "{phase}: diagnostic phase label; {manager_pid}: process ID checked in the /bin/ps snapshot. Raw developer diagnostic; keep English.",
+      "stableKeyPreserved": true
+    },
+    "msg.phase_port_port_listeners_arg1_safety.fce5d4d0": {
+      "english": "{phase} PORT {port}: LISTENERS [{listener_descriptions}] ({safety}).",
+      "notes": "{phase}: diagnostic phase label; {port}: TCP port number; {listener_descriptions}: semicolon-separated listener process descriptions including PID/PPID/PGID/state/command when available; {safety}: safety/ownership status. Raw developer diagnostic; keep English.",
+      "stableKeyPreserved": true
+    }
+  },
+  "v8ValidatorEnforcement": "PASS expected placeholder token sets and per-token notes enforced for all four audited raw diagnostics",
+  "v8RollbackSymlinkHardening": [
+    "reject direct symlink targets",
+    "reject any symlink ancestor under application root, including in-root redirects",
+    "recheck all targets immediately before rollback mutation",
+    "check backup paths for symlinked ancestors",
+    "retain fixed allowlist and before/current/payload hash checks"
+  ],
+  "v8PackageValidation": {
+    "catalogValidator": "PASS — 881 keys; exact catalog/inventory parity; 759 TRANSLATE / 122 KEEP_ENGLISH; semantic placeholder sets and notes enforced.",
+    "installerDryRun": "PASS on disposable project from exact baseline source snapshot.",
+    "installerApplyAndRollback": "PASS on disposable project; original source hashes restored after rollback.",
+    "rollbackSymlinkAncestorTest": "PASS — refused an in-root symlinked ancestor before any target was changed.",
+    "rollbackChangedTargetProtection": "PASS — refused rollback when an installed source file changed after apply.",
+    "rollbackBackupSymlinkProtection": "PASS — refused a symlinked backup file path.",
+    "validatorRegressionTest": "PASS — a deliberately generic {arg1} placeholder causes validation failure.",
+    "zipAndPayloadChecksums": "PASS — ZIP integrity and all listed payload/helper SHA-256 entries verified.",
+    "rustTauriBuild": "NOT RUN here; requires native macOS build after the user applies the guarded patch."
+  },
+  "keyMigrationReportSha256": "7ae795613f59b2ec4b4f7a70ee3dcba252ad0f7b01c4917b3c20c3cf72c956fe"
+}

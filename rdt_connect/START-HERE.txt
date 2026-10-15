@@ -1,0 +1,7 @@
+RDT Voice Server — Phase B development project
+
+This is the COMPLETE app project, not a patch folder.
+Move this extracted folder into ~/dev/testing/ and rename it exactly:
+  RDT_Voice_Desktop_PhaseB
+
+Then follow README.md. Do not run apply-fix.sh; the corrected icon preparation is built into scripts/prepare-macos-bundle.sh.

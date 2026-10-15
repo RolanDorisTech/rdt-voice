@@ -1,0 +1,251 @@
+{
+  "previousCatalogKeys": 902,
+  "activeCatalogKeys": 881,
+  "excludedImplementationKeys": 16,
+  "retiredFragmentKeys": 10,
+  "newSemanticKeys": [
+    "remoteAccess.installTailscale",
+    "remoteAccess.vpnRequirement",
+    "settings.language.activeStatus",
+    "settings.modelStorage.cacheHomeHelp",
+    "settings.security.existingCertificateHelp"
+  ],
+  "missingSourceFindingsResolved": [
+    "Replaced obsolete visible status with settings.language.activeStatus template.",
+    "Removed obsolete title claiming English is the only integrated native language."
+  ],
+  "legacyKeyPolicy": "All surviving v4 keys remain unchanged even if an English value has been corrected; key identity is maintained by source_to_key_map.json, never recomputed from value text.",
+  "retiredKeys": {
+    "msg.certificates_must_be_unexpired_match_the_key.c27e9cae": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.security.existingCertificateHelp",
+      "oldEnglish": "Certificates must be unexpired, match the key, and include"
+    },
+    "msg.choose_a_hugging_face_cache_home_its.b45d5132": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.modelStorage.cacheHomeHelp",
+      "oldEnglish": "Choose a Hugging Face cache home: its"
+    },
+    "msg.empty_row.322cc613": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS class passed to className; not visible interface text. The actual empty-state sentence is a different message."
+    },
+    "msg.enter.dc8659db": {
+      "status": "excluded-implementation-value",
+      "reason": "Keyboard-event key value checked by code (`event.key === \"Enter\"`); not an accessibility instruction or visible label."
+    },
+    "msg.folder_contains_the.f36f5a68": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.modelStorage.cacheHomeHelp",
+      "oldEnglish": "folder contains the"
+    },
+    "msg.folders_up_to_20_locations_are_supported_sto.a5412e3e": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.modelStorage.cacheHomeHelp",
+      "oldEnglish": "folders. Up to 20 locations are supported. Stop the server before saving. RDT Connect will not create a missing folder on an unplugged external drive."
+    },
+    "msg.for_existing_files_first_choose_the_certific.3e9356de": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.security.existingCertificateHelp",
+      "oldEnglish": "For existing files, first choose the certificate and matching private key and click"
+    },
+    "msg.http.e0603c49": {
+      "status": "excluded-implementation-value",
+      "reason": "Lowercase protocol enum used in a conditional (`mode === \"http\"`); the actual visible option has its own complete label."
+    },
+    "msg.https.3e194352": {
+      "status": "excluded-implementation-value",
+      "reason": "Lowercase protocol enum used in a conditional; the actual visible option/status messages have their own complete strings."
+    },
+    "msg.ies.388f91ea": {
+      "status": "excluded-implementation-value",
+      "reason": "Pluralization suffix fragment from `entr${count === 1 ? \"y\" : \"ies\"}`. Never translate this word fragment independently."
+    },
+    "msg.in_subject_alternative_name_rdt_connect_uses.3eaf28c9": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.security.existingCertificateHelp",
+      "oldEnglish": "in Subject Alternative Name. RDT Connect uses the selected paths in place; it does not copy your key or certificates. Keep those paths stable and update/relink them when your certificate renews."
+    },
+    "msg.install_tailscale_for_macos_from.a14d6df3": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "remoteAccess.installTailscale",
+      "oldEnglish": "Install Tailscale for macOS from"
+    },
+    "msg.list_details.b8c578ec": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS class used for generated DOM styling; not the visible browser-row text."
+    },
+    "msg.list_title.c92c8b5f": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS class used for generated DOM styling; not the visible browser title."
+    },
+    "msg.mini_button.660e4ad0": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS class used for a button element; translate the button label and tooltip instead."
+    },
+    "msg.mini_button_approve.db083bf1": {
+      "status": "excluded-implementation-value",
+      "reason": "Combined CSS class list (mini-button approve), not a user-facing label. The visible label “Approve” has its own key."
+    },
+    "msg.mini_button_deny.470184b1": {
+      "status": "excluded-implementation-value",
+      "reason": "Combined CSS class list (mini-button deny), not a user-facing label. The visible labels “Deny” and “Remove” have separate keys."
+    },
+    "msg.model_storage_path.fe6cba2f": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS class attached to the element that displays a filesystem path; not the path or a label."
+    },
+    "msg.model_storage_priority.38069bbd": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS class for the priority-number element; the visible number is generated dynamically."
+    },
+    "msg.pass.3c29833a": {
+      "status": "excluded-implementation-value",
+      "reason": "OpenSSL command argument (`-passin pass:`); it is not displayed UI copy."
+    },
+    "msg.requires_tailscale_or_another_vpn_private_ne.a810bde1": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "remoteAccess.vpnRequirement",
+      "oldEnglish": "Requires Tailscale or another VPN/private network"
+    },
+    "msg.that_lets_your_phone_securely_reach_this_mac.aac7b965": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "remoteAccess.vpnRequirement",
+      "oldEnglish": "that lets your phone securely reach this Mac."
+    },
+    "msg.then_if_it_uses_a_private_ca_choose_that_sel.4931870e": {
+      "status": "replaced-by-complete-translation-unit",
+      "replacementKey": "settings.security.existingCertificateHelp",
+      "oldEnglish": "Then, if it uses a private CA, choose that self-signed root and click"
+    },
+    "msg.unsaved.9c80e833": {
+      "status": "excluded-implementation-value",
+      "reason": "CSS state class added to an element; the visible status text is “Pending save”."
+    },
+    "msg.y.a1fce436": {
+      "status": "excluded-implementation-value",
+      "reason": "Pluralization suffix fragment from `entr${count === 1 ? \"y\" : \"ies\"}`. Never translate this single letter independently."
+    },
+    "msg.slice.9bca2154": {
+      "status": "excluded-extraction-artifact",
+      "reason": "A dynamic user-agent truncation expression, not translatable UI copy."
+    },
+    "MISSING::src/main.ts:171": {
+      "status": "removed-obsolete-source-copy",
+      "reason": "Still present as visible settings/status text in the source snapshot, but intentionally omitted from en.json as an obsolete English-only placeholder. Resolve the source/catalog contract before integration: remove/replace it as part of enabling localization, or add a real key if it will remain visible.",
+      "replacementKey": "settings.language.activeStatus"
+    },
+    "MISSING::index.html:app-language-title": {
+      "status": "removed-obsolete-source-copy",
+      "reason": "Tooltip/title remains in index.html but has no catalog key. It reflects the same obsolete English-only placeholder state; remove/replace it during localization integration, or include it if it remains user-visible."
+    }
+  },
+  "catalogVersionFrom": 3,
+  "catalogVersionTo": 4,
+  "semanticPlaceholderCorrections": {
+    "msg.tcp_port_listener_pid_s_arg1_arg2.41f3d3b1": {
+      "oldEnglish": "TCP {port} listener PID(s)={arg1}; {arg2}",
+      "newEnglish": "TCP {port} listener process IDs: {listener_pids}. Port owner details: {port_owner_details}",
+      "stableKeyPreserved": true
+    },
+    "msg.backend_pid_stopped_pid_was_stopped_but_port.9c4659af": {
+      "oldEnglish": "Backend PID {stopped_pid} was stopped, but port {port} is still occupied by PID(s) {arg1}. RDT Connect did not stop those other process(es). {arg2}",
+      "newEnglish": "Backend PID {stopped_pid} was stopped, but port {port} is still occupied by these listener process IDs: {listener_pids}. RDT Connect did not stop any other processes. {port_owner_details}",
+      "stableKeyPreserved": true
+    },
+    "msg.stop_could_not_verify_port_port_is_free_list.5fded1ba": {
+      "oldEnglish": "Stop could not verify port {port} is free. Listener PID(s): {arg1}. {arg2}",
+      "newEnglish": "Stop could not verify that port {port} is free. Listener process IDs: {listener_pids}. Port owner details: {port_owner_details}",
+      "stableKeyPreserved": true
+    },
+    "msg.stop_did_not_complete_verified_rdt_connect_b.c114a91c": {
+      "oldEnglish": "Stop did not complete; verified RDT Connect backend process(es) remain: {detail}. The app has not reported the server as stopped.",
+      "newEnglish": "Stop did not complete. Remaining verified RDT Connect backend activity: {detail}. The app has not reported the server as stopped.",
+      "stableKeyPreserved": true
+    },
+    "msg.phase_backend_candidate_pid_arg1_ppid_arg2_p.f19f073f": {
+      "oldEnglish": "{phase} BACKEND CANDIDATE: PID={arg1} PPID={arg2} PGID={arg3} STAT={arg4} VERIFIED_EXPECTED_EXECUTABLE={arg5} COMMAND={arg6}",
+      "newEnglish": "{phase} BACKEND CANDIDATE: PID={pid} PPID={parent_pid} PGID={process_group_id} STAT={process_state} VERIFIED_EXPECTED_EXECUTABLE={verified_expected_executable} COMMAND={command}",
+      "stableKeyPreserved": true
+    },
+    "msg.phase_backend_candidate_arg1_additional_cand.87545f12": {
+      "oldEnglish": "{phase} BACKEND CANDIDATE: {arg1} additional candidate(s) omitted from bounded report.",
+      "newEnglish": "{phase} BACKEND CANDIDATE: omitted additional candidate records={candidate_count} (bounded report limit reached).",
+      "stableKeyPreserved": true
+    }
+  },
+  "reclassifiedKeepEnglish": [
+    "msg.phase_backend_candidate_arg1_additional_cand.87545f12",
+    "msg.phase_backend_candidate_pid_arg1_ppid_arg2_p.f19f073f",
+    "msg.phase_manager_process_pid_arg1_ppid_arg2_pgi.fb87c089",
+    "msg.phase_port_port_listeners_arg1_safety.fce5d4d0",
+    "msg.phase_snapshot_manager_pid_arg1_requested_ba.954482f0"
+  ],
+  "notesV6": [
+    "v6 keeps existing active keys stable even where source English and placeholder names are clarified.",
+    "Backend-candidate, manager-process, port-listener and process-snapshot report records are raw developer diagnostics and are KEEP_ENGLISH.",
+    "Translated stop-error messages use complete phrases and semantic named placeholders.",
+    "Remaining generic positional placeholders in translated messages are documented in inventory placeholder_notes; they are not silently renamed in this revision."
+  ],
+  "sourceHashesAfter": {
+    "index.html": "ead0588364189f49b69c25a306fdfcb01268863643c3dda622f824f6df613f3b",
+    "src/main.ts": "174e141d40eec7da86be7612ad9b62b153e69e8067f14003559a066a79d63ff8",
+    "src/style.css": "76a8fdd06fc71d7d512e7c2e7bb7d57ee39def413454cc7522c414306baf913b",
+    "src-tauri/src/main.rs": "add00ee69b4372fa175c4b6ff7d31bdea9e0bb4318eebcef403d36397f2e6fe5"
+  },
+  "v8SemanticPlaceholderCorrections": {
+    "msg.phase_snapshot_manager_pid_arg1_requested_ba.954482f0": {
+      "previousEnglish": "{phase} SNAPSHOT: manager PID={arg1}; requested backend PID={arg2}.",
+      "newEnglish": "{phase} SNAPSHOT: manager PID={manager_pid}; requested backend PID={requested_backend_pid}.",
+      "placeholderNames": [
+        "manager_pid",
+        "phase",
+        "requested_backend_pid"
+      ],
+      "stableKeyPreserved": true,
+      "classification": "KEEP_ENGLISH"
+    },
+    "msg.phase_manager_process_pid_arg1_ppid_arg2_pgi.fb87c089": {
+      "previousEnglish": "{phase} MANAGER PROCESS: PID={arg1} PPID={arg2} PGID={arg3} STAT={arg4} COMMAND={arg5}",
+      "newEnglish": "{phase} MANAGER PROCESS: PID={manager_pid} PPID={parent_pid} PGID={process_group_id} STAT={process_state} COMMAND={command}",
+      "placeholderNames": [
+        "command",
+        "manager_pid",
+        "parent_pid",
+        "phase",
+        "process_group_id",
+        "process_state"
+      ],
+      "stableKeyPreserved": true,
+      "classification": "KEEP_ENGLISH"
+    },
+    "msg.phase_manager_process_pid_arg1_not_found_in.dd6c1a15": {
+      "previousEnglish": "{phase} MANAGER PROCESS: PID {arg1} not found in /bin/ps snapshot.",
+      "newEnglish": "{phase} MANAGER PROCESS: PID {manager_pid} not found in /bin/ps snapshot.",
+      "placeholderNames": [
+        "manager_pid",
+        "phase"
+      ],
+      "stableKeyPreserved": true,
+      "classification": "KEEP_ENGLISH"
+    },
+    "msg.phase_port_port_listeners_arg1_safety.fce5d4d0": {
+      "previousEnglish": "{phase} PORT {port}: LISTENERS [{arg1}] ({safety}).",
+      "newEnglish": "{phase} PORT {port}: LISTENERS [{listener_descriptions}] ({safety}).",
+      "placeholderNames": [
+        "listener_descriptions",
+        "phase",
+        "port",
+        "safety"
+      ],
+      "stableKeyPreserved": true,
+      "classification": "KEEP_ENGLISH"
+    }
+  },
+  "v8Notes": [
+    "All four audited raw diagnostic entries now use semantically named placeholders in both Rust source and the English catalog. Existing active key identities are preserved.",
+    "The locale validator enforces exact expected placeholder-name sets and nonempty per-placeholder notes for all four audited raw diagnostic entries.",
+    "Rollback rejects any symlinked component below the application or backup root and rechecks paths immediately before mutation.",
+    "V8 was created from the v6 remediation payload; the actual user project has not been modified by packaging/tests."
+  ]
+}

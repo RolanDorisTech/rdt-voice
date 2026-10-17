@@ -23,7 +23,7 @@ Click either image below to try the live browser demo:
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
-> **Current browser build:** `v0.2-DEV.9` / HTML build `r34` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
+> **Current browser build:** `v0.2-DEV.9` / HTML build `r35` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
 
 > **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.
 

@@ -15,17 +15,15 @@ Click either image below to try the live browser demo:
 <h1 align="center">RDT Voice</h1>
 <p align="center"><strong>Browser transcription with EasyWhisper and your own Whisper backend</strong></p>
 <hr>
-RDT Voice — Browser transcription with EasyWhisper and your own Whisper backend
-
 **Record in your browser. Transcribe on your device or send audio to a Whisper backend you control. Export captions, transcripts, YouTube chapters, and description drafts.**
 
 - 🚀 **[Try RDT Voice](https://rolandoristech.github.io/rdt-voice/)**
 - ⬇️ **[View the current app source](index.html)** · [Download the complete repository ZIP](https://github.com/RolanDorisTech/rdt-voice/archive/refs/heads/main.zip)
-- 🧰 **[Apple Silicon backend setup guide](backend/apple/README.md)** · [server source](backend/apple/server.py) · [requirements](backend/apple/requirements.txt)
+- 🧰 **[Apple Silicon backend setup guide](backend/README-APPLE-SILICON.md)** · [shared backend guide](backend/README.md) · [server source](backend/server.py) · [requirements](backend/requirements.txt)
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
-> **Current build:** `v0.2-DEV.6` / HTML build `dev6-release-candidate-r8-20261011`. This is a development candidate, not a claim that every browser, device, and model combination has been exhaustively tested.
+> **Current browser build:** `v0.2-DEV.9` / HTML build `r34` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
 
 > **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.
 
@@ -76,26 +74,24 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 3. Click **Start Server**.
 4. Click **Open RDT Voice**.
 
-RDT Connect is optional — you can continue using RDT Voice directly in your browser without installing it.
-
 **3. Open RDT Voice.**
 
 *Click either screenshot to jump to the desktop downloads.*
 
 ## RDT Connect Downloads
 
-| Platform | Installer | Availability |
-|:---:|:---:|:---:|
-| macOS (Apple Silicon) | [**Download RDT Connect (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/v0.2-dev.9/RDT.Connect_0.2.0-dev.9_aarch64.dmg) | Development prerelease |
-| Windows | Installer (.exe) | Coming later |
+| Platform | Installer | Version | Build | File size |
+| --- | --- | --- | --- | --- |
+| macOS (Apple Silicon) | [**Download RDT Connect (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/v0.2-dev.9/RDT.Connect_0.2.0-dev.9_aarch64.dmg) | `0.2.0-dev.9` | Not listed | 351 MB |
+| Windows | Installer (.exe) | Coming later | — | — |
 
 RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.
 
-**macOS note:** This development build is not notarized by Apple, so macOS may show a security warning on first launch. Read the [release notes and first-launch guidance](https://github.com/RolanDorisTech/rdt-voice/releases/tag/v0.2-dev.9).
+<p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="800"></p>
+
+**macOS note:** RDT Connect `0.2.0-dev.9` uses ad-hoc signing and is not Apple-notarized. macOS may show a security warning or prevent first launch. See the [first-launch guidance](rdt_connect/README.md#macos-signing-and-first-launch) and [release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/v0.2-dev.9).
 
 See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
-
-**macOS note:** The current development package is not Apple-notarized. See the [RDT Connect documentation](rdt_connect/README.md) for first-launch security guidance.
 
 ## Run your own Whisper backend
 
@@ -105,7 +101,7 @@ For users with compatible hardware, running Whisper locally can make a **dramati
 
 Your results will depend on your hardware, selected model, audio quality, and language. EasyWhisper remains the easiest option when you don't want to install a separate backend.
 
-For Apple Silicon Macs, see the [Apple Silicon backend setup guide](backend/apple/README.md).
+For Apple Silicon Macs, see the [Apple Silicon backend setup guide](backend/README-APPLE-SILICON.md).
 
 ### Platform scope
 
@@ -329,7 +325,7 @@ RDT Voice incorporates or loads third-party software and resources. Their licens
 - **ONNX Runtime Web** — [MIT License](https://github.com/microsoft/onnxruntime/blob/main/LICENSE); used as part of the browser inference stack.
 - **Google Fonts** — Inter and JetBrains Mono are served as web fonts under their respective upstream font licenses.
 - **Whisper model files and converted model assets** — governed by the terms of each upstream model repository. Check the specific model card and license rather than assuming all model files share one license.
-- * **OpenCC-JS 1.4.2** — MIT; bundled `opencc-data` dictionary data is Apache-2.0. See [`licenses/third-party/opencc-js/NOTICE.md`](licenses/third-party/opencc-js/NOTICE.md).
+- **OpenCC-JS 1.4.2** — MIT; bundled `opencc-data` dictionary data is Apache-2.0. See [`licenses/third-party/opencc-js/NOTICE.md`](licenses/third-party/opencc-js/NOTICE.md).
 
 This list is a practical summary, not a substitute for each upstream license. Preserve the existing repository license files and relevant notices when redistributing the project.
 

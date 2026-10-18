@@ -1,5 +1,5 @@
 <!-- RDT_CONNECT_PROMO_START -->
-<div align="center">
+<div align="left">
   <h1>Meet RDT Connect</h1>
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one Mac app.</p>

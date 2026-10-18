@@ -153,8 +153,12 @@ button.rdt-click-confirm:not(:disabled) { animation: rdtButtonClickConfirm .20s 
 }
 .button[aria-busy="true"] { cursor: progress; opacity: .78; }
 .rdt-inline-success { border-color: rgba(167,243,208,.34) !important; }
-.rdt-button-inline-feedback { display:inline-flex; align-items:center; gap:4px; color:#a7f3d0; animation:rdtInlineFeedbackIn .14s ease-out both; }
-@keyframes rdtInlineFeedbackIn { from { opacity:.65; transform:translateY(1px); } to { opacity:1; transform:translateY(0); } }
+.rdt-button-inline-feedback { display:inline-flex; align-items:center; gap:4px; color:#a7f3d0; animation:rdtInlineFeedbackIn .34s cubic-bezier(.42,0,.58,1) .12s both; }
+@keyframes rdtInlineFeedbackIn {
+  0% { opacity:0; transform:translateY(3px) scale(.94); }
+  65% { opacity:1; transform:translateY(0) scale(1.02); }
+  100% { opacity:1; transform:translateY(0) scale(1); }
+}
 @media (prefers-reduced-motion: reduce) {
   button, button.rdt-click-confirm:not(:disabled) { animation: none !important; transition: none !important; }
 }
@@ -884,6 +888,118 @@ button.rdt-click-confirm:not(:disabled) { animation:rdtA16ButtonPress .30s ease-
 .menu-bar-option input:active + .gold-checkbox-visual { transform:scale(.88); }
 .menu-bar-option input:focus-visible + .gold-checkbox-visual { outline:2px solid #f5c463; outline-offset:3px; }
 .menu-bar-option-copy { flex:1 1 auto; min-width:0; }
+
+@property --spot-x {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+@property --spot-y {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+@property --spot-rx {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 170px;
+}
+@property --spot-ry {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 60px;
+}
+
+/* Soft rounded spotlight proven in the Safari mini-lab. */
+#visual-setup-guide-overlay {
+  position:fixed; inset:0; z-index:2147483000; pointer-events:none;
+  opacity:0; visibility:hidden;
+  background:rgba(3,7,12,.68);
+  -webkit-backdrop-filter:blur(7px) brightness(.42);
+  backdrop-filter:blur(7px) brightness(.42);
+  -webkit-mask-image:radial-gradient(
+    ellipse var(--spot-rx,170px) var(--spot-ry,60px)
+    at var(--spot-x,50%) var(--spot-y,50%),
+    transparent 0%, transparent 62%, rgba(0,0,0,.25) 80%, #000 100%);
+  mask-image:radial-gradient(
+    ellipse var(--spot-rx,170px) var(--spot-ry,60px)
+    at var(--spot-x,50%) var(--spot-y,50%),
+    transparent 0%, transparent 62%, rgba(0,0,0,.25) 80%, #000 100%);
+  transition: opacity .38s ease, --spot-x .48s ease, --spot-y .48s ease, --spot-rx .48s ease, --spot-ry .48s ease, visibility 0s linear .38s;
+}
+#visual-setup-guide-overlay.active {
+  opacity:1; visibility:visible;
+  transition: opacity .38s ease, --spot-x .48s ease, --spot-y .48s ease, --spot-rx .48s ease, --spot-ry .48s ease, visibility 0s;
+}
+body.visual-setup-guide-model #model-download-button,
+body.visual-setup-guide-https #local-https-quick-setup-button {
+  position:relative !important; z-index:2147483001 !important;
+  filter:brightness(1.12);
+  outline:1px solid rgba(255,220,145,.85) !important;
+  outline-offset:3px;
+  border-color:#ffe19a !important;
+  box-shadow:0 0 0 1px rgba(245,198,99,.23),
+    0 0 12px rgba(245,190,91,.48),0 0 23px rgba(245,190,91,.18) !important;
+  transition:filter .35s ease,box-shadow .35s ease,outline-color .35s ease !important;
+}
+
+/* Settings Help: one full-width row and one simple toggle. */
+#settings-help-section { width:100%; max-width:none; min-width:0; }
+#settings-help-section .settings-help-grid {
+  grid-template-columns:minmax(0,1fr) !important; width:100%; min-width:0;
+}
+#settings-help-section .settings-help-card {
+  display:flex; width:100%; min-width:0; padding:12px;
+}
+.visual-setup-guide-toggle {
+  position:relative; display:flex; align-items:center; justify-content:space-between;
+  gap:14px; width:100%; min-width:0; cursor:pointer;
+}
+.visual-setup-guide-toggle-copy { min-width:0; }
+.visual-setup-guide-toggle-copy strong { color:#dce5ed; font-size:12px; font-weight:800; }
+.visual-setup-guide-toggle input {
+  position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden;
+  clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+.visual-setup-guide-switch {
+  position:relative; display:block; flex:0 0 34px; width:34px; height:20px;
+  box-sizing:border-box; border:1px solid #63717d; border-radius:999px;
+  background:rgba(10,13,17,.72); transition:background .16s ease,border-color .16s ease;
+}
+.visual-setup-guide-switch::after {
+  content:""; position:absolute; left:2px; top:2px; width:14px; height:14px;
+  border-radius:50%; background:#a6b3bf;
+  transition:transform .16s ease,background .16s ease;
+}
+.visual-setup-guide-toggle input:checked + .visual-setup-guide-switch {
+  border-color:#bca064; background:rgba(200,173,112,.42);
+}
+.visual-setup-guide-toggle input:checked + .visual-setup-guide-switch::after {
+  transform:translateX(14px); background:#f0cf7d;
+}
+.visual-setup-guide-toggle input:focus-visible + .visual-setup-guide-switch {
+  outline:2px solid #d8b66e; outline-offset:3px;
+}
+
+/* Normalize the gaps between Local Server controls without changing behavior. */
+#view-local #local-https-quick-prompt { margin-top:10px !important; gap:10px 12px !important; }
+#view-local #local-https-quick-status { margin-top:8px !important; }
+#view-local #browser-choice-row { margin-top:10px !important; gap:8px 10px !important; }
+#view-local .model-download-main-row { gap:12px !important; }
+#view-local .model-download-actions { gap:8px !important; }
+#view-local .server-action-row { margin-top:12px !important; gap:10px !important; }
+#view-local #start-progress { margin-top:10px !important; }
+#view-local .local-server-details { margin-top:10px !important; }
+
+@media (prefers-reduced-motion:reduce) {
+  body.visual-setup-guide-model #model-download-button,
+  body.visual-setup-guide-https #local-https-quick-setup-button {
+    animation:none !important;
+  }
+  .visual-setup-guide-switch,
+  .visual-setup-guide-switch::after { transition:none !important; }
+}
+
 .about-company-link { width:fit-content; color:inherit; text-decoration:none; text-underline-offset:3px; }
 .about-company-link:hover strong { color:#f4d79a !important; text-decoration:underline; }
 .about-company-link:focus-visible, .about-business-contact a:focus-visible { outline:2px solid #d8b66e; outline-offset:3px; border-radius:2px; }
@@ -1886,4 +2002,604 @@ html[dir="rtl"] [data-l10n-ignore] {
 @media (prefers-reduced-motion: reduce) {
   .server-action-row > .server-toggle,
   .server-action-row > .button.open-voice-cta { transition:none !important; }
+}
+
+
+/* RDT CONNECT UX PATCH 01 — model menu overlay */
+.local-step-card { overflow: visible !important; }
+.model-select-shell { position: relative !important; }
+.model-select-shell.open { z-index: 100 !important; }
+.model-select-menu {
+  position: absolute !important;
+  top: calc(100% + 7px) !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  margin: 0 !important;
+  max-height: min(360px, 55vh) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  background: #0b141b !important;
+  background-image: linear-gradient(155deg, #111f28, #0a1218) !important;
+  border: 1px solid rgba(148, 163, 184, .42) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .72) !important;
+  opacity: 1 !important;
+  isolation: isolate;
+  z-index: 101 !important;
+  scrollbar-color: #536b79 #0a1218;
+  grid-template-columns: minmax(0, 1fr);
+}
+.model-select-shell.open .model-select-menu { display: grid; }
+.model-select-option { position: relative; background-color: transparent !important; }
+
+
+/* RDT Connect build marker 0D13: warm-gold game-style glow with a tighter halo and slower breathing. */
+/* The persistent red outline remains; the separate gold halo makes the action easier to spot. */
+#local-https-quick-setup-button {
+  border: 1px solid #fb7185 !important;
+  box-shadow: 0 0 0 1px rgba(248,113,133,.30), 0 0 8px rgba(248,75,93,.13) !important;
+}
+
+/* Bright but smooth breathing gold halo. Disabled/busy actions never glow. */
+#local-https-quick-setup-button:not(:disabled):not([aria-busy="true"]),
+#model-download-button:not(:disabled):not([aria-busy="true"]) {
+  animation: rdtSecureActionGlow0D13 6.0s ease-in-out infinite;
+  will-change: filter;
+}
+@keyframes rdtSecureActionGlow0D13 {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(255, 203, 55, .52))
+            drop-shadow(0 0 7px rgba(255, 174, 0, .34));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(255, 225, 105, .98))
+            drop-shadow(0 0 13px rgba(255, 184, 0, .82))
+            drop-shadow(0 0 23px rgba(255, 195, 35, .56));
+  }
+}
+
+/* Preserve the existing short download-attention nudge while the gold halo breathes. */
+#model-download-button.needs-download-attention:not(:disabled):not([aria-busy="true"]) {
+  animation: rdtSecureActionGlow0D13 6.0s ease-in-out infinite,
+             rdtDownloadButtonAttention .82s ease-in-out 4 !important;
+}
+#local-https-quick-setup-button:disabled,
+#local-https-quick-setup-button[aria-busy="true"],
+#model-download-button:disabled,
+#model-download-button[aria-busy="true"] {
+  animation: none !important;
+  filter: none !important;
+  will-change: auto;
+}
+
+/* Make Keychain trust removal read as destructive without changing its safeguards. */
+#remove-tls-trust-button {
+  border: 1px solid rgba(248,113,133,.82) !important;
+  color: #fecaca !important;
+  background: rgba(127,29,29,.20) !important;
+}
+#remove-tls-trust-button:not(:disabled):hover,
+#remove-tls-trust-button:not(:disabled):focus-visible {
+  border-color: #ff7185 !important;
+  color: #fff1f2 !important;
+  background: rgba(127,29,29,.32) !important;
+  box-shadow: 0 0 0 1px rgba(248,113,133,.22), 0 0 10px rgba(220,53,69,.14) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #local-https-quick-setup-button:not(:disabled):not([aria-busy="true"]),
+  #model-download-button:not(:disabled):not([aria-busy="true"]),
+  #model-download-button.needs-download-attention:not(:disabled):not([aria-busy="true"]) {
+    animation: none !important;
+    filter: none !important;
+    will-change: auto;
+  }
+  #local-https-quick-setup-button {
+    border-color: #fb7185 !important;
+    box-shadow: 0 0 0 1px rgba(248,113,133,.32) !important;
+  }
+}
+
+/* 0D14: explicit running-vs-selected model state and selective cache deletion */
+.model-active-status { margin: 7px 0 0; font-size: 11px; line-height: 1.45; }
+.model-switch-row { display: flex; justify-content: flex-end; margin-top: 7px; }
+#model-switch-button[hidden] { display: none !important; }
+.model-cache-selection-list { display: grid; gap: 8px; margin: 12px 0; }
+.model-cache-selection-item { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 9px 10px; border: 1px solid rgba(148,163,184,.20); border-radius: 9px; background: rgba(10,18,24,.34); cursor: pointer; }
+.model-cache-selection-item input[type="checkbox"] { flex: 0 0 auto; margin: 2px 0 0; accent-color: #f5c463; }
+.model-cache-selection-copy { display: grid; gap: 4px; min-width: 0; }
+.model-cache-selection-copy strong { color: #e7edf2; font-size: 11px; line-height: 1.4; }
+.model-cache-selection-copy code { color: #91a4b3; font-size: 9px; overflow-wrap: anywhere; }
+.model-cache-selection-item:has(input:disabled) { opacity: .68; cursor: not-allowed; }
+
+/* 0D15: compact model management, inline model switch, direct updater */
+.version-details.version-tools {
+  display:flex !important; align-items:center; justify-content:flex-end; flex-wrap:nowrap;
+  gap:8px; min-width:0; padding:0; border:0; background:transparent; box-shadow:none;
+}
+.version-tools .version { flex:0 0 auto; cursor:default; }
+.version-tools .version-build-label { color:#9eacb9; font-size:10px; white-space:nowrap; }
+.version-tools .version-build-label #header-build-id { color:#dce5eb; font-variant-numeric:tabular-nums; }
+.version-tools .update-check-button { flex:0 0 auto; padding:7px 10px !important; font-size:10px !important; white-space:nowrap; }
+.version-tools .version-popover { display:none !important; }
+.server-toggle.is-model-switch {
+  background:linear-gradient(135deg,#245a83,#327db0) !important;
+  border-color:rgba(111,190,235,.72) !important; color:#f6fbff !important;
+  box-shadow:0 0 0 1px rgba(78,164,216,.14),0 5px 20px rgba(31,104,157,.24) !important;
+}
+.server-toggle.is-model-switch:hover:not(:disabled) {
+  background:linear-gradient(135deg,#2c6c9b,#3c8ac0) !important;
+}
+.model-cache-selection-list {
+  display:grid; gap:6px; align-content:start; max-height:188px; overflow-y:auto;
+  overscroll-behavior:contain; scrollbar-gutter:stable; padding:3px 6px 3px 0;
+}
+.model-cache-selection-item {
+  align-items:center; gap:8px; padding:6px 8px; min-height:44px;
+}
+.model-cache-selection-copy { gap:3px; }
+.model-cache-selection-copy strong { font-size:11px; line-height:1.35; }
+.model-cache-selection-copy code { font-size:9px; line-height:1.35; }
+.model-cache-active-note { color:#dec786; font-size:9px; line-height:1.35; }
+.model-cache-selection-item.is-active-model-cache { border-color:rgba(222,199,134,.3); }
+.model-cache-selection-item:has(input:disabled) { cursor:not-allowed; }
+.model-cleanup-card .model-cleanup-status { margin-top:7px; }
+.remote-vpn-note {
+  display:block !important; margin:14px 0 0; padding:12px 16px;
+  border:1px solid rgba(89,164,174,.48); border-radius:12px;
+  background:#101b27; color:#c6d0d9; text-align:center;
+  font-size:12px; line-height:1.55; text-wrap:pretty;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+}
+.remote-vpn-note strong { color:#f7fbff; font-weight:750; text-align:center; }
+@media (max-width:760px) {
+  .version-details.version-tools { gap:5px; }
+  .version-tools .version-build-label { font-size:9px; }
+  .version-tools .update-check-button { padding:6px 7px !important; font-size:9px !important; }
+  .remote-vpn-note { display:block !important; text-align:center; padding:11px 13px; }
+}
+
+
+/* 0D16: update feedback stays inside the version popover; no second dropdown. */
+.version-popover .header-update-message:empty { display:none; }
+.version-popover .header-update-message:not(:empty) {
+  display:block; max-width:224px; white-space:normal; overflow-wrap:anywhere;
+  margin-top:3px; color:#aab6c2;
+  font:10px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;
+}
+.version-popover #header-update-action-button:not([hidden]) {
+  display:inline-flex; align-self:flex-start; width:auto; margin-top:4px;
+  white-space:normal; text-align:left;
+}
+.version-popover #header-update-action-button[hidden] { display:none !important; }
+
+
+/* 0D17: blue Switch Model state overrides the red running/stop styling. */
+.button.server-toggle.server-running.is-model-switch,
+.server-action-row > .button.server-toggle.server-running.is-model-switch {
+  color:#f6fbff !important;
+  background:linear-gradient(135deg,#245a83 0%,#327db0 58%,#245a83 100%) !important;
+  border-color:rgba(111,190,235,.78) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 0 0 1px rgba(78,164,216,.16),0 5px 20px rgba(31,104,157,.25) !important;
+}
+.button.server-toggle.server-running.is-model-switch:hover:not(:disabled),
+.server-action-row > .button.server-toggle.server-running.is-model-switch:hover:not(:disabled) {
+  background:linear-gradient(135deg,#2c6c9b 0%,#3c8ac0 58%,#2c6c9b 100%) !important;
+  border-color:rgba(137,207,246,.9) !important;
+}
+
+
+/* Guided Steps + HTTPS attention repair 0D25 */
+/* Keep the release's existing quick-setup gold glow and red safety outline. */
+.button.https-needs-attention {
+  border: 1px solid rgba(255, 205, 105, .92) !important;
+  background-image: none !important;
+  box-shadow: 0 0 0 1px rgba(255, 196, 82, .20),
+              0 0 14px rgba(255, 184, 56, .20) !important;
+}
+#setup-local-https-button.https-needs-attention {
+  animation: httpsSetupAttention0D25 2.8s ease-in-out infinite;
+}
+@keyframes httpsSetupAttention0D25 {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(255,196,82,.15),
+                0 0 8px rgba(255,184,56,.12);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255,196,82,.38),
+                0 0 17px rgba(255,184,56,.24);
+  }
+}
+/* Guided Steps visibility is synchronized explicitly in src/main.ts. */
+@media (prefers-reduced-motion: reduce) {
+  #setup-local-https-button.https-needs-attention {
+    animation: none !important;
+    outline: 2px solid rgba(255,205,105,.75);
+    outline-offset: 2px;
+  }
+}
+
+
+
+
+
+/* HTTPS success celebration — cinematic, brief, non-blocking confirmation. */
+.visual-setup-guide-description {
+  display:block;
+  margin-top:4px;
+  color:#9eafbe;
+  font-size:11px;
+  font-weight:400;
+  line-height:1.45;
+}
+
+.https-setup-success[hidden] { display:none !important; }
+.https-setup-success {
+  position:fixed;
+  inset:0;
+  z-index:2147483100;
+  display:grid;
+  place-items:center;
+  box-sizing:border-box;
+  padding:24px;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  background:radial-gradient(
+    ellipse at 50% 46%,
+    rgba(45,112,207,.20) 0%,
+    rgba(20,35,67,.32) 42%,
+    rgba(4,7,18,.24) 100%
+  );
+  -webkit-backdrop-filter:blur(3px);
+  backdrop-filter:blur(3px);
+  transition:opacity .32s ease,visibility 0s linear .32s;
+}
+.https-setup-success.is-visible {
+  opacity:1;
+  visibility:visible;
+  transition:opacity .28s ease,visibility 0s;
+}
+.https-setup-success.is-hiding {
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .44s ease,visibility 0s linear .44s;
+}
+
+.https-setup-success-panel {
+  position:relative;
+  isolation:isolate;
+  width:min(400px,calc(100vw - 48px));
+  box-sizing:border-box;
+  margin:0;
+  padding:30px 28px 27px;
+  overflow:hidden;
+  border:1px solid rgba(119,203,255,.30);
+  border-radius:24px;
+  background:linear-gradient(
+    145deg,
+    rgba(20,35,59,.97),
+    rgba(10,15,31,.98) 62%,
+    rgba(22,20,49,.97)
+  );
+  box-shadow:
+    0 30px 100px rgba(0,0,0,.46),
+    inset 0 1px 0 rgba(255,255,255,.09),
+    0 0 48px rgba(67,149,255,.16);
+  color:#f2f7ff;
+  text-align:center;
+  opacity:0;
+  transform:translateY(12px) scale(.95);
+  filter:blur(7px);
+}
+.https-setup-success-panel::before {
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:50%;
+  top:-170px;
+  width:340px;
+  height:270px;
+  transform:translateX(-50%);
+  border-radius:50%;
+  background:radial-gradient(
+    ellipse,
+    rgba(57,160,255,.27) 0%,
+    rgba(120,89,255,.12) 42%,
+    transparent 72%
+  );
+  pointer-events:none;
+}
+.https-setup-success.is-visible .https-setup-success-panel {
+  animation:httpsSetupSuccessPanelIn .68s cubic-bezier(.18,.82,.22,1) .04s both;
+}
+
+.https-setup-success-mark {
+  position:relative;
+  display:grid;
+  place-items:center;
+  width:72px;
+  height:72px;
+  margin:0 auto 19px;
+  border:1px solid rgba(105,224,255,.47);
+  border-radius:50%;
+  background:radial-gradient(
+    circle at 35% 25%,
+    rgba(80,194,255,.25),
+    rgba(44,106,188,.13) 58%,
+    rgba(17,24,48,.32)
+  );
+  box-shadow:
+    inset 0 0 20px rgba(83,174,255,.10),
+    0 0 26px rgba(57,166,255,.15);
+}
+.https-setup-success-orbit {
+  position:absolute;
+  inset:-8px;
+  border:1px solid rgba(111,223,255,.57);
+  border-right-color:transparent;
+  border-bottom-color:rgba(164,132,255,.64);
+  border-radius:50%;
+  opacity:0;
+  transform:rotate(-70deg) scale(.78);
+}
+.https-setup-success.is-visible .https-setup-success-orbit {
+  animation:httpsSetupSuccessOrbit 1.25s cubic-bezier(.18,.8,.22,1) both;
+}
+.https-setup-success-mark svg {
+  width:39px;
+  height:39px;
+  overflow:visible;
+}
+.https-setup-success-check {
+  fill:none;
+  stroke:#a8f4ff;
+  stroke-width:3.6;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  stroke-dasharray:42;
+  stroke-dashoffset:42;
+}
+.https-setup-success.is-visible .https-setup-success-check {
+  animation:httpsSetupSuccessCheck .42s cubic-bezier(.25,.8,.25,1) .40s forwards;
+}
+.https-setup-success-kicker {
+  margin:0 0 8px;
+  color:#9cc9f5;
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.19em;
+  line-height:1.5;
+}
+.https-setup-success-panel h2 {
+  margin:0 0 9px;
+  color:#f5f8ff;
+  font-size:30px;
+  font-weight:780;
+  letter-spacing:-.045em;
+  line-height:1.12;
+}
+.https-setup-success-copy {
+  margin:0;
+  color:#c3d6eb;
+  font-size:12px;
+  line-height:1.55;
+}
+
+@keyframes httpsSetupSuccessPanelIn {
+  0% { opacity:0; transform:translateY(15px) scale(.94); filter:blur(8px); }
+  68% { opacity:1; transform:translateY(-2px) scale(1.012); filter:blur(0); }
+  100% { opacity:1; transform:translateY(0) scale(1); filter:blur(0); }
+}
+@keyframes httpsSetupSuccessOrbit {
+  0% { opacity:0; transform:rotate(-70deg) scale(.76); }
+  35% { opacity:.95; }
+  100% { opacity:.72; transform:rotate(255deg) scale(1); }
+}
+@keyframes httpsSetupSuccessCheck {
+  to { stroke-dashoffset:0; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .https-setup-success,
+  .https-setup-success-panel,
+  .https-setup-success-orbit,
+  .https-setup-success-check {
+    animation:none !important;
+    transition:none !important;
+  }
+  .https-setup-success-panel {
+    opacity:1;
+    filter:none;
+    transform:none;
+  }
+  .https-setup-success-orbit { opacity:.7; transform:none; }
+  .https-setup-success-check { stroke-dashoffset:0; }
+}
+
+
+/* Help example: reuse the user's original 416x120 screenshot. */
+.visual-setup-guide-example {
+  display:block;
+  width:min(100%, 416px);
+  height:auto;
+  margin:14px auto 0;
+  border:1px solid rgba(245,196,99,.25);
+  border-radius:12px;
+  background:rgba(11,18,28,.8);
+  box-shadow:0 8px 24px rgba(0,0,0,.22),0 0 18px rgba(245,190,91,.06);
+}
+
+/* A verified up-to-date result gets clear green emphasis and an animated check. */
+.application-update-panel #application-update-message.is-up-to-date {
+  display:flex !important;
+  align-items:center;
+  gap:11px;
+  margin:10px 0 4px !important;
+  padding:13px 15px;
+  border:1px solid rgba(74,222,128,.38);
+  border-radius:12px;
+  background:linear-gradient(110deg,rgba(22,101,52,.27),rgba(11,41,30,.35));
+  box-shadow:inset 0 1px 0 rgba(187,247,208,.05),0 0 20px rgba(34,197,94,.07);
+  color:#bbf7d0 !important;
+  font-size:13px !important;
+  font-weight:800;
+  line-height:1.5;
+}
+.application-update-panel #application-update-message.is-up-to-date::before {
+  content:"✓";
+  display:grid;
+  place-items:center;
+  flex:0 0 25px;
+  width:25px;
+  height:25px;
+  border:1px solid rgba(74,222,128,.55);
+  border-radius:50%;
+  background:rgba(34,197,94,.16);
+  color:#86efac;
+  font-size:15px;
+  font-weight:900;
+  opacity:0;
+  transform:scale(.55) rotate(-25deg);
+  animation:rdtUpdateStatusVerifiedCheck .56s cubic-bezier(.18,.82,.24,1) .06s forwards;
+}
+@keyframes rdtUpdateStatusVerifiedCheck {
+  0% { opacity:0; transform:scale(.55) rotate(-25deg); }
+  70% { opacity:1; transform:scale(1.14) rotate(5deg); }
+  100% { opacity:1; transform:scale(1) rotate(0); }
+}
+
+/* The backdrop lets outside clicks pass through. The panel itself stays interactive. */
+.https-setup-success { pointer-events:none; }
+.https-setup-success-panel { pointer-events:auto; cursor:default; }
+
+@media (prefers-reduced-motion:reduce) {
+  .application-update-panel #application-update-message.is-up-to-date::before {
+    animation:none !important;
+    opacity:1;
+    transform:none;
+  }
+}
+
+
+/* 0D33: compact Help-row image and feathered spotlight edge. */
+.visual-setup-guide-toggle {
+  display:flex !important;
+  align-items:center;
+  min-width:0;
+}
+.visual-setup-guide-toggle > .visual-setup-guide-toggle-copy {
+  order:1;
+  flex:1 1 auto;
+  min-width:0;
+}
+.visual-setup-guide-toggle > .visual-setup-guide-example {
+  order:2;
+  display:block !important;
+  flex:0 1 104px !important;
+  width:104px !important;
+  min-width:0 !important;
+  max-width:104px !important;
+  height:30px !important;
+  min-height:0 !important;
+  max-height:30px !important;
+  object-fit:contain !important;
+  object-position:center !important;
+  align-self:center;
+  margin:0 6px !important;
+  padding:0 !important;
+  border:0 !important;
+  box-sizing:border-box;
+  pointer-events:none;
+}
+.visual-setup-guide-toggle > input#visual-setup-guide-toggle {
+  order:3;
+  flex:0 0 auto;
+}
+.visual-setup-guide-toggle > .visual-setup-guide-switch {
+  order:4;
+  flex:0 0 auto;
+}
+@media (max-width:520px) {
+  .visual-setup-guide-toggle > .visual-setup-guide-example {
+    flex-basis:72px !important;
+    width:72px !important;
+    max-width:72px !important;
+    height:24px !important;
+    max-height:24px !important;
+  }
+}
+
+
+/* 0D34: image fills the Help row's available height without sizing the pill. */
+.visual-setup-guide-toggle > .visual-setup-guide-image-frame {
+  order:2;
+  display:flex;
+  flex:0 1 190px;
+  width:190px;
+  max-width:190px;
+  min-width:0;
+  align-self:stretch;
+  align-items:center;
+  justify-content:center;
+  margin:5px 6px;
+  padding:0;
+  overflow:hidden;
+  box-sizing:border-box;
+  min-height:0;
+  max-height:56px;
+}
+.visual-setup-guide-image-frame > .visual-setup-guide-example {
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  max-width:100% !important;
+  max-height:100% !important;
+  min-width:0 !important;
+  min-height:0 !important;
+  object-fit:contain !important;
+  object-position:center !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  box-sizing:border-box;
+  pointer-events:none;
+}
+.visual-setup-guide-toggle > input#visual-setup-guide-toggle {
+  order:3;
+  flex:0 0 auto;
+}
+.visual-setup-guide-toggle > .visual-setup-guide-switch {
+  order:4;
+  flex:0 0 auto;
+}
+@media (max-width:520px) {
+  .visual-setup-guide-toggle > .visual-setup-guide-image-frame {
+    flex-basis:112px;
+    width:112px;
+    max-width:112px;
+    margin:4px;
+  }
+}
+
+
+/* 0D36: centered image crop without stretching. */
+.visual-setup-guide-image-frame {
+  overflow:hidden !important;
+}
+.visual-setup-guide-image-frame > .visual-setup-guide-example {
+  transform:scale(1.20) !important;
+  transform-origin:50% 50% !important;
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .rdt-button-inline-feedback {
+    animation:none !important;
+  }
+}
+
+/* 0D38: rounded Help image corners */
+.visual-setup-guide-toggle > .visual-setup-guide-image-frame {
+  border-radius: 8px !important;
+  overflow: hidden !important;
 }

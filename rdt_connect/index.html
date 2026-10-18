@@ -19,7 +19,14 @@
             <span id="header-server-status-dot" class="header-server-status-dot stopped" title="Server stopped" role="img" aria-label="Server stopped"></span>
             <details class="version-details">
               <summary class="version"><span id="header-version-label">v0.2-DEV.9</span></summary>
-              <div class="version-popover"><strong>Current build</strong><span id="header-build-id">Loading…</span><small>Check for signed RDT Connect development updates.</small><button id="header-check-updates-button" class="button update-check-button" type="button" aria-controls="application-update-panel" aria-expanded="false">Check for updates</button></div>
+              <div class="version-popover">
+                <strong>Current build</strong>
+                <span id="header-build-id">Loading…</span>
+                <small>Check for signed RDT Connect development updates.</small>
+                <button id="header-check-updates-button" class="button update-check-button" type="button" aria-controls="header-update-message">Check for updates</button>
+                <small id="header-update-message" class="header-update-message" aria-live="polite"></small>
+                <button id="header-update-action-button" class="button update-check-button" type="button" hidden>Download and install update</button>
+              </div>
             </details>
           </div>
         </div>
@@ -306,8 +313,6 @@
             <div class="settings-group-grid settings-general-grid">
               <article class="card settings-general-card" id="settings-general">
             <div class="card-heading"><h2>General</h2><span class="eyebrow">App preferences</span></div>
-            <label class="menu-bar-option recommended-option"><input id="keep-in-menu-bar" type="checkbox" checked /><span class="gold-checkbox-visual" aria-hidden="true"></span><span class="menu-bar-option-copy"><strong>Show in menu bar</strong><small>When on, closing the window keeps RDT Connect in the menu bar. When off, closing quits the app and stops its managed server.</small></span></label>
-
             <div class="settings-language-row">
               <div class="settings-language-copy">
                 <label class="field-label" for="app-language">Interface language</label>
@@ -317,7 +322,32 @@
                 <option value="en" selected>English</option>
               </select>
             </div>
+
+            <label class="menu-bar-option recommended-option"><input id="keep-in-menu-bar" type="checkbox" checked /><span class="gold-checkbox-visual" aria-hidden="true"></span><span class="menu-bar-option-copy"><strong>Show in menu bar</strong><small>When on, closing the window keeps RDT Connect in the menu bar. When off, closing quits the app and stops its managed server.</small></span></label>
+
           </article>
+            </div>
+          </section>
+          <section id="settings-help-section" class="settings-group" aria-labelledby="settings-help-heading">
+            <div class="settings-group-heading"><h2 id="settings-help-heading">Help</h2></div>
+            <div class="settings-group-grid settings-help-grid">
+              <article class="card settings-help-card" id="settings-help">
+                <label class="visual-setup-guide-toggle" for="visual-setup-guide-toggle">
+                  <span class="visual-setup-guide-toggle-copy"><strong>Visual setup guide</strong><small class="visual-setup-guide-description">Highlights the next setup step with a spotlight; turn it off here anytime.</small></span>
+                  <span class="visual-setup-guide-image-frame">
+                    <img
+                  class="visual-setup-guide-example"
+                  src="/download-model-highlight.png"
+                  alt="Example of the visual setup guide spotlighting the Download model button"
+                  width="416"
+                  height="120"
+                />
+                  </span>
+                  <input id="visual-setup-guide-toggle" type="checkbox" checked />
+                  <span class="visual-setup-guide-switch" aria-hidden="true"></span>
+                </label>
+
+              </article>
             </div>
           </section>
           <section id="settings-models-section" class="settings-group" aria-labelledby="settings-models-heading">
@@ -332,11 +362,11 @@
             <p class="muted field-help" data-l10n-rich="settings.modelStorage.cacheHomeHelp">Choose the Hugging Face cache home folder. Inside it, the <code data-l10n-slot="hub">hub</code> directory contains the <code data-l10n-slot="modelFolderPattern">models--…</code> folders. You can add up to 20 locations. Stop the server before saving. Reconnect an external drive before saving; RDT Connect will not create a missing folder on an unplugged drive.</p>
           </article>
               <article class="card model-cleanup-card">
-            <div class="card-heading"><h2>Model cleanup</h2><span class="eyebrow">Separate storage</span></div>
-            <p class="muted">Browser models and Mac models are stored separately. Choose the area you want to manage; deletion requires confirmation.</p>
+            <div class="card-heading"><h2>Model management</h2><span class="eyebrow">Separate storage</span></div>
+                        <p class="muted">Choose specific downloaded RDT Connect Mac models to remove. EasyWhisper browser data and other model repositories are never deleted here.</p>
+            <div id="model-cache-selection-list" class="model-cache-selection-list" role="group" aria-label="Downloaded RDT Connect models">Checking model cache availability…</div>
             <div class="model-cleanup-actions">
-              <button id="manage-easywhisper-models-button" class="button secondary" type="button" title="Open the selected browser in RDT Voice’s EasyWhisper model manager. Review the browser-storage option before confirming deletion.">Manage browser models</button>
-              <button id="delete-rdt-models-button" class="button danger" type="button" title="Delete only the known RDT Connect MLX Whisper model cache entries. Other model repositories and EasyWhisper browser data are not touched.">Delete RDT Connect models</button>
+              <button id="delete-rdt-models-button" class="button danger" type="button" title="Delete only the downloaded RDT Connect MLX models you select below.">Delete RDT Connect models</button>
             </div>
             <p id="model-cleanup-status" class="muted field-help" role="status" aria-live="polite">Stop the local server and finish or cancel downloads before deleting Mac models.</p>
           </article>
@@ -398,5 +428,20 @@
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
-  </body>
+
+  <div id="https-setup-success" class="https-setup-success" hidden aria-hidden="true">
+    <div class="https-setup-success-panel" role="status" aria-live="polite">
+      <div class="https-setup-success-mark" aria-hidden="true">
+        <span class="https-setup-success-orbit"></span>
+        <svg viewBox="0 0 48 48" focusable="false" aria-hidden="true">
+          <path class="https-setup-success-check" d="M12 24.5 20.5 33 36.5 16"/>
+        </svg>
+      </div>
+      <p class="https-setup-success-kicker">SECURE CONNECTION READY</p>
+      <h2>You're all set!</h2>
+      <p class="https-setup-success-copy">Trusted HTTPS is ready on this Mac.</p>
+    </div>
+  </div>
+
+</body>
 </html>

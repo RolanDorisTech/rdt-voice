@@ -1,3 +1,17 @@
+<!-- RDT_CONNECT_PROMO_START -->
+<div align="center">
+  <h1>Meet RDT Connect</h1>
+  <h3>Your desktop companion for RDT Voice and local Whisper</h3>
+  <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one Mac app.</p>
+  <p><strong>For macOS on Apple Silicon</strong></p>
+  <p><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.10/RDT_Connect_0.2.0-dev.10_aarch64.dmg"><img src="https://img.shields.io/badge/Download-RDT%20Connect%20for%20macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS"></a></p>
+  <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
+  <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
+</div>
+<!-- RDT_CONNECT_PROMO_END -->
+
+---
+
 [![RDT Voice - Try Now](https://img.shields.io/badge/RDT_Voice-Try_Now-brightgreen?style=for-the-badge&logo=github)](https://rolandoristech.github.io/rdt-voice/)
 
 ## 🎥 See it in action

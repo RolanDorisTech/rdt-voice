@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::TcpListener;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -18,12 +18,13 @@ use std::sync::{
 };
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri_plugin_deep_link::DeepLinkExt;
 use tauri::{
-    menu::{IsMenuItem, Menu, MenuItem},
+    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, State,
+    webview::WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, State, WebviewUrl,
 };
+use tauri_plugin_deep_link::DeepLinkExt;
 
 const APP_VERSION_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const BUILD_ID: &str = env!("RDT_BUILD_ID");
@@ -137,7 +138,10 @@ struct BackendState {
     // Serialize lifecycle operations so concurrent Start/Stop invocations cannot orphan a process.
     lifecycle: Mutex<()>,
     model_download_status: Arc<Mutex<ModelDownloadStatus>>,
-    model_download_pid: Arc<Mutex<Option<u32>>>,
+    // Exact spawned-process identity, including start time and command. PID alone is
+    // not sufficient ownership evidence for signaling a process group.
+    model_download_pid: Arc<Mutex<Option<ProcessSnapshot>>>,
+    model_download_log_path: Arc<Mutex<Option<PathBuf>>>,
     model_download_cancel_requested: Arc<AtomicBool>,
     resource_dir: PathBuf,
     token_path: PathBuf,
@@ -347,6 +351,7 @@ impl BackendState {
             lifecycle: Mutex::new(()),
             model_download_status: Arc::new(Mutex::new(ModelDownloadStatus::default())),
             model_download_pid: Arc::new(Mutex::new(None)),
+            model_download_log_path: Arc::new(Mutex::new(None)),
             model_download_cancel_requested: Arc::new(AtomicBool::new(false)),
             resource_dir,
             token_path,
@@ -916,12 +921,15 @@ struct ProcessSnapshot {
     ppid: u32,
     pgid: u32,
     stat: String,
+    started: String,
     command: String,
 }
 
 fn process_snapshot() -> Vec<ProcessSnapshot> {
     let output = match Command::new("/bin/ps")
-        .args(["-ww", "-axo", "pid=,ppid=,pgid=,stat=,command="])
+        // lstart lets us distinguish the captured process from a later process
+        // that reuses the same PID and command line.
+        .args(["-ww", "-axo", "pid=,ppid=,pgid=,stat=,lstart=,command="])
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -933,7 +941,10 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
         .lines()
         .filter_map(|line| {
             let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() < 5 {
+            // The ps `lstart` column is five whitespace-delimited words.
+            // Keep the remaining command column separate so spaces in command
+            // arguments do not corrupt process-start identity.
+            if fields.len() < 10 {
                 return None;
             }
             Some(ProcessSnapshot {
@@ -941,7 +952,8 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
                 ppid: fields[1].parse().ok()?,
                 pgid: fields[2].parse().ok()?,
                 stat: fields[3].to_string(),
-                command: fields[4..].join(" "),
+                started: fields[4..9].join(" "),
+                command: fields[9..].join(" "),
             })
         })
         .collect()
@@ -974,6 +986,7 @@ fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnaps
     current.iter().any(|item| {
         item.pid == snapshot.pid
             && item.pgid == snapshot.pgid
+            && item.started == snapshot.started
             && item.command == snapshot.command
             && !item.stat.starts_with('Z')
     })
@@ -1785,7 +1798,12 @@ async fn pick_tls_file(
                 "Choose RDT Voice server certificate",
                 &[],
             ),
-            tray_text(&locale, "msg.certificate_files.169b49a8", "Certificate files", &[]),
+            tray_text(
+                &locale,
+                "msg.certificate_files.169b49a8",
+                "Certificate files",
+                &[],
+            ),
             &["pem", "crt", "cer"],
         ),
         "private-key" => (
@@ -1795,7 +1813,12 @@ async fn pick_tls_file(
                 "Choose matching private key",
                 &[],
             ),
-            tray_text(&locale, "msg.private_key_files.611887c1", "Private-key files", &[]),
+            tray_text(
+                &locale,
+                "msg.private_key_files.611887c1",
+                "Private-key files",
+                &[],
+            ),
             &["pem", "key"],
         ),
         "ca" => (
@@ -1805,7 +1828,12 @@ async fn pick_tls_file(
                 "Choose self-signed root CA certificate",
                 &[],
             ),
-            tray_text(&locale, "msg.ca_certificate_files.0154de22", "CA certificate files", &[]),
+            tray_text(
+                &locale,
+                "msg.ca_certificate_files.0154de22",
+                "CA certificate files",
+                &[],
+            ),
             &["pem", "crt", "cer"],
         ),
         _ => return Err("Unknown certificate file type.".into()),
@@ -2131,18 +2159,58 @@ fn set_local_transport(
     Ok(local_https_status_from_config(&config))
 }
 
+const RDT_MODEL_LOCK_JSON: &str = include_str!("../../../backend/rdt_model_lock.json");
+
+fn model_lock_entry(model: &str) -> Option<Value> {
+    static LOCK: OnceLock<Value> = OnceLock::new();
+    let lock = LOCK.get_or_init(|| {
+        serde_json::from_str(RDT_MODEL_LOCK_JSON)
+            .expect("RDT model lock JSON is validated at build time")
+    });
+    lock.get("models")?.get(model).cloned()
+}
+
+fn model_lock_string(model: &str, key: &str) -> Option<String> {
+    model_lock_entry(model)?
+        .get(key)?
+        .as_str()
+        .map(str::to_string)
+}
+
+fn model_lock_sha256(model: &str) -> Option<String> {
+    let value = model_lock_string(model, "sha256")?;
+    if value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn model_lock_revision(model: &str) -> Option<String> {
+    let value = model_lock_string(model, "revision")?;
+    if value.len() == 40
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn validate_model(model: &str) -> Result<(), String> {
-    const ALLOWED: [&str; 5] = [
-        "mlx-community/whisper-large-v3-turbo",
-        "mlx-community/whisper-large-v3-mlx",
-        "mlx-community/whisper-small-mlx",
-        "mlx-community/whisper-base-mlx",
-        "mlx-community/whisper-tiny",
-    ];
-    if ALLOWED.contains(&model) {
+    if model_lock_entry(model).is_some()
+        && model_lock_revision(model).is_some()
+        && model_lock_sha256(model).is_some()
+    {
         Ok(())
     } else {
-        Err("Choose one of the supported Whisper models from the list.".into())
+        Err("Choose one of the pinned MLX Whisper models from the list.".into())
     }
 }
 
@@ -2288,44 +2356,124 @@ fn apply_model_download_output_line(
             "Downloading model files. Progress is based on transferred bytes.",
         ),
         "verifying" => ("verifying", "Verifying the downloaded model files…"),
-        // This line comes before the process exits. Keep the UI at 99% in the
-        // verifying phase until child.wait() and output-reader joins have completed.
+        // Keep this below 100%; the supervisor independently rechecks cache files
+        // and owns process cleanup before publishing terminal success.
         "complete" => (
             "verifying",
-            "Model files were verified; confirming the downloader has exited…",
+            "Model files were verified; finishing downloader cleanup…",
         ),
         _ => return,
     };
     publish_model_download_status(app, store, phase, message, true);
 }
 
-fn read_model_download_stdout<R: Read>(
-    mut reader: R,
-    app: AppHandle,
-    store: Arc<Mutex<ModelDownloadStatus>>,
-    cancel_requested: Arc<AtomicBool>,
-) {
-    let mut chunk = [0u8; 4096];
-    let mut line: Vec<u8> = Vec::with_capacity(256);
+fn consume_model_download_log(
+    reader: &mut File,
+    pending_line: &mut Vec<u8>,
+    app: &AppHandle,
+    store: &Arc<Mutex<ModelDownloadStatus>>,
+    cancel_requested: &Arc<AtomicBool>,
+    finalize: bool,
+) -> Result<bool, String> {
+    let mut saw_complete = false;
+    let mut chunk = [0u8; 8192];
     loop {
-        let n = match reader.read(&mut chunk) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => n,
-        };
-        for byte in &chunk[..n] {
+        let count = reader
+            .read(&mut chunk)
+            .map_err(|error| format!("Could not read model-download progress log: {error}"))?;
+        if count == 0 {
+            break; // Regular-file EOF is non-blocking; a child cannot hold this open.
+        }
+        for byte in &chunk[..count] {
             if *byte == b'\n' || *byte == b'\r' {
-                if !line.is_empty() {
-                    apply_model_download_output_line(&line, &app, &store, &cancel_requested);
-                    line.clear();
+                if !pending_line.is_empty() {
+                    if String::from_utf8_lossy(pending_line).trim()
+                        == "RDT_MODEL_DOWNLOAD_STAGE:complete"
+                    {
+                        saw_complete = true;
+                    }
+                    apply_model_download_output_line(pending_line, app, store, cancel_requested);
+                    pending_line.clear();
                 }
-            } else if line.len() < 1024 {
-                line.push(*byte);
+            } else if pending_line.len() < 1024 {
+                pending_line.push(*byte);
             }
         }
     }
-    if !line.is_empty() {
-        apply_model_download_output_line(&line, &app, &store, &cancel_requested);
+    if finalize && !pending_line.is_empty() {
+        if String::from_utf8_lossy(pending_line).trim() == "RDT_MODEL_DOWNLOAD_STAGE:complete" {
+            saw_complete = true;
+        }
+        apply_model_download_output_line(pending_line, app, store, cancel_requested);
+        pending_line.clear();
     }
+    Ok(saw_complete)
+}
+
+fn create_model_download_log() -> Result<(PathBuf, File), String> {
+    let temp = std::env::temp_dir();
+    let stamp = unix_epoch_millis();
+    for attempt in 0..16u8 {
+        let path = temp.join(format!(
+            "rdt-connect-model-download-{}-{stamp}-{attempt}.log",
+            std::process::id()
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&path) {
+            Ok(file) => return Ok((path, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Could not create a private model-download progress log: {error}"
+                ));
+            }
+        }
+    }
+    Err("Could not allocate a unique model-download progress log. Close any stale RDT Connect download attempt and retry.".into())
+}
+
+fn clear_model_download_log_path(store: &Arc<Mutex<Option<PathBuf>>>, expected_path: &Path) {
+    if let Ok(mut current) = store.lock() {
+        if current.as_deref() == Some(expected_path) {
+            *current = None;
+        }
+    }
+    // If a child still has the descriptor open, unlinking the name keeps the
+    // ephemeral machine-readable log private and bounds named temporary files.
+    let _ = fs::remove_file(expected_path);
+}
+
+fn capture_model_download_identity(
+    pid: u32,
+    expected_exe: &Path,
+) -> Result<ProcessSnapshot, String> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let snapshot = process_snapshot();
+        if snapshot.is_empty() {
+            return Err("The process table could not be inspected, so downloader ownership could not be established.".into());
+        }
+        if let Some(leader) = snapshot.iter().find(|item| item.pid == pid) {
+            if leader.pgid != pid
+                || leader.stat.starts_with('Z')
+                || !command_is_expected_backend(&leader.command, expected_exe)
+            {
+                return Err("The spawned downloader's process group or executable did not match the packaged backend.".into());
+            }
+            return Ok(leader.clone());
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    Err("The downloader exited before its process identity could be recorded. No process-group signal was sent.".into())
 }
 
 fn approximate_directory_bytes(path: &Path) -> u64 {
@@ -2400,7 +2548,8 @@ fn start_model_download(
             model: Some(model),
             destination_root: Some(cache_status.active_root),
             phase: "complete".into(),
-            message: "A verified local copy is already available; no download is needed.".into(),
+            message: "A verified local MLX model copy is already available; no download is needed."
+                .into(),
             progress_percent: 100,
             downloaded_bytes: 0,
             total_bytes: Some(0),
@@ -2424,6 +2573,7 @@ fn start_model_download(
     if !exe.is_file() {
         return Err(format!("Bundled model downloader was not found at {}. Run scripts/prepare-macos-bundle.sh first.", exe.display()));
     }
+    let (log_path, log_writer) = create_model_download_log()?;
     state
         .model_download_cancel_requested
         .store(false, Ordering::SeqCst);
@@ -2455,6 +2605,13 @@ fn start_model_download(
         .env_remove("HUGGING_FACE_HUB_TOKEN")
         .env_remove("WRITE_TOKEN")
         .env_remove("PYTHONPATH")
+        // Model downloads must use the official Hugging Face origin. Do not inherit
+        // a shell-defined HF_ENDPOINT that silently redirects every model request.
+        .env("HF_ENDPOINT", "https://huggingface.co")
+        // Hugging Face reads these before import. Bound idle network stalls while
+        // allowing slower connections to large MLX weight files to make progress.
+        .env("HF_HUB_DOWNLOAD_TIMEOUT", "60")
+        .env("HF_HUB_ETAG_TIMEOUT", "20")
         .env("HF_HOME", &root)
         .env("HF_HUB_CACHE", &hub_cache)
         .env("HUGGINGFACE_HUB_CACHE", &hub_cache)
@@ -2464,12 +2621,15 @@ fn start_model_download(
         .env("HF_HUB_DISABLE_PROGRESS_BARS", "0")
         .env("PYTHONUNBUFFERED", "1")
         .current_dir(exe.parent().unwrap_or(Path::new(".")))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        // A regular file cannot stay open awaiting EOF from a multiprocessing helper.
+        // The supervisor tails it non-blockingly and owns all child cleanup.
+        .stdout(Stdio::from(log_writer))
+        .stderr(Stdio::null());
     command.process_group(0);
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
+            let _ = fs::remove_file(&log_path);
             publish_model_download_status(
                 &app,
                 &state.model_download_status,
@@ -2481,91 +2641,256 @@ fn start_model_download(
         }
     };
     let pid = child.id();
+    let identity = match capture_model_download_identity(pid, &exe) {
+        Ok(identity) => identity,
+        Err(error) => {
+            // Child::kill targets this exact spawned process handle, not a port or a
+            // process name. If identity could not be established, never signal a PGID.
+            let _ = child.kill();
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            let _ = fs::remove_file(&log_path);
+            publish_model_download_status(
+                &app,
+                &state.model_download_status,
+                "failed",
+                &format!("Could not safely register the model downloader: {error}"),
+                false,
+            );
+            return Err(format!(
+                "Could not safely register the model downloader: {error}"
+            ));
+        }
+    };
     if let Ok(mut download_pid) = state.model_download_pid.lock() {
-        *download_pid = Some(pid);
+        *download_pid = Some(identity.clone());
     }
+    if let Ok(mut stored_log) = state.model_download_log_path.lock() {
+        *stored_log = Some(log_path.clone());
+    }
+
     let app_thread = app.clone();
     let status_store = Arc::clone(&state.model_download_status);
     let pid_store = Arc::clone(&state.model_download_pid);
+    let log_path_store = Arc::clone(&state.model_download_log_path);
     let cancel_requested = Arc::clone(&state.model_download_cancel_requested);
+    let expected_exe = exe.clone();
+    let model_for_worker = model.clone();
+    let root_for_worker = root.clone();
     thread::spawn(move || {
-        let stdout_thread = child.stdout.take().map(|stdout| {
-            let app = app_thread.clone();
-            let store = Arc::clone(&status_store);
-            let cancel = Arc::clone(&cancel_requested);
-            thread::spawn(move || read_model_download_stdout(stdout, app, store, cancel))
-        });
-        let stderr_thread = child.stderr.take().map(|mut stderr| {
-            thread::spawn(move || {
-                let _ = std::io::copy(&mut stderr, &mut std::io::sink());
-            })
-        });
-        let result = child.wait();
-        if let Some(reader) = stdout_thread {
-            let _ = reader.join();
-        }
-        if let Some(reader) = stderr_thread {
-            let _ = reader.join();
-        }
-        let was_canceled = cancel_requested.swap(false, Ordering::SeqCst);
-        if let Ok(mut download_pid) = pid_store.lock() {
-            *download_pid = None;
-        }
-        match result {
-            Ok(_) if was_canceled => publish_model_download_status(
-                &app_thread,
-                &status_store,
-                "cancelled",
-                "Download canceled. Completed files remain cached and can be reused on retry.",
-                false,
-            ),
-            Ok(exit) if exit.success() => publish_model_download_status(
-                &app_thread,
-                &status_store,
-                "complete",
-                "Download complete. The verified model is ready to use.",
-                false,
-            ),
-            Ok(exit) => {
-                let existing = status_store
-                    .lock()
-                    .map(|s| s.message.clone())
-                    .unwrap_or_default();
-                let message = if existing.starts_with("Download failed (") {
-                    existing
-                } else {
-                    format!(
-                        "Download failed (exit {}). Check your network connection and retry.",
-                        exit.code().unwrap_or(-1)
-                    )
-                };
+        let mut log_reader = match File::open(&log_path) {
+            Ok(file) => file,
+            Err(error) => {
+                // A read failure is terminal only after the exact spawned group is
+                // stopped; otherwise keep active state so Cancel can retry safely.
+                if let Err(stop_error) =
+                    finish_stopping_model_download_group(&identity, &expected_exe)
+                {
+                    let message = format!("The download progress log could not be opened ({error}); cleanup is unconfirmed ({stop_error}). Select Try cancel again.");
+                    publish_model_download_status(
+                        &app_thread,
+                        &status_store,
+                        "failed",
+                        &message,
+                        true,
+                    );
+                    clear_model_download_log_path(&log_path_store, &log_path);
+                    return;
+                }
+                if let Ok(mut current) = pid_store.lock() {
+                    *current = None;
+                }
                 publish_model_download_status(
                     &app_thread,
                     &status_store,
                     "failed",
-                    &message,
+                    "The model downloader's progress log could not be opened. Retry the download.",
                     false,
                 );
+                clear_model_download_log_path(&log_path_store, &log_path);
+                return;
             }
-            Err(_) => publish_model_download_status(
+        };
+        let mut pending_line = Vec::with_capacity(512);
+        let mut complete_seen_at: Option<Instant> = None;
+        let mut exit_status = None;
+        let mut supervisor_error: Option<String> = None;
+        let mut recovered_after_complete = false;
+
+        loop {
+            match consume_model_download_log(
+                &mut log_reader,
+                &mut pending_line,
                 &app_thread,
                 &status_store,
-                "failed",
-                "The model downloader ended unexpectedly. Check the connection and retry.",
+                &cancel_requested,
                 false,
-            ),
+            ) {
+                Ok(saw_complete) => {
+                    if saw_complete && complete_seen_at.is_none() {
+                        complete_seen_at = Some(Instant::now());
+                    }
+                }
+                Err(error) => {
+                    supervisor_error = Some(error);
+                    break;
+                }
+            }
+
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    exit_status = Some(status);
+                    if let Ok(saw_complete) = consume_model_download_log(
+                        &mut log_reader,
+                        &mut pending_line,
+                        &app_thread,
+                        &status_store,
+                        &cancel_requested,
+                        true,
+                    ) {
+                        if saw_complete && complete_seen_at.is_none() {
+                            complete_seen_at = Some(Instant::now());
+                        }
+                    }
+                    break;
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    supervisor_error =
+                        Some(format!("Could not monitor the model downloader: {error}"));
+                    break;
+                }
+            }
+
+            // COMPLETE is emitted only after weight SHA-256 validation and the verified
+            // cache marker are durable. Give normal interpreter teardown 1.5s; if still
+            // alive, independently verify the pinned cache and terminate only this exact
+            // isolated process group. No unbounded pipe EOF wait or arbitrary 8s stall.
+            if !cancel_requested.load(Ordering::SeqCst)
+                && complete_seen_at.is_some_and(|at| at.elapsed() >= Duration::from_millis(1500))
+            {
+                let cache_valid = model_cache_has_weights(&root_for_worker, &model_for_worker);
+                match finish_stopping_model_download_group(&identity, &expected_exe) {
+                    Ok(()) => {
+                        let exit_deadline = Instant::now() + Duration::from_secs(2);
+                        loop {
+                            match child.try_wait() {
+                                Ok(Some(status)) => {
+                                    exit_status = Some(status);
+                                    recovered_after_complete = true;
+                                    break;
+                                }
+                                Ok(None) if Instant::now() < exit_deadline => {
+                                    thread::sleep(Duration::from_millis(50));
+                                }
+                                Ok(None) => {
+                                    supervisor_error = Some("The validated model is cached, but the downloader did not exit after bounded process cleanup. Select Try cancel again; RDT Connect has not claimed the process stopped.".into());
+                                    break;
+                                }
+                                Err(error) => {
+                                    supervisor_error = Some(format!("The validated model is cached, but downloader exit could not be confirmed: {error}. Select Try cancel again."));
+                                    break;
+                                }
+                            }
+                            if supervisor_error.is_some() || exit_status.is_some() {
+                                break;
+                            }
+                        }
+                        if exit_status.is_some() {
+                            // Do not trust the progress marker alone. Final cache
+                            // validation below decides whether 100% is justified.
+                            recovered_after_complete = cache_valid;
+                        }
+                    }
+                    Err(error) => {
+                        supervisor_error = Some(format!("The downloader announced completion but cleanup could not be confirmed: {error}. Select Try cancel again."));
+                    }
+                }
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
         }
+
+        if let Some(error) = supervisor_error {
+            // Keep active=true and the process identity while cleanup is unconfirmed;
+            // the UI offers Try cancel again rather than enabling another download.
+            publish_model_download_status(&app_thread, &status_store, "failed", &error, true);
+            clear_model_download_log_path(&log_path_store, &log_path);
+            return;
+        }
+
+        // The downloader's parent can exit while a multiprocessing resource tracker
+        // still owns the process-group membership. Close out that exact group before
+        // releasing the UI or allowing a second model download.
+        if let Err(error) = finish_stopping_model_download_group(&identity, &expected_exe) {
+            let message = format!("The downloader exited, but cleanup of its verified process group is not confirmed: {error}. Select Try cancel again.");
+            publish_model_download_status(&app_thread, &status_store, "failed", &message, true);
+            clear_model_download_log_path(&log_path_store, &log_path);
+            return;
+        }
+
+        let canceled = cancel_requested.swap(false, Ordering::SeqCst);
+        let cache_valid = model_cache_has_weights(&root_for_worker, &model_for_worker);
+        if let Ok(mut current) = pid_store.lock() {
+            if current.as_ref().is_some_and(|recorded| {
+                recorded.pid == identity.pid
+                    && recorded.pgid == identity.pgid
+                    && recorded.started == identity.started
+                    && recorded.command == identity.command
+            }) {
+                *current = None;
+            }
+        }
+
+        if cache_valid {
+            let message = if recovered_after_complete {
+                "The model files were fully downloaded and verified. RDT Connect recovered the downloader's stalled final shutdown. The model is ready to use."
+            } else if canceled {
+                "The model files finished downloading and passed verification before cancellation completed. The model is ready to use."
+            } else if exit_status.is_some_and(|status| status.success()) {
+                "Download complete. The verified MLX model is ready to use."
+            } else {
+                "The downloader ended unexpectedly, but the MLX model files are complete and passed verification. The model is ready to use."
+            };
+            publish_model_download_status(&app_thread, &status_store, "complete", message, false);
+        } else if canceled {
+            publish_model_download_status(
+                &app_thread,
+                &status_store,
+                "cancelled",
+                "Download canceled. Only complete, verified model files will be shown as Downloaded; valid completed files remain reusable for retry.",
+                false,
+            );
+        } else {
+            let message = if recovered_after_complete {
+                "The downloader stalled after announcing completion, but independent pinned MLX cache verification failed. The model is not marked Downloaded; retry the download."
+            } else if exit_status.is_some_and(|status| status.success()) {
+                "The downloader exited successfully, but the MLX cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
+            } else {
+                "Model download did not finish with a complete, verified MLX cache. The model is not marked Downloaded; check the connection and retry."
+            };
+            publish_model_download_status(&app_thread, &status_store, "failed", message, false);
+        }
+        clear_model_download_log_path(&log_path_store, &log_path);
     });
     Ok(initial)
 }
 
-// Model downloads use their own process group (CommandExt::process_group(0)).
-// Before any escalation, verify every live group member is the packaged RDT backend;
-// never kill a process merely because it happens to occupy the server's port.
+// Model downloads use their own process group (CommandExt::process_group(0)). The
+// captured leader identity includes start time, PGID and full command. Helper processes
+// such as Python's resource_tracker are permitted only within that isolated group.
 fn model_download_group_members_are_owned(
-    group_id: u32,
+    identity: &ProcessSnapshot,
     expected_exe: &Path,
 ) -> Result<bool, String> {
+    if identity.pid == 0 || identity.pgid != identity.pid {
+        return Err("The stored downloader identity is not an isolated process group.".into());
+    }
     let snapshot = process_snapshot();
     if snapshot.is_empty() {
         return Err(
@@ -2574,37 +2899,68 @@ fn model_download_group_members_are_owned(
     }
     let members: Vec<&ProcessSnapshot> = snapshot
         .iter()
-        .filter(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+        .filter(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'))
         .collect();
     if members.is_empty() {
+        // The captured group is gone. A different process may now reuse the leader
+        // PID in another group; that is not grounds to signal anything.
         return Ok(false);
     }
-    if members
-        .iter()
-        .any(|item| !command_is_expected_backend(&item.command, expected_exe))
-    {
-        return Err("The isolated download group contains a process that could not be verified as the packaged RDT backend; no further signal was sent.".into());
+    if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
+        if leader.pgid != identity.pgid
+            || leader.started != identity.started
+            || leader.command != identity.command
+        {
+            return Err("The downloader PID now identifies a different process; no process-group signal was sent.".into());
+        }
+    }
+    // The group was created exclusively for this child with process_group(0).
+    // Legitimate helpers such as Python's multiprocessing.resource_tracker have a
+    // different command line but inherit that isolated PGID. Validate the original
+    // leader while it exists; a still-populated PGID cannot be reused after the
+    // leader exits until every member is gone. Never signal by port/name alone.
+    if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
+        if !command_is_expected_backend(&leader.command, expected_exe) {
+            return Err("The original downloader leader no longer matches the packaged backend; no process-group signal was sent.".into());
+        }
     }
     Ok(true)
 }
 
-// SIGTERM is sent by the Cancel command. After a short grace period this helper
-// rechecks ownership, escalates only the same isolated group to SIGKILL if needed,
-// and returns only after all verified non-zombie members are gone.
-fn finish_stopping_model_download_group(group_id: u32, expected_exe: &Path) -> Result<(), String> {
-    let term_deadline = Instant::now() + Duration::from_millis(600);
+// Send TERM to only the verified download process group, allow graceful shutdown,
+// then revalidate identity before escalating to KILL. Every wait is bounded.
+fn finish_stopping_model_download_group(
+    identity: &ProcessSnapshot,
+    expected_exe: &Path,
+) -> Result<(), String> {
+    if !model_download_group_members_are_owned(identity, expected_exe)? {
+        return Ok(());
+    }
+    let group_id = identity.pgid;
+    let rc = unsafe { libc::kill(-(group_id as i32), libc::SIGTERM) };
+    if rc != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(format!(
+                "Could not request graceful cleanup of the verified downloader group: {error}"
+            ));
+        }
+        return Ok(());
+    }
+
+    let term_deadline = Instant::now() + Duration::from_millis(700);
     loop {
-        if !model_download_group_members_are_owned(group_id, expected_exe)? {
+        if !model_download_group_members_are_owned(identity, expected_exe)? {
             return Ok(());
         }
         if Instant::now() >= term_deadline {
             break;
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(75));
     }
 
-    // Ownership is deliberately checked again immediately before SIGKILL.
-    if !model_download_group_members_are_owned(group_id, expected_exe)? {
+    // Ownership is deliberately checked immediately before SIGKILL.
+    if !model_download_group_members_are_owned(identity, expected_exe)? {
         return Ok(());
     }
     let rc = unsafe { libc::kill(-(group_id as i32), libc::SIGKILL) };
@@ -2615,19 +2971,20 @@ fn finish_stopping_model_download_group(group_id: u32, expected_exe: &Path) -> R
                 "Could not force-stop the verified downloader group: {error}"
             ));
         }
+        return Ok(());
     }
 
     let final_deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        if !model_download_group_members_are_owned(group_id, expected_exe)? {
+        if !model_download_group_members_are_owned(identity, expected_exe)? {
             return Ok(());
         }
         if Instant::now() >= final_deadline {
             break;
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(75));
     }
-    Err("The verified download process group is still active after the stop signal.".into())
+    Err("The verified download process group is still active after bounded termination.".into())
 }
 
 #[tauri::command]
@@ -2652,21 +3009,21 @@ fn cancel_model_download(
     snapshot.phase = "canceling".into();
     snapshot.message = "Stopping the download and its helper workers…".into();
 
-    let pid = state
+    let identity = state
         .model_download_pid
         .lock()
         .map_err(|_| "Model-download process state is unavailable.".to_string())?
-        .to_owned();
-    if let Some(pid) = pid {
+        .clone();
+    if let Some(identity) = identity {
         let expected_exe = state
             .resource_dir
             .join("rdt_voice_backend")
             .join("rdt_voice_backend");
-        match model_download_group_members_are_owned(pid, &expected_exe) {
+        match model_download_group_members_are_owned(&identity, &expected_exe) {
             Ok(true) => {
                 // The group was created specifically for this download. Its live
                 // members must all match our bundled executable before signaling.
-                let result = unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
+                let result = unsafe { libc::kill(-(identity.pgid as i32), libc::SIGTERM) };
                 if result != 0 {
                     let error = std::io::Error::last_os_error();
                     if error.raw_os_error() != Some(libc::ESRCH) {
@@ -2703,15 +3060,26 @@ fn cancel_model_download(
         let app_for_escalation = app.clone();
         let status_store = Arc::clone(&state.model_download_status);
         let pid_store = Arc::clone(&state.model_download_pid);
+        let log_path_store = Arc::clone(&state.model_download_log_path);
         let cancel_requested = Arc::clone(&state.model_download_cancel_requested);
+        let identity_for_escalation = identity.clone();
+        let model = snapshot.model.clone();
+        let destination_root = snapshot.destination_root.clone();
         thread::spawn(move || {
-            // Let SIGTERM finish cleanly first. If a worker has inherited stdout or
-            // stderr, it can hold the reader join open after the parent exits.
-            thread::sleep(Duration::from_millis(1200));
+            // The foreground command already requested TERM. Allow bounded grace,
+            // then revalidate the exact stored identity before escalation.
+            thread::sleep(Duration::from_millis(900));
             let still_this_attempt = cancel_requested.load(Ordering::SeqCst)
                 && pid_store
                     .lock()
-                    .map(|current| *current == Some(pid))
+                    .map(|current| {
+                        current.as_ref().is_some_and(|captured| {
+                            captured.pid == identity_for_escalation.pid
+                                && captured.pgid == identity_for_escalation.pgid
+                                && captured.started == identity_for_escalation.started
+                                && captured.command == identity_for_escalation.command
+                        })
+                    })
                     .unwrap_or(false)
                 && status_store
                     .lock()
@@ -2721,23 +3089,14 @@ fn cancel_model_download(
                 return;
             }
 
-            if let Err(error) = finish_stopping_model_download_group(pid, &expected_exe) {
-                let still_this_attempt = cancel_requested.load(Ordering::SeqCst)
-                    && pid_store
-                        .lock()
-                        .map(|current| *current == Some(pid))
-                        .unwrap_or(false);
-                if !still_this_attempt {
-                    return;
-                }
+            if let Err(error) =
+                finish_stopping_model_download_group(&identity_for_escalation, &expected_exe)
+            {
                 let updated = if let Ok(mut status) = status_store.lock() {
-                    // Do not overwrite a terminal result if the child finished while
-                    // the escalation helper was collecting its final process snapshot.
                     if !status.active || status.phase != "canceling" {
                         return;
                     }
-                    // Keep active=true so Start/Delete cannot race a possibly-live
-                    // downloader. phase=failed makes Cancel retryable in the UI.
+                    // Keep active=true so Start/Delete cannot race a possibly-live process.
                     status.phase = "failed".into();
                     status.message = format!("Cancellation could not be confirmed: {error} Select Try cancel again; no unverified process was signaled.");
                     Some(status.clone())
@@ -2747,6 +3106,63 @@ fn cancel_model_download(
                 if let Some(updated) = updated {
                     let _ = app_for_escalation.emit("rdt-model-download-status", updated);
                 }
+                return;
+            }
+
+            // If the worker already published a terminal result, do not overwrite it.
+            let still_this_attempt = cancel_requested.load(Ordering::SeqCst)
+                && pid_store
+                    .lock()
+                    .map(|current| {
+                        current.as_ref().is_some_and(|captured| {
+                            captured.pid == identity_for_escalation.pid
+                                && captured.pgid == identity_for_escalation.pgid
+                                && captured.started == identity_for_escalation.started
+                                && captured.command == identity_for_escalation.command
+                        })
+                    })
+                    .unwrap_or(false)
+                && status_store
+                    .lock()
+                    .map(|status| status.active && status.phase == "canceling")
+                    .unwrap_or(false);
+            if !still_this_attempt {
+                return;
+            }
+
+            let cache_valid = model
+                .as_deref()
+                .zip(destination_root.as_deref())
+                .is_some_and(|(model, root)| model_cache_has_weights(Path::new(root), model));
+            cancel_requested.store(false, Ordering::SeqCst);
+            if let Ok(mut current) = pid_store.lock() {
+                if current.as_ref().is_some_and(|captured| {
+                    captured.pid == identity_for_escalation.pid
+                        && captured.started == identity_for_escalation.started
+                }) {
+                    *current = None;
+                }
+            }
+            if cache_valid {
+                publish_model_download_status(
+                    &app_for_escalation,
+                    &status_store,
+                    "complete",
+                    "The MLX model files are complete and verified. The downloader has been safely stopped and the model is ready to use.",
+                    false,
+                );
+            } else {
+                publish_model_download_status(
+                    &app_for_escalation,
+                    &status_store,
+                    "cancelled",
+                    "Download canceled. Only complete, verified MLX model files will be shown as Downloaded; completed files can be reused on retry.",
+                    false,
+                );
+            }
+            let remaining_log = log_path_store.lock().ok().and_then(|mut path| path.take());
+            if let Some(path) = remaining_log {
+                let _ = fs::remove_file(path);
             }
         });
     } else {
@@ -2823,7 +3239,7 @@ fn delete_rdt_model_caches(
         "mlx-community/whisper-large-v3-mlx",
         "mlx-community/whisper-small-mlx",
         "mlx-community/whisper-base-mlx",
-        "mlx-community/whisper-tiny",
+        "mlx-community/whisper-tiny-mlx",
     ];
     let mut deleted = 0usize;
     let mut bytes = 0u64;
@@ -2978,6 +3394,129 @@ fn load_model_storage_locations(state: &BackendState) -> Result<Vec<String>, Str
     Ok(config.locations)
 }
 
+fn model_snapshot_file_is_complete(snapshot: &Path, repo_root: &Path, name: &str) -> bool {
+    // Snapshot filenames must be simple child names; do not allow an index file
+    // to make cache validation escape the selected model repository.
+    if name.is_empty()
+        || Path::new(name).file_name().and_then(|value| value.to_str()) != Some(name)
+        || name == "."
+        || name == ".."
+    {
+        return false;
+    }
+    let path = snapshot.join(name);
+    let Ok(resolved) = fs::canonicalize(path) else {
+        return false;
+    };
+    if !resolved.starts_with(repo_root) {
+        return false;
+    }
+    let Ok(metadata) = fs::metadata(resolved) else {
+        return false;
+    };
+    metadata.is_file() && metadata.len() > 0
+}
+
+fn model_snapshot_is_complete(root: &Path, model: &str, snapshot_path: &Path) -> bool {
+    let Some(revision) = model_lock_revision(model) else {
+        return false;
+    };
+    let Some(expected_sha) = model_lock_sha256(model) else {
+        return false;
+    };
+    let Some(weight_name) = model_lock_string(model, "weight_file") else {
+        return false;
+    };
+    if weight_name != "weights.npz" {
+        return false;
+    }
+
+    let Ok(home_root) = fs::canonicalize(root) else {
+        return false;
+    };
+    let hub_cache = home_root.join("hub");
+    let Ok(cache_root) = fs::canonicalize(&hub_cache) else {
+        return false;
+    };
+    let repo_key = format!("models--{}", model.replace('/', "--"));
+    let Ok(repo_root) = fs::canonicalize(cache_root.join(&repo_key)) else {
+        return false;
+    };
+    if !repo_root.starts_with(&cache_root) {
+        return false;
+    }
+    let Ok(snapshots_root) = fs::canonicalize(repo_root.join("snapshots")) else {
+        return false;
+    };
+    if !snapshots_root.starts_with(&repo_root) {
+        return false;
+    }
+    let Ok(snapshot) = fs::canonicalize(snapshot_path) else {
+        return false;
+    };
+    if !snapshot.is_dir()
+        || !snapshot.starts_with(&snapshots_root)
+        || snapshot.file_name().and_then(|name| name.to_str()) != Some(revision.as_str())
+    {
+        return false;
+    }
+
+    if !model_snapshot_file_is_complete(&snapshot, &repo_root, "config.json")
+        || !model_snapshot_file_is_complete(&snapshot, &repo_root, &weight_name)
+    {
+        return false;
+    }
+    let Ok(config_bytes) = fs::read(snapshot.join("config.json")) else {
+        return false;
+    };
+    let Ok(config) = serde_json::from_slice::<Value>(&config_bytes) else {
+        return false;
+    };
+    if config.get("model_type").and_then(Value::as_str) != Some("whisper") {
+        return false;
+    }
+
+    let Ok(weight_path) = fs::canonicalize(snapshot.join(&weight_name)) else {
+        return false;
+    };
+    let Ok(meta) = fs::metadata(&weight_path) else {
+        return false;
+    };
+    if !weight_path.starts_with(&repo_root) || !meta.is_file() || meta.len() == 0 {
+        return false;
+    }
+    let marker_dir = home_root.join("rdt-model-verification");
+    let marker_path = marker_dir.join(format!("{repo_key}.json"));
+    let Ok(marker_dir_meta) = fs::symlink_metadata(&marker_dir) else {
+        return false;
+    };
+    let Ok(marker_meta) = fs::symlink_metadata(&marker_path) else {
+        return false;
+    };
+    if marker_dir_meta.file_type().is_symlink()
+        || !marker_dir_meta.is_dir()
+        || marker_meta.file_type().is_symlink()
+        || !marker_meta.is_file()
+    {
+        return false;
+    }
+    let Ok(marker_bytes) = fs::read(&marker_path) else {
+        return false;
+    };
+    let Ok(marker) = serde_json::from_slice::<Value>(&marker_bytes) else {
+        return false;
+    };
+    marker.get("schema_version").and_then(Value::as_u64) == Some(1)
+        && marker.get("repo_id").and_then(Value::as_str) == Some(model)
+        && marker.get("revision").and_then(Value::as_str) == Some(revision.as_str())
+        && marker.get("weight_file").and_then(Value::as_str) == Some(weight_name.as_str())
+        && marker.get("sha256").and_then(Value::as_str) == Some(expected_sha.as_str())
+        && marker.get("size_bytes").and_then(Value::as_u64) == Some(meta.len())
+        && marker.get("mtime_ns").and_then(Value::as_i64)
+            == Some(meta.mtime() * 1_000_000_000 + meta.mtime_nsec())
+        && marker.get("inode").and_then(Value::as_u64) == Some(meta.ino())
+}
+
 fn model_cache_has_weights(root: &Path, model: &str) -> bool {
     let repo_key = format!("models--{}", model.replace('/', "--"));
     let snapshots = root.join("hub").join(repo_key).join("snapshots");
@@ -2985,21 +3524,9 @@ fn model_cache_has_weights(root: &Path, model: &str) -> bool {
         Ok(entries) => entries,
         Err(_) => return false,
     };
-    const WEIGHTS: [&str; 6] = [
-        "weights.safetensors",
-        "model.safetensors",
-        "weights.npz",
-        "pytorch_model.bin",
-        "model.bin",
-        "flax_model.msgpack",
-    ];
-    entries.filter_map(Result::ok).any(|entry| {
-        if !entry.path().is_dir() {
-            return false;
-        }
-        let snap = entry.path();
-        WEIGHTS.iter().any(|name| snap.join(name).is_file())
-    })
+    entries
+        .filter_map(Result::ok)
+        .any(|entry| model_snapshot_is_complete(root, model, &entry.path()))
 }
 
 fn make_model_storage_status(
@@ -3240,11 +3767,7 @@ async fn pick_model_storage_directory(
         "Choose a Hugging Face model-cache home",
         &[],
     );
-    let picked = app
-        .dialog()
-        .file()
-        .set_title(title)
-        .blocking_pick_folder();
+    let picked = app.dialog().file().set_title(title).blocking_pick_folder();
     match picked {
         Some(folder) => {
             let path = folder
@@ -4211,6 +4734,8 @@ fn start_backend_blocking(
         .env("HF_HUB_DISABLE_XET", "1")
         .current_dir(bundle_dir)
         .env("WHISPER_MODEL_ID", &model)
+        .env("HF_ENDPOINT", "https://huggingface.co")
+        .env("RDT_CONNECT_MANAGED", "1")
         .env("HF_HOME", &model_storage_root)
         .env("HF_HUB_CACHE", &hub_cache)
         .env("HUGGINGFACE_HUB_CACHE", &hub_cache)
@@ -4897,7 +5422,7 @@ fn read_last_server_choice(state: &BackendState) -> LastServerChoice {
         }
     }
     LastServerChoice {
-        model: "mlx-community/whisper-tiny".into(),
+        model: "mlx-community/whisper-tiny-mlx".into(),
         preferred_port: 8888,
     }
 }
@@ -4961,6 +5486,29 @@ fn tray_voice_preflight_passes(state: &BackendState, status: &BackendStatus) -> 
         .send()
         .map(|response| response.status().is_success())
         .unwrap_or(false)
+}
+
+fn show_update_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("updates") {
+        window
+            .show()
+            .map_err(|error| format!("Could not show the update window: {error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("Could not focus the update window: {error}"))?;
+        let _ = app.emit("rdt-connect-update-check-request", ());
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(app, "updates", WebviewUrl::App("update.html".into()))
+        .title("RDT Connect Updates")
+        .inner_size(468.0, 270.0)
+        .min_inner_size(420.0, 250.0)
+        .resizable(false)
+        .center()
+        .build()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open the update window: {error}"))
 }
 
 fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<tauri::Wry>> {
@@ -5336,6 +5884,11 @@ fn open_about_link(kind: String, locale: Option<String>) -> Result<(), String> {
             url.to_string()
         }
         "email" => EMAIL.to_string(),
+        "rdt-voice-license" => "https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE".to_string(),
+        "commercial-license" => "https://github.com/RolanDorisTech/rdt-voice/blob/main/COMMERCIAL_LICENSE.md".to_string(),
+        "license-history" => "https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE_HISTORY.md".to_string(),
+        "third-party-acknowledgements" => "https://github.com/RolanDorisTech/rdt-voice/blob/main/README.md#acknowledgements-and-third-party-licenses".to_string(),
+
         _ => return Err("Unknown About link; no external target was opened.".into()),
     };
     #[cfg(target_os = "macos")]
@@ -5502,8 +6055,80 @@ fn main() {
             }
 
             let state = app.state::<BackendState>();
+            #[cfg(target_os = "macos")]
+            {
+                let app_about = MenuItem::with_id(
+                    app,
+                    "app-menu-about-rdt-connect",
+                    "About RDT Connect",
+                    true,
+                    None::<&str>,
+                )?;
+                let app_updates = MenuItem::with_id(
+                    app,
+                    "app-menu-check-updates",
+                    "Check for Updates",
+                    true,
+                    None::<&str>,
+                )?;
+                let app_separator = PredefinedMenuItem::separator(app)?;
+                let app_quit =
+                    PredefinedMenuItem::quit(app, Some("Quit RDT Connect"))?;
+                let app_submenu = Submenu::with_items(
+                    app,
+                    "RDT Connect",
+                    true,
+                    &[&app_about, &app_updates, &app_separator, &app_quit],
+                )?;
+
+                let file_close =
+                    PredefinedMenuItem::close_window(app, Some("Close Window"))?;
+                let file_submenu =
+                    Submenu::with_items(app, "File", true, &[&file_close])?;
+
+                let undo = PredefinedMenuItem::undo(app, None)?;
+                let redo = PredefinedMenuItem::redo(app, None)?;
+                let edit_separator = PredefinedMenuItem::separator(app)?;
+                let cut = PredefinedMenuItem::cut(app, None)?;
+                let copy = PredefinedMenuItem::copy(app, None)?;
+                let paste = PredefinedMenuItem::paste(app, None)?;
+                let select_all = PredefinedMenuItem::select_all(app, None)?;
+                let edit_submenu = Submenu::with_items(
+                    app,
+                    "Edit",
+                    true,
+                    &[&undo, &redo, &edit_separator, &cut, &copy, &paste, &select_all],
+                )?;
+
+                let minimize = PredefinedMenuItem::minimize(app, None)?;
+                let window_close =
+                    PredefinedMenuItem::close_window(app, Some("Close Window"))?;
+                let window_submenu =
+                    Submenu::with_items(app, "Window", true, &[&minimize, &window_close])?;
+
+                let app_menu = Menu::with_items(
+                    app,
+                    &[&app_submenu, &file_submenu, &edit_submenu, &window_submenu],
+                )?;
+                app.set_menu(app_menu)?;
+            }
+
+            app.on_menu_event(|app, event| {
+                match event.id().as_ref() {
+                    "app-menu-about-rdt-connect" => {
+                        let _ = app.emit("rdt-connect-open-about", ());
+                    },
+                    "app-menu-check-updates" => {
+                        if let Err(error) = show_update_window(app) {
+                            eprintln!("[RDT Connect] Could not open update status window: {error}");
+                        }
+                    }
+                    _ => {}
+                }
+            });
+
             let menu = build_tray_menu(app.handle(), &state).map_err(std::io::Error::other)?;
-            // Bright-white transparent template mark; full-color branding remains the Dock icon.
+            // Black-and-clear template mask adapts to macOS appearance; the Dock icon stays full color.
             TrayIconBuilder::with_id("rdt-connect-menu-bar")
                 .icon(tauri::include_image!("icons/rdt-menu-bar-icon.png"))
                 .icon_as_template(false)

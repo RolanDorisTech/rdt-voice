@@ -986,6 +986,8 @@
     "updater.progress": "{TOTAL} boyutunun {DOWNLOADED} kadarı indirildi.",
     "updater.relaunching": "Güncelleme yüklendi. RDT Connect yeniden başlatılıyor…",
     "updater.restartFailed": "Güncelleme yüklendi ancak RDT Connect otomatik olarak yeniden başlatılamadı. Uygulamadan çıkıp yeniden açın.",
-    "updater.upToDate": "RDT Connect güncel."
+    "updater.upToDate": "RDT Connect güncel.",
+    "updater.reopenApp": "Uygulamayı Yeniden Aç",
+    "updater.installedReopen": "Güncelleme yüklendi. Yeni sürümü kullanmak için “Uygulamayı Yeniden Aç” seçeneğini seçin."
   }
 }

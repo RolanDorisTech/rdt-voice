@@ -986,6 +986,8 @@
     "updater.progress": "已下載 {DOWNLOADED}，共 {TOTAL}。",
     "updater.relaunching": "更新已安裝。正在重新啟動 RDT Connect…",
     "updater.restartFailed": "更新已安裝，但 RDT Connect 無法自動重新啟動。請退出並重新開啟應用程式。",
-    "updater.upToDate": "RDT Connect 已是最新版本。"
+    "updater.upToDate": "RDT Connect 已是最新版本。",
+    "updater.reopenApp": "重新開啟應用程式",
+    "updater.installedReopen": "更新已安裝。選擇「重新開啟應用程式」以使用新版本。"
   }
 }

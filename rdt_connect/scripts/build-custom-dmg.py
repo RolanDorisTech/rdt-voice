@@ -192,6 +192,18 @@ def main():
     if "rdtconnect" not in schemes:
         stop("built app bundle does not register the rdtconnect URL scheme.")
 
+    # Refuse to package an old .app left in target/ when the source marker has
+    # advanced. BUILD_ID is embedded in the compiled Rust application response.
+    try:
+        executable_bytes = executable.read_bytes()
+    except OSError as exc:
+        stop(f"could not read the built RDT Connect executable: {exc}")
+    if marker.encode("ascii") not in executable_bytes:
+        stop(
+            f"built app does not contain active build marker {marker}; "
+            "rebuild the app with scripts/build-macos-with-marker.sh before packaging."
+        )
+
     dmgbuild = find_dmgbuild()
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     output = BUILD / f"dmg-custom-{marker}-{stamp}"

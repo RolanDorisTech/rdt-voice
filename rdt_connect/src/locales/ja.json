@@ -986,6 +986,8 @@
     "updater.progress": "{TOTAL} 中 {DOWNLOADED} をダウンロードしました。",
     "updater.relaunching": "更新をインストールしました。RDT Connect を再起動しています…",
     "updater.restartFailed": "更新はインストールされましたが、RDT Connect を自動で再起動できませんでした。アプリを終了して、もう一度開いてください。",
-    "updater.upToDate": "RDT Connect は最新です。"
+    "updater.upToDate": "RDT Connect は最新です。",
+    "updater.reopenApp": "アプリを再起動",
+    "updater.installedReopen": "アップデートをインストールしました。新しいバージョンを使うには「アプリを再起動」を選択してください。"
   }
 }

@@ -986,6 +986,8 @@
     "updater.progress": "Scaricati {DOWNLOADED} di {TOTAL}.",
     "updater.relaunching": "Aggiornamento installato. Riavvio di RDT Connect…",
     "updater.restartFailed": "L’aggiornamento è stato installato, ma RDT Connect non è riuscito a riavviarsi automaticamente. Chiudi e riapri l’app.",
-    "updater.upToDate": "RDT Connect è aggiornato."
+    "updater.upToDate": "RDT Connect è aggiornato.",
+    "updater.reopenApp": "Riapri l’app",
+    "updater.installedReopen": "Aggiornamento installato. Seleziona “Riapri l’app” per usare la nuova versione."
   }
 }

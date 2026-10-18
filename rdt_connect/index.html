@@ -57,7 +57,7 @@
               <div class="model-select-row">
                 <div id="model-select-tooltip" class="model-select-shell" title="Choose which Whisper model the local server will use. Stop the server before changing models.">
                   <select id="model-select" class="model-select-source" aria-hidden="true" tabindex="-1" title="Choose which Whisper model the local server will use.">
-                    <option value="mlx-community/whisper-tiny" selected>Tiny · Fastest · ~74 MB</option>
+                    <option value="mlx-community/whisper-tiny-mlx" selected>Tiny · Fastest · ~74 MB</option>
                     <option value="mlx-community/whisper-base-mlx">Base · ~144 MB</option>
                     <option value="mlx-community/whisper-small-mlx">Small · ~481 MB</option>
                     <option value="mlx-community/whisper-large-v3-turbo">Large v3 Turbo · Recommended · ~1.61 GB</option>
@@ -398,20 +398,19 @@
             <div class="settings-group-heading"><h2 id="settings-updates-heading">Updates &amp; About</h2><p class="muted">App updates, product details, and licences.</p></div>
             <div class="settings-group-grid settings-updates-grid">
               <article class="card about-card settings-about-card">
-            <div class="card-heading about-card-heading"><h2>About</h2><div class="about-heading-actions"><span id="about-version-label" class="eyebrow">RDT Connect · v0.2-DEV.9 · Build marker loading…</span><button id="about-check-updates-button" class="button update-check-button" type="button" aria-controls="application-update-panel" aria-expanded="false">Check for updates</button></div></div>
+            <div class="card-heading about-card-heading"><h2>About</h2><div class="about-heading-actions"><span id="about-version-label" class="eyebrow">RDT Connect · version/build information loading…</span><button id="about-check-updates-button" class="button update-check-button" type="button" aria-controls="application-update-panel" aria-expanded="false">Check for updates</button></div></div>
             <p class="muted">RDT Connect helps you run your own private, local transcription server. You choose when to connect another device, and the app keeps the security details visible instead of hiding them.</p>
             <div id="application-update-panel" class="application-update-panel" aria-hidden="true" inert><div class="card-heading"><h2>Application updates</h2></div><p id="application-update-message" class="muted" aria-live="polite"></p><div class="application-update-actions"><button id="application-update-action-button" class="button update-check-button" type="button" hidden disabled>Download and install update</button></div></div>
             <div class="about-channel-row">
               <div class="about-company-block"><a id="about-company-link" class="about-company-link" href="https://github.com/RolanDorisTech/rdt-voice" target="_blank" rel="noopener noreferrer"><strong>Built by Rolan &amp; Doris Tech ↗</strong></a><small>Local AI Made Easy · Apple Silicon and on-device AI</small><small class="about-business-contact">Business contact · <a id="about-business-contact-link" href="mailto:woknewsbusiness@gmail.com">woknewsbusiness@gmail.com</a></small></div>
-              <button id="about-youtube-button" class="button secondary" type="button" title="Open the Rolan & Doris Tech YouTube channel in your default browser">Support us on YouTube ↗</button>
-            </div>
+              <button id="about-youtube-button" class="button secondary" type="button" title="Open the Rolan & Doris Tech YouTube channel in your default browser">Support us on YouTube ↗</button></div>
             <details class="legal-details">
               <summary>Licences and third-party acknowledgements</summary>
               <p class="muted">RDT Voice, RDT Connect, third-party libraries, and model files may have different terms. The current RDT Voice repository identifies its source license as PolyForm Noncommercial 1.0.0; the historical MIT text does not by itself establish the license for a current release. Always check the exact version and model card you use.</p>
-              <div class="legal-links"><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">RDT Voice license</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/COMMERCIAL_LICENSE.md" target="_blank" rel="noopener noreferrer">Commercial licensing</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE_HISTORY.md" target="_blank" rel="noopener noreferrer">License history</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/README.md" target="_blank" rel="noopener noreferrer">Third-party acknowledgements</a></div>
+              <div class="legal-links"><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" id="legal-rdt-voice-license-link">RDT Voice license</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/COMMERCIAL_LICENSE.md" target="_blank" rel="noopener noreferrer" id="legal-commercial-license-link">Commercial licensing</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE_HISTORY.md" target="_blank" rel="noopener noreferrer" id="legal-license-history-link">License history</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/README.md#acknowledgements-and-third-party-licenses" target="_blank" rel="noopener noreferrer" id="legal-third-party-acknowledgements-link">Third-party acknowledgements</a></div>
               <p class="muted field-help">Model weights and runtime dependencies retain their own licences and notices. RDT Connect's own release licence must be read from the licence file included with that release.</p>
             </details>
-            <p class="about-copyright">© 2026 Rolan &amp; Doris Tech · Built for private, on-device AI.</p>
+            <p class="about-copyright">© 2026 Rolan &amp; Doris Tech</p>
           </article>
             </div>
           </section>

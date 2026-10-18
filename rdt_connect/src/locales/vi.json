@@ -986,6 +986,8 @@
     "updater.progress": "Đã tải {DOWNLOADED} trên tổng {TOTAL}.",
     "updater.relaunching": "Đã cài đặt bản cập nhật. Đang khởi động lại RDT Connect…",
     "updater.restartFailed": "Bản cập nhật đã được cài đặt nhưng RDT Connect không thể tự khởi động lại. Hãy thoát và mở lại ứng dụng.",
-    "updater.upToDate": "RDT Connect đã là phiên bản mới nhất."
+    "updater.upToDate": "RDT Connect đã là phiên bản mới nhất.",
+    "updater.reopenApp": "Mở lại ứng dụng",
+    "updater.installedReopen": "Đã cài đặt bản cập nhật. Chọn “Mở lại ứng dụng” để dùng phiên bản mới."
   }
 }

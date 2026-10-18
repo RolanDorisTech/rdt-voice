@@ -986,6 +986,8 @@
     "updater.progress": "Na-download ang {DOWNLOADED} sa kabuuang {TOTAL}.",
     "updater.relaunching": "Na-install ang update. Nire-restart ang RDT Connect…",
     "updater.restartFailed": "Na-install ang update, pero hindi awtomatikong na-restart ang RDT Connect. Isara at buksan muli ang app.",
-    "updater.upToDate": "Napapanahon na ang RDT Connect."
+    "updater.upToDate": "Napapanahon na ang RDT Connect.",
+    "updater.reopenApp": "Buksan muli ang app",
+    "updater.installedReopen": "Na-install na ang update. Piliin ang “Buksan muli ang app” para gamitin ang bagong bersyon."
   }
 }

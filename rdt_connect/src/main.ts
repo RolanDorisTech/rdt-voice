@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { check as checkForTauriUpdate, type Update as TauriUpdate, type DownloadEvent as TauriDownloadEvent } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./style.css";
@@ -73,6 +73,7 @@ const aboutCheckUpdatesButton = $("about-check-updates-button") as HTMLButtonEle
 const applicationUpdatePanel = $("application-update-panel") as HTMLDivElement;
 const applicationUpdateMessage = $("application-update-message") as HTMLParagraphElement;
 const applicationUpdateActionButton = $("application-update-action-button") as HTMLButtonElement;
+const headerUpdateActionButton = document.querySelector<HTMLButtonElement>("#header-update-action-button");
 const headerVersionLabel = $("header-version-label") as HTMLSpanElement;
 const headerBuildId = $("header-build-id") as HTMLSpanElement;
 const aboutVersionLabel = $("about-version-label") as HTMLSpanElement;
@@ -100,7 +101,7 @@ function syncDeveloperToggleButton() {
   developerToggleButton.setAttribute("aria-pressed", String(developerOptionsEnabled));
   developerToggleButton.classList.toggle("enabled", developerOptionsEnabled);
   developerToggleButton.title = developerOptionsEnabled ? "Developer tools enabled" : "Enable developer tools";
-} 
+}
 syncDeveloperToggleButton();
 function setAppView(target: string, persist = true) {
   const allowed = ["local", "settings", "remote"].includes(target) || (target === "developer" && developerOptionsEnabled);
@@ -246,7 +247,7 @@ const modelSelectCurrentBadge = $("model-select-current-badge");
 let modelSwitchTargetAfterStop: string | null = null;
 const modelOptionBaseLabels = new Map<string, string>(Array.from(modelSelect.options).map((option) => [option.value, option.textContent || option.value]));
 const modelMenuDetails: Record<string, { name: string; description: string; size: string; recommended?: boolean }> = {
-  "mlx-community/whisper-tiny": { name: "Tiny", description: "Fastest · smallest download", size: "~74 MB" },
+  "mlx-community/whisper-tiny-mlx": { name: "Tiny", description: "Fastest · smallest download", size: "~74 MB" },
   "mlx-community/whisper-base-mlx": { name: "Base", description: "Lightweight choice", size: "~144 MB" },
   "mlx-community/whisper-small-mlx": { name: "Small", description: "Middle-size model", size: "~481 MB" },
   "mlx-community/whisper-large-v3-turbo": { name: "Large v3 Turbo", description: "Strong balance of speed and quality", size: "~1.61 GB", recommended: true },
@@ -256,7 +257,7 @@ function modelMenuInfo(option: HTMLOptionElement) {
   return modelMenuDetails[option.value] || { name: option.textContent || option.value, description: "Whisper model", size: "Size varies" };
 }
 function modelToneFor(model: string): "tiny" | "base" | "small" | "turbo" | "large" {
-  if (model.endsWith("whisper-tiny")) return "tiny";
+  if (model.endsWith("whisper-tiny-mlx")) return "tiny";
   if (model.endsWith("whisper-base-mlx")) return "base";
   if (model.endsWith("whisper-small-mlx")) return "small";
   if (model.endsWith("whisper-large-v3-turbo")) return "turbo";
@@ -488,8 +489,8 @@ const startButtonLabel = $("start-button-label");
 const startProgress = $("start-progress");
 const startProgressText = $("start-progress-text");
 const startProgressDescription = $("start-progress-description");
-const aboutYoutubeButton = $("about-youtube-button") as HTMLButtonElement;
 const aboutCompanyLink = $("about-company-link") as HTMLAnchorElement;
+const aboutYoutubeButton = $("about-youtube-button") as HTMLButtonElement;
 const aboutBusinessContactLink = $("about-business-contact-link") as HTMLAnchorElement;
 const openButton = $("open-button") as HTMLButtonElement;
 const browserSelect = $("browser-select") as HTMLSelectElement;
@@ -1030,6 +1031,11 @@ void listen<ModelDownloadStatus>("rdt-model-download-status", (event) => {
     void refreshModelCacheBadges();
   } else if (incoming.phase === "failed") {
     showNotice(incoming.message, "error");
+    // A failed or recovered download can leave partial HF snapshot entries behind.
+    // Re-read native cache verification even if cleanup remains active so a stale
+    // "Downloaded" badge is never preserved from the previous selection.
+    void refreshModelStorageStatus();
+    void refreshModelCacheBadges();
   }
 });
 
@@ -1618,7 +1624,7 @@ function friendlyModelName(model: string): string {
     "mlx-community/whisper-large-v3-mlx": "Whisper Large v3",
     "mlx-community/whisper-small-mlx": "Whisper Small",
     "mlx-community/whisper-base-mlx": "Whisper Base",
-    "mlx-community/whisper-tiny": "Whisper Tiny",
+    "mlx-community/whisper-tiny-mlx": "Whisper Tiny",
   };
   return names[model] || model.split("/").pop() || "Whisper model";
 }
@@ -1628,7 +1634,7 @@ function approximateModelSizeLabel(model: string): string {
     "mlx-community/whisper-large-v3-mlx": "~3.08 GB",
     "mlx-community/whisper-small-mlx": "~481 MB",
     "mlx-community/whisper-base-mlx": "~144 MB",
-    "mlx-community/whisper-tiny": "~74 MB",
+    "mlx-community/whisper-tiny-mlx": "~74 MB",
   };
   return sizes[model] || "an approximate size";
 }
@@ -1792,8 +1798,8 @@ function renderModelDownloadUI() {
   const hasProgress = Boolean(download && ((active && ["checking", "canceling", "verifying"].includes(phase)) || (download.totalBytes && download.totalBytes > 0 && ["downloading", "verifying", "failed", "cancelled"].includes(phase))));
   modelDownloadProgressWrap.classList.toggle("hidden", !hasProgress);
   if (hasProgress && download) {
-    // 100% is reserved for the terminal, inactive success event after the native
-    // subprocess and its inherited output pipes have both finished.
+    // 100% is reserved for a terminal, inactive success event after the native
+    // downloader group is cleaned up and the cache independently validates complete.
     const verifiedComplete = complete && !active;
     const percent = verifiedComplete ? 100 : Math.max(0, Math.min(99, download.progressPercent || 0));
     modelDownloadProgressBar.style.width = `${percent}%`;
@@ -1857,6 +1863,16 @@ function renderModelCleanupButtons() {
     : "Select one or more downloaded model caches above. Nothing is preselected.";
   updateSettingsLockHelp();
 }
+
+const clearRequiredModelGuidance = () => {
+  modelDownloadButton.closest<HTMLElement>(".model-download-panel")
+    ?.classList.remove("needs-model-download");
+  modelDownloadButton.classList.remove("needs-model-download-target");
+};
+modelSelect.addEventListener("change", clearRequiredModelGuidance);
+modelDownloadButton.addEventListener(
+  "click", clearRequiredModelGuidance, { capture: true },
+);
 
 modelDownloadButton.addEventListener("click", async () => {
   const model = modelSelect.value;
@@ -2522,20 +2538,25 @@ async function runAction(action: () => Promise<unknown>, successMessage?: string
 }
 
 
-async function startSelectedBackendModel() {
-  const selectedCache = await invoke<ModelStorageStatus>("get_model_storage_status", { model: modelSelect.value });
+let modelAvailabilityCheckInFlight = false;
+function nudgeModelDownloadButton(): void {
+  if (modelDownloadButton.hidden || modelDownloadButton.disabled) return;
+  modelDownloadButton.classList.remove("needs-download-attention");
+  void modelDownloadButton.offsetWidth;
+  modelDownloadButton.classList.add("needs-download-attention");
+  window.setTimeout(() => modelDownloadButton.classList.remove("needs-download-attention"), 4200);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  modelDownloadButton.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+  modelDownloadButton.focus({ preventScroll: true });
+}
+
+async function startSelectedBackendModel(preverifiedCache?: ModelStorageStatus) {
+  const selectedCache = preverifiedCache ?? await invoke<ModelStorageStatus>("get_model_storage_status", { model: modelSelect.value });
   modelStorageStatus = selectedCache;
   renderModelStorageSummary(selectedCache);
   renderModelDownloadUI();
   if (!selectedCache.modelCached) {
-    showNotice("This model isn't downloaded yet. Select Download model above to continue, then try Start Server again.", "warning");
-    modelDownloadButton.classList.remove("needs-download-attention");
-    void modelDownloadButton.offsetWidth;
-    modelDownloadButton.classList.add("needs-download-attention");
-    window.setTimeout(() => modelDownloadButton.classList.remove("needs-download-attention"), 4200);
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    modelDownloadButton.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
-    modelDownloadButton.focus({ preventScroll: true });
+    nudgeModelDownloadButton();
     return;
   }
   await runAction(async () => {
@@ -2555,6 +2576,50 @@ startButton.addEventListener("click", async () => {
   if (busy) return;
   const wasRunning = backend.running;
   const requestedModel = modelSelect.value;
+  let precheckedStartupCache: ModelStorageStatus | null = null;
+  if (!wasRunning) {
+    if (modelAvailabilityCheckInFlight) return;
+    modelAvailabilityCheckInFlight = true;
+    try {
+      const cache = await invoke<ModelStorageStatus>("get_model_storage_status", { model: requestedModel });
+      modelStorageStatus = cache;
+      renderModelStorageSummary(cache);
+      renderModelDownloadUI();
+      if (!cache.modelCached) {
+        nudgeModelDownloadButton();
+        return;
+      }
+      precheckedStartupCache = cache;
+    } catch (error) {
+      showNotice(`Could not verify the selected model cache; the server was not started. ${String(error)}`, "error");
+      return;
+    } finally {
+      modelAvailabilityCheckInFlight = false;
+    }
+  }
+
+  // Missing model: guide attention through motion and focus, not text.
+  if (!wasRunning && !modelDownloadButton.hidden
+      && !modelDownloadButton.disabled && !modelDownloadStatus.active) {
+    const downloadPanel =
+      modelDownloadButton.closest<HTMLElement>(".model-download-panel");
+
+    modelDownloadButton.classList.remove("needs-model-download-target");
+    if (downloadPanel) {
+      downloadPanel.classList.remove("needs-model-download");
+      void downloadPanel.offsetWidth;
+      downloadPanel.classList.add("needs-model-download");
+      downloadPanel.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto" : "smooth",
+        block: "nearest",
+      });
+    }
+    void modelDownloadButton.offsetWidth;
+    modelDownloadButton.classList.add("needs-model-download-target");
+    modelDownloadButton.focus({ preventScroll: true });
+    return;
+  }
   const wantsSwitch = wasRunning && !!backend.model && requestedModel !== backend.model;
   if (wantsSwitch) {
     if (modelDownloadStatus.active || modelStorageBusy) {
@@ -2567,9 +2632,8 @@ startButton.addEventListener("click", async () => {
       modelStorageStatus = selectedCache;
       renderModelStorageSummary(selectedCache);
       if (!selectedCache.modelCached) {
-        showNotice("The selected model is not downloaded yet. The current server was left running; download that model, then try Switch Model again.", "warning");
         setBusy(false);
-        modelDownloadButton.focus({ preventScroll: true });
+        nudgeModelDownloadButton();
         return;
       }
     } catch (error) {
@@ -2623,10 +2687,10 @@ startButton.addEventListener("click", async () => {
         showNotice("The previous server is stopped. Starting the selected model…", "info");
         renderBackendStatus();
         await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        await startSelectedBackendModel();
+        await startSelectedBackendModel(precheckedStartupCache ?? undefined);
       }
     } else {
-      await startSelectedBackendModel();
+      await startSelectedBackendModel(precheckedStartupCache ?? undefined);
     }
   } finally {
     modelSwitchTargetAfterStop = null;
@@ -2654,12 +2718,43 @@ let updateCheckInFlight: Promise<void> | null = null;
 let pendingTauriUpdate: TauriUpdate | null = null;
 let updateInstallInProgress = false;
 
+type UpdateUiAction = "install" | "installing" | "reopen" | null;
+let updateUiMessageKey = "updater.checking";
+let updateUiMessageParams: Record<string, string> = {};
+let updateUiAction: UpdateUiAction = null;
+let updateInstalledAwaitingRelaunch = false;
+function publishUpdateWindowState(): void {
+  void emit("rdt-connect-update-status", {
+    key: updateUiMessageKey,
+    params: updateUiMessageParams,
+    action: updateUiAction,
+  }).catch(() => undefined);
+}
+function setApplicationUpdateAction(action: UpdateUiAction): void {
+  updateUiAction = action;
+  const buttons = [applicationUpdateActionButton, headerUpdateActionButton].filter(
+    (button): button is HTMLButtonElement => button !== null,
+  );
+  for (const button of buttons) {
+    button.hidden = action === null;
+    button.disabled = action === "installing";
+    if (action === "install") button.textContent = updateMessage("updater.downloadInstall");
+    else if (action === "installing") button.textContent = updateMessage("updater.downloading");
+    else if (action === "reopen") button.textContent = updateMessage("updater.reopenApp");
+  }
+  publishUpdateWindowState();
+}
+
 function updateMessage(key: string, params: Record<string, string> = {}): string {
   return translateKey(key, params, getActiveLocale());
 }
 function setApplicationUpdateMessage(key: string, params: Record<string, string> = {}): void {
+  updateUiMessageKey = key;
+  updateUiMessageParams = { ...params };
   applicationUpdateMessage.textContent = updateMessage(key, params);
   applicationUpdateMessage.classList.toggle("is-up-to-date", key === "updater.upToDate");
+  applicationUpdateMessage.classList.toggle("is-update-installed", key === "updater.installedReopen");
+  publishUpdateWindowState();
 }
 function updateErrorDetail(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
@@ -2679,11 +2774,10 @@ function isMissingDevelopmentFeed(errorText: string): boolean {
 }
 
 function checkForApplicationUpdates(): Promise<void> {
-  if (updateInstallInProgress) return Promise.resolve();
+  if (updateInstallInProgress || updateInstalledAwaitingRelaunch) return Promise.resolve();
   if (updateCheckInFlight) return updateCheckInFlight;
   updateCheckInFlight = (async () => {
-    applicationUpdateActionButton.hidden = true;
-    applicationUpdateActionButton.disabled = true;
+    setApplicationUpdateAction(null);
     if (pendingTauriUpdate) {
       const previous = pendingTauriUpdate;
       pendingTauriUpdate = null;
@@ -2698,9 +2792,7 @@ function checkForApplicationUpdates(): Promise<void> {
       }
       pendingTauriUpdate = update;
       setApplicationUpdateMessage("updater.available", { VERSION: update.version });
-      applicationUpdateActionButton.textContent = updateMessage("updater.downloadInstall");
-      applicationUpdateActionButton.hidden = false;
-      applicationUpdateActionButton.disabled = false;
+      setApplicationUpdateAction("install");
     } catch (error) {
       const detail = updateErrorDetail(error);
       if (isMissingDevelopmentFeed(detail)) {
@@ -2711,10 +2803,9 @@ function checkForApplicationUpdates(): Promise<void> {
         setApplicationUpdateMessage("updater.checkFailed", { ERROR: detail });
       }
     } finally {
-      if (!pendingTauriUpdate) {
-        applicationUpdateActionButton.hidden = true;
-        applicationUpdateActionButton.disabled = true;
-      }
+      if (updateInstalledAwaitingRelaunch) setApplicationUpdateAction("reopen");
+      else if (pendingTauriUpdate) setApplicationUpdateAction("install");
+      else setApplicationUpdateAction(null);
       updateCheckInFlight = null;
     }
   })();
@@ -2722,17 +2813,26 @@ function checkForApplicationUpdates(): Promise<void> {
 }
 
 async function installAvailableApplicationUpdate(): Promise<void> {
+  if (updateInstalledAwaitingRelaunch) {
+    try {
+      await relaunch();
+    } catch {
+      setApplicationUpdateMessage("updater.restartFailed");
+      setApplicationUpdateAction("reopen");
+    }
+    return;
+  }
   if (updateInstallInProgress || !pendingTauriUpdate) return;
   const update = pendingTauriUpdate;
   updateInstallInProgress = true;
-  applicationUpdateActionButton.disabled = true;
   aboutCheckUpdatesButton.disabled = true;
   headerCheckUpdatesButton.disabled = true;
+  setApplicationUpdateAction("installing");
   let downloadedBytes = 0;
   let totalBytes: number | null = null;
   setApplicationUpdateMessage("updater.downloading");
   try {
-    await update.downloadAndInstall((event: TauriDownloadEvent) => {
+    await update.download((event: TauriDownloadEvent) => {
       if (event.event === "Started") {
         totalBytes = event.data.contentLength ?? null;
         setApplicationUpdateMessage("updater.downloading");
@@ -2746,25 +2846,26 @@ async function installAvailableApplicationUpdate(): Promise<void> {
         }
       }
     });
+    setApplicationUpdateMessage("updater.downloading");
+    await update.install({ restartAfterInstall: false });
     pendingTauriUpdate = null;
-    setApplicationUpdateMessage("updater.relaunching");
-    try {
-      await relaunch();
-    } catch {
-      setApplicationUpdateMessage("updater.restartFailed");
-    }
+    updateInstalledAwaitingRelaunch = true;
+    setApplicationUpdateMessage("updater.installedReopen");
+    setApplicationUpdateAction("reopen");
   } catch (error) {
     setApplicationUpdateMessage("updater.installFailed", { ERROR: updateErrorDetail(error) });
     if (pendingTauriUpdate === update) {
       pendingTauriUpdate = null;
       try { await update.close(); } catch { /* installation failure cleanup is best-effort */ }
     }
+    setApplicationUpdateAction(null);
   } finally {
     updateInstallInProgress = false;
     aboutCheckUpdatesButton.disabled = false;
     headerCheckUpdatesButton.disabled = false;
-    applicationUpdateActionButton.hidden = !pendingTauriUpdate;
-    applicationUpdateActionButton.disabled = !pendingTauriUpdate;
+    if (updateInstalledAwaitingRelaunch) setApplicationUpdateAction("reopen");
+    else if (pendingTauriUpdate) setApplicationUpdateAction("install");
+    else setApplicationUpdateAction(null);
   }
 }
 
@@ -2802,20 +2903,78 @@ aboutCheckUpdatesButton.addEventListener("click", () => {
   else showApplicationUpdates(false);
 });
 headerCheckUpdatesButton.addEventListener("click", () => showApplicationUpdates(true));
+
+void listen("rdt-connect-open-about", () => {
+  const tabs = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(".view-tab")
+  );
+  const settingsTab = tabs.find((tab) => {
+    const marker = [
+      tab.id, tab.dataset.view, tab.dataset.target,
+      tab.getAttribute("aria-controls"),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return marker.includes("settings");
+  }) ?? tabs.find((tab) => /settings/i.test(tab.textContent ?? ""));
+
+  settingsTab?.click();
+  requestAnimationFrame(() => {
+    $("settings-updates-section")?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto" : "smooth",
+      block: "start",
+    });
+  });
+}).catch(() => undefined);
+
+void listen("rdt-connect-check-updates", () => {
+  void checkForApplicationUpdates();
+}).catch(() => undefined);
+void listen("rdt-connect-update-window-ready", () => {
+  publishUpdateWindowState();
+  void checkForApplicationUpdates();
+}).catch(() => undefined);
+void listen("rdt-connect-update-check-request", () => {
+  void checkForApplicationUpdates();
+}).catch(() => undefined);
+void listen("rdt-connect-update-install-request", () => {
+  void installAvailableApplicationUpdate();
+}).catch(() => undefined);
+void listen("rdt-connect-update-relaunch-request", () => {
+  void installAvailableApplicationUpdate();
+}).catch(() => undefined);
 applicationUpdateActionButton.addEventListener("click", () => { void installAvailableApplicationUpdate(); });
+if (headerUpdateActionButton) headerUpdateActionButton.addEventListener("click", () => { void installAvailableApplicationUpdate(); });
 void refreshAppBuildInfo();
 
+const legalLinkRoutes: Array<[string, string]> = [
+  ["legal-rdt-voice-license-link", "rdt-voice-license"],
+  ["legal-commercial-license-link", "commercial-license"],
+  ["legal-license-history-link", "license-history"],
+  ["legal-third-party-acknowledgements-link", "third-party-acknowledgements"],
+];
+for (const [id, kind] of legalLinkRoutes) {
+  const link = document.getElementById(id) as HTMLAnchorElement | null;
+  link?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      await invoke("open_about_link", { kind, locale: getActiveLocale() });
+    } catch (error) {
+      showNotice(`Could not open ${link.textContent?.trim() || "license link"}: ${String(error)}`, "error");
+    }
+  });
+}
+
+if (brandHomeLink) brandHomeLink.addEventListener("click", async (event) => {
+  event.preventDefault();
+  try { await invoke("open_about_link", { kind: "website", locale: getActiveLocale() }); }
+  catch (error) { showNotice(`Could not open the RDT Voice website: ${String(error)}`, "error"); }
+});
 aboutYoutubeButton.addEventListener("click", async () => {
   try {
     await invoke("open_youtube_channel");
   } catch (error) {
     showNotice(`Could not open the YouTube channel: ${String(error)}`, "error");
   }
-});
-if (brandHomeLink) brandHomeLink.addEventListener("click", async (event) => {
-  event.preventDefault();
-  try { await invoke("open_about_link", { kind: "website", locale: getActiveLocale() }); }
-  catch (error) { showNotice(`Could not open the RDT Voice website: ${String(error)}`, "error"); }
 });
 aboutCompanyLink.addEventListener("click", async (event) => {
   event.preventDefault();

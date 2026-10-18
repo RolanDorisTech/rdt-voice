@@ -986,6 +986,8 @@
     "updater.progress": "Завантажено {DOWNLOADED} із {TOTAL}.",
     "updater.relaunching": "Оновлення встановлено. Перезапуск RDT Connect…",
     "updater.restartFailed": "Оновлення встановлено, але RDT Connect не вдалося автоматично перезапустити. Закрийте й знову відкрийте програму.",
-    "updater.upToDate": "RDT Connect оновлено до останньої версії."
+    "updater.upToDate": "RDT Connect оновлено до останньої версії.",
+    "updater.reopenApp": "Відкрити застосунок знову",
+    "updater.installedReopen": "Оновлення встановлено. Виберіть «Відкрити застосунок знову», щоб використовувати нову версію."
   }
 }

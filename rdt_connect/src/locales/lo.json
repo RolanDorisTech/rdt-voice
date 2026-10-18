@@ -986,6 +986,8 @@
     "updater.progress": "ດາວໂຫຼດແລ້ວ {DOWNLOADED} ຈາກ {TOTAL}.",
     "updater.relaunching": "ຕິດຕັ້ງການອັບເດດແລ້ວ. ກຳລັງເລີ່ມ RDT Connect ໃໝ່…",
     "updater.restartFailed": "ການອັບເດດຕິດຕັ້ງແລ້ວ ແຕ່ RDT Connect ບໍ່ສາມາດເລີ່ມໃໝ່ໄດ້ອັດຕະໂນມັດ. ປິດແລ້ວເປີດແອັບຄືນໃໝ່.",
-    "updater.upToDate": "RDT Connect ເປັນເວີຊັນລ່າສຸດແລ້ວ."
+    "updater.upToDate": "RDT Connect ເປັນເວີຊັນລ່າສຸດແລ້ວ.",
+    "updater.reopenApp": "ເປີດແອັບອີກຄັ້ງ",
+    "updater.installedReopen": "ຕິດຕັ້ງອັບເດດແລ້ວ. ເລືອກ “ເປີດແອັບອີກຄັ້ງ” ເພື່ອໃຊ້ລຸ້ນໃໝ່."
   }
 }

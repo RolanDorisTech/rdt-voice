@@ -2603,3 +2603,135 @@ html[dir="rtl"] [data-l10n-ignore] {
   border-radius: 8px !important;
   overflow: hidden !important;
 }
+
+
+/* 0D45 — paced language-free model cue; truly clipped Help screenshot. */
+#view-local .model-download-panel.needs-model-download {
+  animation: rdtModelPanelCue0D45 3.2s cubic-bezier(.42, 0, .24, 1)
+    1 both !important;
+}
+#view-local .model-download-panel.needs-model-download #model-download-button,
+#view-local #model-download-button.needs-model-download-target {
+  animation: rdtModelButtonCue0D45 3.2s cubic-bezier(.42, 0, .24, 1)
+    1 both !important;
+}
+@keyframes rdtModelPanelCue0D45 {
+  0%, 100% {
+    border-color: rgba(204, 176, 107, .24);
+    box-shadow: none;
+  }
+  24%, 66% {
+    border-color: rgba(225, 196, 124, .72);
+    box-shadow: 0 0 0 1px rgba(225,196,124,.10),
+                0 0 20px rgba(225,196,124,.14);
+  }
+}
+@keyframes rdtModelButtonCue0D45 {
+  0%, 100% {
+    filter: none;
+    box-shadow: 0 0 0 0 rgba(225,196,124,0);
+  }
+  25%, 64% {
+    filter: brightness(1.055);
+    box-shadow: 0 0 0 2px rgba(225,196,124,.22),
+                0 0 22px rgba(225,196,124,.22);
+  }
+}
+
+/* Clip both the transformed image and its frame so the corners are visible. */
+#settings-help .visual-setup-guide-image-frame {
+  overflow: hidden !important;
+  border-radius: 16px !important;
+  clip-path: inset(0 round 16px) !important;
+}
+#settings-help .visual-setup-guide-image-frame > .visual-setup-guide-example {
+  border-radius: 16px !important;
+  clip-path: inset(0 round 16px) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #view-local .model-download-panel.needs-model-download,
+  #view-local .model-download-panel.needs-model-download #model-download-button,
+  #view-local #model-download-button.needs-model-download-target {
+    animation: none !important;
+    filter: none !important;
+  }
+  #view-local .model-download-panel.needs-model-download {
+    border-color: rgba(225,196,124,.65) !important;
+    box-shadow: 0 0 0 1px rgba(225,196,124,.12) !important;
+  }
+  #view-local #model-download-button.needs-model-download-target {
+    outline: 2px solid rgba(225,196,124,.55);
+    outline-offset: 3px;
+  }
+}
+
+
+/* 0D46: social/update actions live in the macOS app menu, not About. */
+#about-company-link[hidden],
+#about-youtube-button[hidden],
+#about-check-updates-button[hidden] {
+  display: none !important;
+}
+
+
+/* 0D47: calm, non-verbal guidance when the selected model is not cached. */
+@keyframes rdtDownloadSpotlightCue0D47 {
+  0%, 100% { outline: 1px solid rgba(245,205,103,.08); outline-offset: 2px; box-shadow: 0 0 0 1px rgba(248,113,133,.25), 0 0 8px rgba(248,75,93,.10); }
+  50% { outline: 2px solid rgba(245,205,103,.76); outline-offset: 4px; box-shadow: 0 0 0 2px rgba(245,205,103,.24), 0 0 18px rgba(245,197,91,.30); }
+}
+#model-download-button.needs-download-attention:not(:disabled):not([aria-busy="true"]) {
+  animation: rdtDownloadSpotlightCue0D47 1.45s ease-in-out 2 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #model-download-button.needs-download-attention:not(:disabled):not([aria-busy="true"]) {
+    animation: none !important; outline: 2px solid rgba(245,205,103,.82) !important; outline-offset: 3px !important; filter: none !important; will-change: auto;
+  }
+}
+
+
+/* 0D49: About and updater presentation; preserve existing behavior. */
+.about-channel-row {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 11px !important;
+}
+.about-channel-row > div { width: 100%; }
+#about-youtube-button {
+  align-self: flex-start !important;
+  width: fit-content !important;
+  max-width: 100%;
+  white-space: nowrap !important;
+}
+
+/* 0D50: final requested UI adjustments */
+.about-channel-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+}
+.about-channel-row > div {
+  width: auto !important;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+#about-youtube-button {
+  align-self: center !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: 100%;
+  margin-left: auto;
+  white-space: nowrap !important;
+}
+@media (max-width: 720px) {
+  .about-channel-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  #about-youtube-button {
+    align-self: flex-start !important;
+    width: fit-content !important;
+    white-space: nowrap !important;
+  }
+}

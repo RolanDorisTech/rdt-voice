@@ -986,6 +986,8 @@
     "updater.progress": "{DOWNLOADED} dari {TOTAL} telah diunduh.",
     "updater.relaunching": "Pembaruan terpasang. Memulai ulang RDT Connect…",
     "updater.restartFailed": "Pembaruan telah dipasang, tetapi RDT Connect tidak dapat dimulai ulang otomatis. Tutup lalu buka kembali aplikasi.",
-    "updater.upToDate": "RDT Connect sudah versi terbaru."
+    "updater.upToDate": "RDT Connect sudah versi terbaru.",
+    "updater.reopenApp": "Buka Ulang Aplikasi",
+    "updater.installedReopen": "Pembaruan terpasang. Pilih “Buka Ulang Aplikasi” untuk memakai versi baru."
   }
 }

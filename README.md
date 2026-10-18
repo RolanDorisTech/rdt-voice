@@ -87,7 +87,7 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 **SHA-256 (Build 0D50):** `732c35f3bbc26c3bfd6904ea3070413573af7d62f9095e07cd5af39efcd6bc0b`
 
-The Download (.dmg) link opens the published DMG directly, without the intermediate website download page or its second Download button. The browser manages the download and its progress. Update the link and release details together for each new version.
+Download (.dmg) links directly to the published GitHub Release asset. The browser's Downloads panel handles download progress and cancellation. Update the link, version, build, and file size when publishing a new installer.
 
 
 RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.

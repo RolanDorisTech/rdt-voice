@@ -44,6 +44,10 @@ assert.equal(readme.split(promoStart).length - 1, 1,
 assert.equal(readme.split(promoEnd).length - 1, 1,
   "README promotion must have one end marker");
 const promo = readme.split(promoStart)[1].split(promoEnd)[0];
+assert.equal((promo.match(/<div align="left">/g) || []).length, 1,
+  "RDT Connect promotion must be left-aligned");
+assert.equal(promo.includes('<div align="center">'), false,
+  "RDT Connect promotion must not revert to centered alignment");
 assert.ok(promo.includes(match[1]),
   "promotional download badge must point at the same verified DMG");
 assert.ok(promo.includes("assets/rdt-connect-server-running.png"),

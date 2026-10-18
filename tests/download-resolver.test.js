@@ -31,6 +31,10 @@ check("returns numeric size, digest and canonical HTTPS URL", (() => {
   const x = select([release(FALLBACK)]);
   return x.size === 371715568 && x.digest === GOOD_DIGEST && x.url === `${REPO}/${FALLBACK}/RDT_Connect_0.2.0-dev.10_aarch64.dmg`;
 })(), true);
+check("returns the restricted streaming Worker URL", (() => {
+  const x = select([release(FALLBACK)]);
+  return x.proxyUrl === `https://rdt-connect-download-proxy.rolandoristech.workers.dev/download/${FALLBACK}`;
+})(), true);
 check("policy: newest published_at wins over higher version number",
   tagOf([release("rdt-connect-v0.2.0-dev.9", { published_at: "2026-10-17T00:00:00Z" }),
          release(FALLBACK, { published_at: "2026-10-16T00:00:00Z" })]), "rdt-connect-v0.2.0-dev.9");

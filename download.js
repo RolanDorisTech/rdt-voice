@@ -3,6 +3,7 @@
 const RDT_CONNECT_RELEASES_API =
   "https://api.github.com/repos/RolanDorisTech/rdt-voice/releases?per_page=100";
 const RDT_CONNECT_REPO_PATH = "/RolanDorisTech/rdt-voice";
+const RDT_CONNECT_DOWNLOAD_PROXY_ORIGIN = "https://rdt-connect-download-proxy.rolandoristech.workers.dev";
 const RDT_CONNECT_TAG_RE =
   /^rdt-connect-v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/;
 
@@ -56,7 +57,8 @@ function selectLatestEligibleConnectDownload(releases) {
       name: expectedName,
       size: asset.size,
       digest: asset.digest,
-      url: url.href
+      url: url.href,
+      proxyUrl: `${RDT_CONNECT_DOWNLOAD_PROXY_ORIGIN}/download/${release.tag_name}`
     };
   }
   return null;
@@ -78,8 +80,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const releaseDetails = document.getElementById("release-details");
     const retryButton = document.getElementById("retry-button");
     const progress = document.getElementById("download-progress");
+    const progressFill = document.getElementById("download-progress-fill");
     const downloadHelp = document.getElementById("download-help");
-    if (!status || !downloadLink || !releaseDetails || !retryButton || !progress || !downloadHelp) return;
+    if (!status || !downloadLink || !releaseDetails || !retryButton || !progress || !progressFill || !downloadHelp) return;
 
     let activeController = null;
     let timerId = null;
@@ -122,6 +125,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         if (!result) throw new Error("No eligible published Connect DMG was found.");
 
         downloadLink.href = result.url;
+        downloadLink.dataset.proxyUrl = result.proxyUrl;
+        downloadLink.dataset.filename = result.name;
+        downloadLink.dataset.size = String(result.size);
+        downloadLink.dataset.forceNative = "false";
+        downloadLink.textContent = "Download (.dmg)";
         downloadLink.setAttribute("aria-label", `Download RDT Connect ${result.version} for macOS`);
         releaseDetails.textContent = `Version ${result.version} · ${formatFileSize(result.size)}`;
         downloadLink.hidden = false;
@@ -140,13 +148,105 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     retryButton.addEventListener("click", () => { void resolveDownload(); });
-    downloadLink.addEventListener("click", () => {
-      // GitHub's direct asset download does not expose byte progress to this
-      // page. Keep the claim indeterminate and point users to browser Downloads.
-      status.textContent = "Starting the download. For actual transfer progress, check your browser’s Downloads panel.";
-      downloadHelp.hidden = false;
-      progress.hidden = false;
-      progress.setAttribute("aria-valuetext", "Download handed off to your browser; exact transfer progress is shown in the browser Downloads panel.");
+    function updateDownloadProgress(downloaded, total) {
+      const percent = total > 0 ? Math.min(100, Math.floor(downloaded * 100 / total)) : 0;
+      progressFill.style.width = `${percent}%`;
+      progress.setAttribute("aria-valuenow", String(percent));
+      progress.setAttribute("aria-valuetext", total > 0
+        ? `${percent}% — ${formatFileSize(downloaded)} of ${formatFileSize(total)}`
+        : `${formatFileSize(downloaded)} written`);
+      status.textContent = total > 0
+        ? `Downloading RDT Connect… ${percent}% (${formatFileSize(downloaded)} of ${formatFileSize(total)})`
+        : `Downloading RDT Connect… ${formatFileSize(downloaded)} written`;
+    }
+
+    async function downloadWithProgress() {
+      let writable = null;
+      let reader = null;
+      try {
+        status.textContent = "Choose where to save the installer…";
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: downloadLink.dataset.filename || "RDT_Connect.dmg",
+          types: [{
+            description: "RDT Connect macOS installer",
+            accept: { "application/octet-stream": [".dmg"] }
+          }]
+        });
+
+        status.textContent = "Connecting to the download stream…";
+        const response = await fetch(downloadLink.dataset.proxyUrl, {
+          method: "GET",
+          headers: { Accept: "application/octet-stream" },
+          cache: "no-store"
+        });
+        if (!response.ok || !response.body) {
+          throw new Error(`Download stream returned HTTP ${response.status}`);
+        }
+
+        const headerSize = Number(response.headers.get("Content-Length"));
+        const metadataSize = Number(downloadLink.dataset.size);
+        const total = Number.isSafeInteger(headerSize) && headerSize > 0
+          ? headerSize
+          : (Number.isSafeInteger(metadataSize) && metadataSize > 0 ? metadataSize : 0);
+
+        writable = await fileHandle.createWritable();
+        progressFill.style.width = "0%";
+        progress.setAttribute("aria-valuenow", "0");
+        progress.setAttribute("aria-valuetext", total > 0 ? "0% downloaded" : "Receiving data");
+        progress.hidden = false;
+        downloadHelp.hidden = true;
+
+        let downloaded = 0;
+        reader = response.body.getReader();
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          await writable.write(part.value);
+          downloaded += part.value.byteLength;
+          updateDownloadProgress(downloaded, total);
+        }
+
+        await writable.close();
+        writable = null;
+        progressFill.style.width = "100%";
+        progress.setAttribute("aria-valuenow", "100");
+        progress.setAttribute("aria-valuetext", `Download complete — ${formatFileSize(downloaded)} written`);
+        status.textContent = `Download complete — ${formatFileSize(downloaded)} saved.`;
+      } catch (error) {
+        if (writable) {
+          try { await writable.abort(); } catch {}
+        }
+        if (reader) {
+          try { await reader.cancel(); } catch {}
+        }
+        progress.hidden = true;
+
+        if (error && error.name === "AbortError") {
+          status.textContent = "Download canceled.";
+          return;
+        }
+
+        console.error("[RDT Connect download progress]", error);
+        downloadLink.dataset.forceNative = "true";
+        downloadLink.textContent = "Download directly (browser progress)";
+        downloadLink.hidden = false;
+        downloadHelp.hidden = false;
+        status.textContent =
+          "In-page streaming is unavailable right now. Click the link below to use the browser-managed download instead.";
+      }
+    }
+
+    downloadLink.addEventListener("click", event => {
+      if (typeof window.showSaveFilePicker !== "function" ||
+          downloadLink.dataset.forceNative === "true") {
+        status.textContent =
+          "Starting the browser-managed download. Check your browser’s Downloads panel for progress.";
+        downloadHelp.hidden = false;
+        progress.hidden = true;
+        return;
+      }
+      event.preventDefault();
+      void downloadWithProgress();
     });
 
     void resolveDownload();

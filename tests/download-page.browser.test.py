@@ -62,6 +62,7 @@ try:
             launch_options["executable_path"] = chromium_path
         browser = p.chromium.launch(**launch_options)
         page = browser.new_page(accept_downloads=True)
+        page.on("pageerror", lambda error: print("PAGE ERROR:", error))
         api_calls = {"n": 0, "mode": "good"}
 
         def route_api(route):
@@ -73,6 +74,40 @@ try:
         page.route("https://api.github.com/repos/RolanDorisTech/rdt-voice/releases?per_page=100", route_api)
         html = (ROOT / "download.html").read_text().replace('<script src="./download.js" defer></script>', "")
         page.set_content(html)
+        # Install mocks after set_content so they exist in the actual test document.
+        page.evaluate("""() => {
+          window.__writtenBytes = 0;
+          Object.defineProperty(window, "showSaveFilePicker", {
+            configurable: true,
+            writable: true,
+            value: async () => ({
+              createWritable: async () => ({
+                write: async chunk => { window.__writtenBytes += chunk.byteLength; },
+                close: async () => {},
+                abort: async () => {}
+              })
+            })
+          });
+          const nativeFetch = window.fetch.bind(window);
+          window.fetch = async (input, init) => {
+            const href = typeof input === "string" ? input : input.url;
+            if (href.startsWith("https://rdt-connect-download-proxy.rolandoristech.workers.dev/download/")) {
+              return new Response(new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+                  setTimeout(() => {
+                    controller.enqueue(new Uint8Array([5, 6, 7, 8]));
+                    controller.close();
+                  }, 40);
+                }
+              }), { status: 200, headers: {
+                "Content-Length": "8",
+                "Content-Type": "application/octet-stream"
+              }});
+            }
+            return nativeFetch(input, init);
+          };
+        }""")
         page.add_script_tag(path=str(ROOT / "download.js"))
         page.wait_for_function("document.querySelector('#download-link').hidden === false || document.querySelector('#retry-button').hidden === false")
         link = page.locator("#download-link")
@@ -81,15 +116,21 @@ try:
         check("link points at exact expected asset", lambda: link.get_attribute("href") == URL)
         check("version and exact human-readable size shown", lambda: "0.2.0-dev.10" in page.locator("#release-details").inner_text() and "354.5 MiB (371,715,568 bytes)" in page.locator("#release-details").inner_text())
         check("retry hidden after success", lambda: page.locator("#retry-button").is_hidden())
-        # The sandbox blocks browser navigation to external GitHub URLs, so prevent
-        # the actual network handoff and verify only the click-state behavior here.
-        link.evaluate("el => el.addEventListener('click', event => event.preventDefault(), { once: true })")
         link.click()
-        check("download click triggers handoff messaging", lambda: "Starting the download" in page.locator("#status").inner_text())
-        check("status explains browser Downloads progress", lambda: "Downloads panel" in page.locator("#status").inner_text())
-        check("handoff progress is visible and indeterminate", lambda: page.locator("#download-progress").is_visible() and page.locator("#download-progress").get_attribute("aria-valuenow") is None)
+        try:
+            page.wait_for_function("document.querySelector('#status').innerText.includes('Download complete')", timeout=10000)
+        except Exception:
+            print("DEBUG status:", page.locator("#status").inner_text())
+            print("DEBUG save API:", page.evaluate("typeof window.showSaveFilePicker"))
+            print("DEBUG proxy URL:", link.get_attribute("data-proxy-url"))
+            raise
+        check("download completion is reported after stream finishes", lambda: "Download complete" in page.locator("#status").inner_text())
+        check("byte counter reflects bytes written to file", lambda: page.evaluate("window.__writtenBytes") == 8)
+        check("in-page progress reaches 100 percent", lambda: page.locator("#download-progress").is_visible() and page.locator("#download-progress").get_attribute("aria-valuenow") == "100")
+        check("progress fill reaches full width", lambda: page.locator("#download-progress-fill").evaluate("el => el.style.width") == "100%")
+        check("progress describes bytes rather than animation", lambda: "written" in page.locator("#download-progress").get_attribute("aria-valuetext"))
+        check("progress help stays hidden during measured download", lambda: page.locator("#download-help").is_hidden())
         check("page remains usable after handoff", lambda: page.url == "about:blank")
-        check("progress help explains byte-progress limitation", lambda: page.locator("#download-help").is_visible() and "does not report byte-by-byte progress" in page.locator("#download-help").inner_text())
 
         # Failure path: use a fresh page because download.js declares module-level consts.
         page2 = browser.new_page()

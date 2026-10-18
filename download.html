@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Download the current eligible RDT Connect macOS installer.">
+  <title>Download RDT Connect</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111827;
+      color: #f9fafb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 1.25rem;
+      background: radial-gradient(ellipse at 50% 0%, #243047 0%, #111827 58%);
+    }
+    main { width: min(39rem, 100%); padding: 1.5rem 0 2rem; }
+    .eyebrow { color: #facc15; font-size: .82rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { line-height: 1.12; letter-spacing: -.025em; margin: .6rem 0 1rem; }
+    p { line-height: 1.6; color: #d1d5db; }
+    a { color: #fde68a; }
+    .panel { padding: 1.15rem; border: 1px solid #46536a; border-radius: 1rem; background: rgb(17 24 39 / 80%); box-shadow: 0 18px 50px rgb(0 0 0 / 18%); }
+    #status { margin: 0; }
+    #release-details { margin: .45rem 0 0; color: #aab6c8; font-size: .92rem; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1.1rem; }
+    .download-button, .retry-button {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 2.8rem;
+      border: 1px solid #facc15; border-radius: .7rem; padding: .7rem 1rem;
+      font: inherit; font-weight: 700; cursor: pointer; text-decoration: none;
+    }
+    .download-button { background: #facc15; color: #111827; }
+    .download-button:hover { background: #fde68a; }
+    .retry-button { background: transparent; color: #f9fafb; }
+    .retry-button:hover { background: #273449; }
+    button:disabled { opacity: .6; cursor: wait; }
+    :focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+    [hidden] { display: none !important; }
+    #download-progress {
+      position: relative; overflow: hidden; height: .35rem; margin-top: 1rem;
+      border-radius: 999px; background: #334155;
+    }
+    #download-progress::before {
+      content: ""; position: absolute; top: 0; bottom: 0; width: 38%;
+      border-radius: inherit; background: #facc15; animation: handoff 1.35s ease-in-out infinite;
+    }
+    @keyframes handoff { from { left: -40%; } to { left: 105%; } }
+    .fallback { margin-top: 1.25rem; font-size: .95rem; }
+    @media (prefers-reduced-motion: reduce) {
+      #download-progress::before { animation: none; left: 31%; width: 38%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">RDT Connect</p>
+    <h1>Download for macOS</h1>
+    <section class="panel" aria-label="RDT Connect installer">
+      <p id="status" role="status" aria-live="polite" aria-atomic="true">Checking GitHub for the newest eligible Apple-silicon installer…</p>
+      <p id="release-details" hidden></p>
+      <div class="actions">
+        <a id="download-link" class="download-button" href="https://github.com/RolanDorisTech/rdt-voice/releases" hidden>Download (.dmg)</a>
+        <button id="retry-button" class="retry-button" type="button" hidden>Try again</button>
+      </div>
+      <div id="download-progress" role="progressbar" aria-label="Download handoff" aria-valuetext="Waiting for a download to start" hidden></div>
+    </section>
+    <p id="download-help" class="fallback" hidden>GitHub’s direct download does not report byte-by-byte progress to this page. Check your browser’s Downloads panel for the actual transfer progress.</p>
+    <p class="fallback">If the verified download link is unavailable, you can <a href="https://github.com/RolanDorisTech/rdt-voice/releases">browse the official RDT Connect release list</a>.</p>
+  </main>
+  <script src="./download.js" defer></script>
+</body>
+</html>

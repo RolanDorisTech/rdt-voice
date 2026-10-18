@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "popup-windows",
+  "description": "Allow the dedicated About and update windows to exchange only the core invoke and event APIs they use.",
+  "windows": [
+    "updates"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close"
+  ]
+}

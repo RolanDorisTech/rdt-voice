@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-mlx-whisper
-numpy
+mlx-whisper==0.4.3
 python-multipart
 qrcode>=7.4,<9

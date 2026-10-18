@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>RDT Connect Updates</title>
+  </head>
+  <body>
+    <main class="update-window-shell">
+      <header class="update-window-header">
+        <div class="update-window-mark" aria-hidden="true">RDT</div>
+        <div><h1>Application updates</h1><p>RDT Connect</p></div>
+      </header>
+      <section class="update-window-status" aria-live="polite" aria-atomic="true">
+        <span id="update-window-status-dot" class="update-window-status-dot" aria-hidden="true"></span>
+        <p id="update-window-message">Checking for updates…</p>
+      </section>
+      <div class="update-window-progress" aria-hidden="true"><span></span></div>
+      <footer class="update-window-actions">
+        <button id="update-window-check-button" class="update-window-secondary" type="button">Check for updates</button>
+        <button id="update-window-primary-button" class="update-window-primary" type="button" hidden disabled>Download and install update</button>
+      </footer>
+    </main>
+    <script type="module" src="/src/update-window.ts"></script>
+  </body>
+</html>

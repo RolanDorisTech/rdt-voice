@@ -1,0 +1,36 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/resources/rdt_voice_backend/
+src-tauri/resources/rdt_voice_web/
+src-tauri/resources/third_party_notices/
+
+# Generated macOS bundle resources and branding assets
+build/
+public/rdt-brand-icon.webp
+src-tauri/icons/icon.icns
+
+# Local-only backups and generated Python artifacts
+release-safety-backup-*/
+*.pre-*
+__pycache__/
+*.py[cod]
+
+# Local backups and generated files — never publish
+.backup-*/
+.rdt-connect-backups/
+release-safety-backup-*/
+.DS_Store
+*.bak
+*.backup-*
+__pycache__/
+*.py[cod]
+src-tauri/gen/
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+*.key
+*.log
+updates/dev/latest.json

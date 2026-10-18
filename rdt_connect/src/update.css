@@ -1,0 +1,191 @@
+* { box-sizing: border-box; }
+:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+body { margin: 0; min-width: 340px; min-height: 100vh; color: #f5f5f7; background: #151619; }
+.update-window-shell { padding: 27px 28px 22px; min-height: 100vh; display: flex; flex-direction: column; gap: 22px; }
+.update-window-header { display: flex; align-items: center; gap: 13px; }
+.update-window-mark { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; color: #f3d66d; border: 1px solid rgba(243,214,109,.35); background: linear-gradient(145deg, #303037, #1d1e23); font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.update-window-header h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
+.update-window-header p { margin: 4px 0 0; color: #a6a7ae; font-size: 12px; }
+.update-window-status { display: flex; gap: 12px; align-items: flex-start; min-height: 68px; padding: 17px 16px; border: 1px solid rgba(255,255,255,.09); border-radius: 14px; background: rgba(255,255,255,.035); }
+.update-window-status p { margin: 0; line-height: 1.5; font-size: 13px; overflow-wrap: anywhere; }
+.update-window-status-dot { width: 9px; height: 9px; margin-top: 5px; flex: 0 0 auto; border-radius: 50%; background: #9698a1; box-shadow: 0 0 0 4px rgba(150,152,161,.12); }
+.update-window-status.is-up-to-date .update-window-status-dot { background: #5bc58a; box-shadow: 0 0 0 4px rgba(91,197,138,.12); }
+.update-window-status.is-update-available .update-window-status-dot { background: #f3d66d; box-shadow: 0 0 0 4px rgba(243,214,109,.13); }
+.update-window-status.is-error .update-window-status-dot { background: #e97777; box-shadow: 0 0 0 4px rgba(233,119,119,.12); }
+.update-window-progress { height: 3px; overflow: hidden; border-radius: 8px; background: rgba(255,255,255,.065); }
+.update-window-progress span { display: block; width: 32%; height: 100%; opacity: 0; border-radius: inherit; background: #e8ca68; }
+.update-window-shell.is-busy .update-window-progress span { opacity: 1; animation: update-window-sweep 1.35s ease-in-out infinite; }
+.update-window-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 9px; margin-top: auto; }
+.update-window-actions button { min-height: 37px; padding: 0 13px; border-radius: 10px; font: inherit; font-size: 12px; cursor: pointer; transition: background .16s ease, border-color .16s ease, opacity .16s ease; }
+.update-window-secondary { border: 1px solid rgba(255,255,255,.13); background: transparent; color: #d3d4da; }
+.update-window-primary { border: 1px solid #d8bd60; background: #e6cb70; color: #1b1b1d; font-weight: 650; }
+.update-window-actions button:hover:not(:disabled) { filter: brightness(1.08); }
+.update-window-actions button:focus-visible { outline: 2px solid #f3d66d; outline-offset: 3px; }
+.update-window-actions button:disabled { cursor: wait; opacity: .65; }
+@keyframes update-window-sweep { 0% { transform: translateX(-110%); } 100% { transform: translateX(360%); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+
+/* 0D49: Centered update window with a clear native-style status symbol. */
+.update-window-shell {
+  padding: 20px 28px;
+  justify-content: center;
+  gap: 15px;
+}
+.update-window-header {
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  gap: 9px;
+}
+.update-window-header > div:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.update-window-status {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+  padding: 18px 16px;
+  text-align: center;
+  gap: 11px;
+}
+.update-window-status p {
+  max-width: 34ch;
+  line-height: 1.5;
+  font-size: 14px;
+}
+.update-window-status-dot {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 0;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.12);
+  color: #c4c8d0;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1;
+}
+.update-window-status-dot::before { content: "…"; }
+.update-window-status.is-up-to-date .update-window-status-dot {
+  background: rgba(91,197,138,.14);
+  color: #75e0a4;
+  box-shadow: 0 0 0 1px rgba(91,197,138,.32),
+              0 0 17px rgba(91,197,138,.12);
+}
+.update-window-status.is-up-to-date .update-window-status-dot::before { content: "✓"; }
+.update-window-status.is-update-available .update-window-status-dot {
+  background: rgba(243,214,109,.13);
+  color: #f3d66d;
+  box-shadow: 0 0 0 1px rgba(243,214,109,.30);
+}
+.update-window-status.is-update-available .update-window-status-dot::before { content: "↑"; }
+.update-window-status.is-error .update-window-status-dot {
+  background: rgba(233,119,119,.13);
+  color: #f28d8d;
+  box-shadow: 0 0 0 1px rgba(233,119,119,.30);
+}
+.update-window-status.is-error .update-window-status-dot::before { content: "!"; }
+.update-window-progress { opacity: 0; }
+.update-window-shell.is-busy .update-window-progress { opacity: 1; }
+.update-window-actions {
+  justify-content: center;
+  margin-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-window-status-dot,
+  .update-window-progress,
+  .update-window-progress span {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* 0D50: compact updater layout */
+html, body {
+  height: 100%;
+  min-height: 0 !important;
+  overflow: hidden;
+}
+.update-window-shell {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0 !important;
+  padding: 12px 24px !important;
+  justify-content: center;
+  gap: 8px !important;
+  overflow: hidden;
+}
+.update-window-header {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px !important;
+}
+.update-window-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.update-window-header h1 { font-size: 16px; }
+.update-window-header p { margin-top: 2px; }
+.update-window-status {
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px !important;
+  padding: 8px 10px !important;
+  text-align: center;
+  gap: 9px !important;
+}
+.update-window-status p {
+  flex: 0 1 auto;
+  max-width: 36ch;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.update-window-status-dot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  margin: 0 !important;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+}
+.update-window-status-dot::before { content: "…"; }
+.update-window-status.is-up-to-date .update-window-status-dot::before { content: "✓"; }
+.update-window-status.is-update-available .update-window-status-dot::before { content: "↑"; }
+.update-window-status.is-error .update-window-status-dot::before { content: "!"; }
+.update-window-progress {
+  height: 2px;
+  flex: 0 0 2px;
+}
+.update-window-actions {
+  justify-content: center;
+  margin-top: 0 !important;
+  gap: 8px;
+}
+.update-window-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-window-status-dot,
+  .update-window-progress,
+  .update-window-progress span {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -986,6 +986,8 @@
     "updater.progress": "ดาวน์โหลดแล้ว {DOWNLOADED} จาก {TOTAL}",
     "updater.relaunching": "ติดตั้งการอัปเดตแล้ว กำลังเริ่ม RDT Connect ใหม่…",
     "updater.restartFailed": "ติดตั้งการอัปเดตแล้ว แต่ไม่สามารถเริ่ม RDT Connect ใหม่โดยอัตโนมัติได้ โปรดปิดแล้วเปิดแอปอีกครั้ง",
-    "updater.upToDate": "RDT Connect เป็นเวอร์ชันล่าสุดแล้ว"
+    "updater.upToDate": "RDT Connect เป็นเวอร์ชันล่าสุดแล้ว",
+    "updater.reopenApp": "เปิดแอปอีกครั้ง",
+    "updater.installedReopen": "ติดตั้งอัปเดตแล้ว เลือก “เปิดแอปอีกครั้ง” เพื่อใช้เวอร์ชันใหม่"
   }
 }

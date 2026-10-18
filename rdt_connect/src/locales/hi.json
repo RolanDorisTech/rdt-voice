@@ -986,6 +986,8 @@
     "updater.progress": "{TOTAL} में से {DOWNLOADED} डाउनलोड हुआ।",
     "updater.relaunching": "अपडेट इंस्टॉल हो गया। RDT Connect फिर से शुरू हो रहा है…",
     "updater.restartFailed": "अपडेट इंस्टॉल हो गया, लेकिन RDT Connect अपने आप फिर से शुरू नहीं हो सका। ऐप बंद करके दोबारा खोलें।",
-    "updater.upToDate": "RDT Connect नवीनतम संस्करण पर है।"
+    "updater.upToDate": "RDT Connect नवीनतम संस्करण पर है।",
+    "updater.reopenApp": "ऐप फिर से खोलें",
+    "updater.installedReopen": "अपडेट इंस्टॉल हो गया है। नया संस्करण इस्तेमाल करने के लिए “ऐप फिर से खोलें” चुनें।"
   }
 }

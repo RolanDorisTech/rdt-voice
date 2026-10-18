@@ -986,6 +986,8 @@
     "updater.progress": "Staženo {DOWNLOADED} z {TOTAL}.",
     "updater.relaunching": "Aktualizace nainstalována. Restartuje se RDT Connect…",
     "updater.restartFailed": "Aktualizace byla nainstalována, ale RDT Connect se nepodařilo automaticky restartovat. Ukončete aplikaci a znovu ji otevřete.",
-    "updater.upToDate": "RDT Connect je aktuální."
+    "updater.upToDate": "RDT Connect je aktuální.",
+    "updater.reopenApp": "Znovu otevřít aplikaci",
+    "updater.installedReopen": "Aktualizace je nainstalována. Zvolením „Znovu otevřít aplikaci“ použijete novou verzi."
   }
 }

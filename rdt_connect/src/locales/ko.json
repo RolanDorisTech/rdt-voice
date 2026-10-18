@@ -986,6 +986,8 @@
     "updater.progress": "{TOTAL} 중 {DOWNLOADED} 다운로드됨.",
     "updater.relaunching": "업데이트가 설치되었습니다. RDT Connect를 다시 시작합니다…",
     "updater.restartFailed": "업데이트가 설치되었지만 RDT Connect를 자동으로 다시 시작하지 못했습니다. 앱을 종료한 후 다시 여세요.",
-    "updater.upToDate": "RDT Connect가 최신 버전입니다."
+    "updater.upToDate": "RDT Connect가 최신 버전입니다.",
+    "updater.reopenApp": "앱 다시 열기",
+    "updater.installedReopen": "업데이트가 설치되었습니다. 새 버전을 사용하려면 ‘앱 다시 열기’를 선택하세요."
   }
 }

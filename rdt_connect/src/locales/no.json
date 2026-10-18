@@ -986,6 +986,8 @@
     "updater.progress": "Lastet ned {DOWNLOADED} av {TOTAL}.",
     "updater.relaunching": "Oppdateringen er installert. Starter RDT Connect på nytt…",
     "updater.restartFailed": "Oppdateringen ble installert, men RDT Connect kunne ikke starte på nytt automatisk. Avslutt og åpne appen igjen.",
-    "updater.upToDate": "RDT Connect er oppdatert."
+    "updater.upToDate": "RDT Connect er oppdatert.",
+    "updater.reopenApp": "Åpne appen på nytt",
+    "updater.installedReopen": "Oppdateringen er installert. Velg «Åpne appen på nytt» for å bruke den nye versjonen."
   }
 }

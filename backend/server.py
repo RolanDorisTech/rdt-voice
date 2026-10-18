@@ -1,6 +1,6 @@
 # RDT Voice local transcription server — v0.2-DEV.6
 # Adaptive silence filtering, local transcription, and request safeguards
-import os, re, math, bisect, tempfile, subprocess, wave, pathlib, datetime, uuid, platform, asyncio, time, threading, secrets, hmac, shutil, ipaddress, queue, sqlite3, hashlib, json, signal
+import os, re, math, bisect, tempfile, subprocess, wave, pathlib, datetime, uuid, platform, asyncio, time, threading, secrets, hmac, shutil, ipaddress, queue, sqlite3, hashlib, json, signal, sys
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -15,6 +15,216 @@ from qrcode.image.svg import SvgPathImage
 from contextlib import contextmanager
 
 MODEL_ID = os.getenv("WHISPER_MODEL_ID", "mlx-community/whisper-large-v3-turbo")
+
+# RDT Connect uses immutable model and weight records shared with the Rust cache
+# validator. The manifest is bundled as PyInstaller data for the desktop app.
+_RDT_MODEL_LOCK_CACHE: Optional[dict] = None
+_RDT_MODEL_LOCK_PATH: Optional[pathlib.Path] = None
+
+def _rdt_load_model_lock() -> dict:
+    global _RDT_MODEL_LOCK_CACHE, _RDT_MODEL_LOCK_PATH
+    if _RDT_MODEL_LOCK_CACHE is not None:
+        return _RDT_MODEL_LOCK_CACHE
+    candidates = []
+    frozen_root = getattr(sys, "_MEIPASS", None)
+    if frozen_root:
+        candidates.append(pathlib.Path(frozen_root) / "rdt_model_lock.json")
+        # PyInstaller one-dir builds may place --add-data files beside the executable
+        # rather than beside the frozen Python module, depending on contents layout.
+        candidates.append(pathlib.Path(sys.executable).resolve().parent / "rdt_model_lock.json")
+    candidates.append(pathlib.Path(__file__).resolve().with_name("rdt_model_lock.json"))
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            continue
+        if not isinstance(value, dict) or value.get("schema_version") != 1:
+            continue
+        models = value.get("models")
+        if not isinstance(models, dict) or not models:
+            continue
+        for model_id, spec in models.items():
+            if (not isinstance(model_id, str) or
+                    not isinstance(spec, dict) or
+                    not isinstance(spec.get("revision"), str) or
+                    not re.fullmatch(r"[0-9a-f]{40}", spec["revision"]) or
+                    spec.get("weight_file") != "weights.npz" or
+                    not isinstance(spec.get("sha256"), str) or
+                    not re.fullmatch(r"[0-9a-f]{64}", spec["sha256"])):
+                raise RuntimeError("The bundled RDT model lock has invalid model metadata.")
+        _RDT_MODEL_LOCK_CACHE = value
+        _RDT_MODEL_LOCK_PATH = candidate
+        return value
+    raise RuntimeError("The pinned RDT model lock is missing or invalid. Rebuild RDT Connect resources.")
+
+def _rdt_model_spec(repo_id: str) -> dict:
+    models = _rdt_load_model_lock()["models"]
+    spec = models.get(repo_id) if isinstance(repo_id, str) else None
+    if not isinstance(spec, dict):
+        raise ValueError("The selected model is not in the approved MLX Whisper model lock.")
+    return spec
+
+def _rdt_marker_path(cache_dir, repo_id: str) -> pathlib.Path:
+    cache_path = pathlib.Path(cache_dir).resolve(strict=True)
+    repo_key = "models--" + repo_id.replace("/", "--")
+    return cache_path.parent / "rdt-model-verification" / (repo_key + ".json")
+
+def _rdt_marker_is_current(snapshot_path, cache_dir, repo_id: str, spec: dict, weight_path) -> bool:
+    import stat as _stat
+    try:
+        cache_root = pathlib.Path(cache_dir).resolve(strict=True).parent
+        marker = _rdt_marker_path(cache_dir, repo_id)
+        marker_dir_st = marker.parent.lstat()
+        marker_st = marker.lstat()
+        if (not pathlib.Path(cache_root).is_dir() or
+                _stat.S_ISLNK(marker_dir_st.st_mode) or not _stat.S_ISDIR(marker_dir_st.st_mode) or
+                _stat.S_ISLNK(marker_st.st_mode) or not _stat.S_ISREG(marker_st.st_mode) or
+                not marker.resolve(strict=True).is_relative_to(cache_root)):
+            return False
+        data = json.loads(marker.read_text(encoding="utf-8"))
+        snapshot = pathlib.Path(snapshot_path).resolve(strict=True)
+        weight = pathlib.Path(weight_path).resolve(strict=True)
+        repo_root = (pathlib.Path(cache_dir).resolve(strict=True) /
+                     ("models--" + repo_id.replace("/", "--"))).resolve(strict=True)
+        meta = weight.stat()
+        return (
+            isinstance(data, dict) and
+            data.get("schema_version") == 1 and
+            data.get("repo_id") == repo_id and
+            data.get("revision") == spec["revision"] and
+            data.get("weight_file") == spec["weight_file"] and
+            data.get("sha256") == spec["sha256"] and
+            data.get("size_bytes") == meta.st_size and meta.st_size > 0 and
+            data.get("mtime_ns") == meta.st_mtime_ns and
+            data.get("inode") == meta.st_ino and
+            snapshot.name == spec["revision"] and
+            snapshot.is_relative_to(repo_root / "snapshots") and
+            weight.is_relative_to(repo_root) and
+            weight.is_file()
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError):
+        return False
+
+def _rdt_write_verified_marker(snapshot_path, cache_dir, repo_id: str, spec: dict, weight_path) -> None:
+    import stat as _stat
+    cache_root = pathlib.Path(cache_dir).resolve(strict=True).parent
+    marker_dir = cache_root / "rdt-model-verification"
+    if marker_dir.exists() or marker_dir.is_symlink():
+        mode = marker_dir.lstat().st_mode
+        if _stat.S_ISLNK(mode) or not _stat.S_ISDIR(mode):
+            raise RuntimeError("The model verification directory is not a private directory.")
+    else:
+        marker_dir.mkdir(mode=0o700)
+    try:
+        marker_dir.chmod(0o700)
+    except OSError:
+        pass
+    weight = pathlib.Path(weight_path).resolve(strict=True)
+    meta = weight.stat()
+    marker = _rdt_marker_path(cache_dir, repo_id)
+    payload = {
+        "schema_version": 1,
+        "repo_id": repo_id,
+        "revision": spec["revision"],
+        "weight_file": spec["weight_file"],
+        "sha256": spec["sha256"],
+        "size_bytes": meta.st_size,
+        "mtime_ns": meta.st_mtime_ns,
+        "inode": meta.st_ino,
+    }
+    temporary = marker_dir / ("." + marker.name + "." + str(os.getpid()) + "." + uuid.uuid4().hex + ".tmp")
+    fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, separators=(",", ":"))
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, marker)
+    finally:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+
+def _rdt_model_snapshot_is_complete(snapshot_path, cache_dir, repo_id, *, verify_digest=False) -> bool:
+    """Validate the exact locked MLX snapshot; never accept arbitrary framework weights.
+
+    Hugging Face snapshot files may be symlinks into this repository's own blobs.
+    Resolve strictly, reject escapes/dangling links, require config.json and the exact
+    locked weights.npz. SHA-256 is performed only at download/first verification;
+    ordinary UI/cache checks use the private marker plus file identity metadata.
+    """
+    try:
+        spec = _rdt_model_spec(repo_id)
+        cache_root = pathlib.Path(cache_dir).resolve(strict=True)
+        repo_root = (cache_root / ("models--" + repo_id.replace("/", "--"))).resolve(strict=True)
+        if not repo_root.is_relative_to(cache_root):
+            return False
+        snapshots_root = (repo_root / "snapshots").resolve(strict=True)
+        if not snapshots_root.is_relative_to(repo_root):
+            return False
+        snapshot = pathlib.Path(snapshot_path).resolve(strict=True)
+        if (not snapshot.is_dir() or snapshot.name != spec["revision"] or
+                not snapshot.is_relative_to(snapshots_root)):
+            return False
+
+        def safe_file(name):
+            if not isinstance(name, str) or pathlib.Path(name).name != name:
+                return None
+            try:
+                resolved = (snapshot / name).resolve(strict=True)
+                if not resolved.is_relative_to(repo_root) or not resolved.is_file():
+                    return None
+                if resolved.stat().st_size <= 0:
+                    return None
+                return resolved
+            except (OSError, RuntimeError):
+                return None
+
+        config_path = safe_file("config.json")
+        weights_path = safe_file(spec["weight_file"])
+        if config_path is None or weights_path is None:
+            return False
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            return False
+        if not isinstance(config, dict) or config.get("model_type") != "whisper":
+            return False
+        if verify_digest:
+            digest = hashlib.sha256()
+            with weights_path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != spec["sha256"]:
+                return False
+            _rdt_write_verified_marker(snapshot, cache_dir, repo_id, spec, weights_path)
+            return _rdt_marker_is_current(snapshot, cache_dir, repo_id, spec, weights_path)
+        return _rdt_marker_is_current(snapshot, cache_dir, repo_id, spec, weights_path)
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+        return False
+
+def _rdt_resolve_model_snapshot(repo_id: str) -> str:
+    """Return verified local pinned snapshot; managed Connect never downloads implicitly."""
+    spec = _rdt_model_spec(repo_id)
+    cache_dir = os.getenv("HF_HUB_CACHE", "").strip()
+    if not cache_dir:
+        raise RuntimeError("The configured Hugging Face model cache is unavailable. Open Settings → Models.")
+    managed = os.getenv("RDT_CONNECT_MANAGED", "0") == "1"
+    from huggingface_hub import snapshot_download
+    snapshot = snapshot_download(
+        repo_id=repo_id,
+        revision=spec["revision"],
+        cache_dir=cache_dir,
+        token=False,
+        local_files_only=managed,
+    )
+    if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=False):
+        # Non-managed RDT Voice may have just populated the pinned Hub snapshot.
+        if managed or not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
+            raise RuntimeError("The selected model is not a complete, verified pinned MLX snapshot. Use Download Model in RDT Connect and retry.")
+    return str(pathlib.Path(snapshot).resolve(strict=True))
 SAMPLE_RATE=16000
 CUT_SILENCE_SECONDS=2.0
 MIN_MAX_RMS_GATE=35.0
@@ -837,7 +1047,7 @@ PAIR_REDEEM_HTML = r"""<!doctype html><html lang="en"><head><meta charset="utf-8
 .pair-copy-link[hidden],.pair-browser-help[hidden]{display:none!important}
 .pair-browser-choice .pair-copy-link{margin-top:10px;background:#26333e;border:1px solid #465360;color:#edf4f8;font-size:.9rem}
 </style></head><body><main class="card"><div class="brand-mark" aria-hidden="true"><img class="brand-logo" alt="" src="data:image/png;base64,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"></div><h1>Connect to RDT Voice</h1><p class="muted">Confirm the browser you want to pair. Scanning the QR does not grant access by itself.</p><div class="detected" id="detected">Detected device · Browser</div><label for="deviceName">Device name or place <span>(optional)</span></label><input id="deviceName" maxlength="64" autocomplete="off" placeholder="e.g. Personal iPhone · Home"><p class="muted privacy-note">This label helps you recognize the device. RDT Voice does not request your GPS location.</p>
-<div class="pair-browser-choice"><label for="pair-browser-choice">Browser for this pairing</label><select id="pair-browser-choice" aria-describedby="pair-browser-help"><option value="current">Use this browser</option><option value="chrome">Chrome</option><option value="other">Another browser…</option></select><p id="pair-browser-help" class="pair-browser-help" hidden></p><button id="pair-copy-link" class="pair-copy-link" type="button" hidden>Copy pairing link</button><p class="pair-browser-security">The selected browser requests its own approval. The short-lived pairing code is not your access-token key.</p></div>
+<div class="pair-browser-choice"><label for="pair-browser-choice">Browser for this pairing</label><select id="pair-browser-choice" aria-describedby="pair-browser-help"><option value="current">Use this browser</option><option value="chrome">Chrome (experimental)</option><option value="other">Other browser (experimental)</option></select><p id="pair-browser-help" class="pair-browser-help" hidden></p><button id="pair-copy-link" class="pair-copy-link" type="button" hidden>Copy pairing link</button><p class="pair-browser-security">The selected browser requests its own approval. The short-lived pairing code is not your access-token key.</p></div>
 <button id="requestAccess" type="button">Request approval</button><div class="spinner" id="spinner" hidden></div><p id="status" class="status" role="status" aria-live="polite">Ready to request approval.</p><p id="help" class="muted" hidden>Return to the RDT Voice pairing page on the Mac. You may need to generate a fresh QR code.</p><p class="muted browser-note">Choose your phone browser above before requesting approval. Once approved, that browser receives its own secure session automatically—no manual server URL or access-token-key setup.</p></main><script>
 (()=>{
  const $=id=>document.getElementById(id),status=$('status'),help=$('help'),spinner=$('spinner'),button=$('requestAccess'),labelInput=$('deviceName');
@@ -1460,7 +1670,7 @@ with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as _wf:
 try:
     with wave.open(_warm_path, "wb") as wf:
         wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(16000); wf.writeframes(b"\x00\x00"*8000)
-    mlx_whisper.transcribe(_warm_path, path_or_hf_repo=MODEL_ID, verbose=False)
+    mlx_whisper.transcribe(_warm_path, path_or_hf_repo=_rdt_resolve_model_snapshot(MODEL_ID), verbose=False)
 finally:
     try: os.unlink(_warm_path)
     except OSError: pass
@@ -1763,7 +1973,7 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
                 set_progress(job_id, 50, "transcribing", label="Transcribing with MLX", duration_original=len(raw)/float(sr))
                 result=mlx_whisper.transcribe(
                     w2,
-                    path_or_hf_repo=MODEL_ID,
+                    path_or_hf_repo=_rdt_resolve_model_snapshot(MODEL_ID),
                     verbose=False,
                     condition_on_previous_text=False,
                     **({"language": language} if language and language != "auto" else {}),
@@ -2103,6 +2313,7 @@ def _progress_route(job_id: str, host: Optional[str]=Header(None), authorization
     if not p: return JSONResponse(status_code=404, content={"error":"unknown job_id"})
     return p
     
+
 def _parse_args():
     import argparse as _ap
     p=_ap.ArgumentParser()
@@ -2115,7 +2326,7 @@ def _parse_args():
         "mlx-community/whisper-large-v3-mlx",
         "mlx-community/whisper-small-mlx",
         "mlx-community/whisper-base-mlx",
-        "mlx-community/whisper-tiny",
+        "mlx-community/whisper-tiny-mlx",
     ], help="Download a supported MLX Whisper model into the configured Hugging Face cache, then exit")
     return p.parse_known_args()[0]
 
@@ -2134,12 +2345,15 @@ def _download_model_only(repo_id: str) -> None:
 
     # Stable fallback estimates are used only when repository file metadata cannot
     # provide a complete byte total. The UI labels those totals as approximate.
+    try:
+        model_lock = _rdt_load_model_lock()
+        model_spec = _rdt_model_spec(repo_id)
+    except (RuntimeError, ValueError):
+        print("RDT_MODEL_DOWNLOAD_ERROR:model_not_approved", flush=True)
+        raise SystemExit(6)
     size_estimates = {
-        "mlx-community/whisper-large-v3-turbo": 1_610_000_000,
-        "mlx-community/whisper-large-v3-mlx": 3_080_000_000,
-        "mlx-community/whisper-small-mlx": 481_000_000,
-        "mlx-community/whisper-base-mlx": 144_000_000,
-        "mlx-community/whisper-tiny": 74_000_000,
+        model_id: int(spec.get("size_estimate_bytes", 0))
+        for model_id, spec in model_lock["models"].items()
     }
     print("RDT_MODEL_DOWNLOAD_STAGE:checking", flush=True)
     try:
@@ -2153,43 +2367,6 @@ def _download_model_only(repo_id: str) -> None:
         planned_files = None
         estimated = True
         total_bytes = int(size_estimates.get(repo_id, 0))
-        if supports_dry_run:
-            dry_rows = snapshot_download(
-                repo_id=repo_id,
-                cache_dir=cache_dir,
-                token=False,
-                local_files_only=False,
-                dry_run=True,
-                max_workers=4,
-            )
-            to_download = [item for item in dry_rows if bool(getattr(item, "will_download", True))]
-            planned_files = len(to_download)
-            known_sizes = [getattr(item, "file_size", None) for item in to_download]
-            if not to_download:
-                # Everything appears cached. Verify the actual snapshot and weight file
-                # before returning success instead of showing a fake 100% transfer.
-                snapshot = snapshot_download(repo_id=repo_id, cache_dir=cache_dir, token=False, local_files_only=True)
-                snapshot_path = pathlib.Path(snapshot)
-                weight_names = ("weights.safetensors", "model.safetensors", "weights.npz", "pytorch_model.bin", "model.bin", "flax_model.msgpack")
-                if not snapshot_path.is_dir() or not any((snapshot_path / name).is_file() for name in weight_names):
-                    print("RDT_MODEL_DOWNLOAD_ERROR:cached_weights_not_found", flush=True)
-                    raise SystemExit(3)
-                print("RDT_MODEL_DOWNLOAD_META:0:0:0", flush=True)
-                print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
-                print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
-                return
-            if known_sizes and all(isinstance(value, (int, float)) and value >= 0 for value in known_sizes):
-                known_total = int(sum(known_sizes))
-                if known_total > 0:
-                    total_bytes = known_total
-                    estimated = False
-
-        if total_bytes <= 0:
-            print("RDT_MODEL_DOWNLOAD_ERROR:missing_size_estimate", flush=True)
-            raise SystemExit(5)
-
-        files_label = str(planned_files if planned_files is not None else 0)
-        print(f"RDT_MODEL_DOWNLOAD_META:{total_bytes}:{files_label}:{1 if estimated else 0}", flush=True)
         progress_lock = _threading.Lock()
         last_emit_at = 0.0
         last_emit_bytes = 0
@@ -2252,12 +2429,72 @@ def _download_model_only(repo_id: str) -> None:
                 self._rdt_emit_transfer()
                 return result
 
+        if supports_dry_run:
+            dry_rows = snapshot_download(
+                repo_id=repo_id,
+                revision=model_spec["revision"],
+                cache_dir=cache_dir,
+                token=False,
+                local_files_only=False,
+                dry_run=True,
+                max_workers=4,
+            )
+            to_download = [item for item in dry_rows if bool(getattr(item, "will_download", True))]
+            planned_files = len(to_download)
+            known_sizes = [getattr(item, "file_size", None) for item in to_download]
+            if not to_download:
+                # All files appear cached according to Hub metadata. Validate the pinned
+                # snapshot and the actual weight digest rather than trusting file presence.
+                snapshot = snapshot_download(repo_id=repo_id, revision=model_spec["revision"], cache_dir=cache_dir, token=False, local_files_only=True)
+                if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id):
+                    if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
+                        # The Hub metadata said the files were cached, but the pinned weights
+                        # failed verification. Repair only this approved repository/revision;
+                        # never delete the user's Hugging Face cache or unrelated repos.
+                        repair_total = max(1, int(size_estimates.get(repo_id, 0)))
+                        total_bytes = repair_total
+                        estimated = True
+                        print(f"RDT_MODEL_DOWNLOAD_META:{total_bytes}:0:1", flush=True)
+                        print("RDT_MODEL_DOWNLOAD_STAGE:downloading", flush=True)
+                        snapshot = snapshot_download(
+                            repo_id=repo_id,
+                            revision=model_spec["revision"],
+                            cache_dir=cache_dir,
+                            token=False,
+                            local_files_only=False,
+                            force_download=True,
+                            max_workers=4,
+                            tqdm_class=_RdtProgressTqdm,
+                        )
+                        print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
+                        if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
+                            print("RDT_MODEL_DOWNLOAD_ERROR:cache_repair_failed_verification", flush=True)
+                            raise SystemExit(3)
+                        print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
+                        return
+                print("RDT_MODEL_DOWNLOAD_META:0:0:0", flush=True)
+                print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
+                print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
+                return
+            if known_sizes and all(isinstance(value, (int, float)) and value >= 0 for value in known_sizes):
+                known_total = int(sum(known_sizes))
+                if known_total > 0:
+                    total_bytes = known_total
+                    estimated = False
+
+        if total_bytes <= 0:
+            print("RDT_MODEL_DOWNLOAD_ERROR:missing_size_estimate", flush=True)
+            raise SystemExit(5)
+
+        files_label = str(planned_files if planned_files is not None else 0)
+        print(f"RDT_MODEL_DOWNLOAD_META:{total_bytes}:{files_label}:{1 if estimated else 0}", flush=True)
         print("RDT_MODEL_DOWNLOAD_STAGE:downloading", flush=True)
         # Ignore a parent shell's progress-disable variable; the custom tqdm class
         # captures real transfer bytes while suppressing the default flickery terminal bars.
         os.environ.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
         download_kwargs = {
             "repo_id": repo_id,
+            "revision": model_spec["revision"],
             "cache_dir": cache_dir,
             "token": False,
             "local_files_only": False,
@@ -2266,13 +2503,15 @@ def _download_model_only(repo_id: str) -> None:
         }
         snapshot = snapshot_download(**download_kwargs)
         print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
-        snapshot_path = pathlib.Path(snapshot)
-        weight_names = ("weights.safetensors", "model.safetensors", "weights.npz", "pytorch_model.bin", "model.bin", "flax_model.msgpack")
-        if not snapshot_path.is_dir() or not any((snapshot_path / name).is_file() for name in weight_names):
-            print("RDT_MODEL_DOWNLOAD_ERROR:weights_not_found", flush=True)
-            raise SystemExit(3)
-        # Keep the visible progress below 100 until the actual snapshot verification passed.
-        print(f"RDT_MODEL_DOWNLOAD_PROGRESS:{total_bytes}:{total_bytes}:99", flush=True)
+        if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id):
+            if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
+                print("RDT_MODEL_DOWNLOAD_ERROR:downloaded_model_incomplete_or_hash_mismatch", flush=True)
+                raise SystemExit(3)
+        # Snapshot verification, not an estimated byte count, establishes completion.
+        # Only report the exact planned byte total when the Hub supplied exact sizes;
+        # never make an approximate model size look like measured transfer bytes.
+        if not estimated:
+            print(f"RDT_MODEL_DOWNLOAD_PROGRESS:{total_bytes}:{total_bytes}:99", flush=True)
         print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
     except SystemExit:
         raise

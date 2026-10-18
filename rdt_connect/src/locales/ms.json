@@ -986,6 +986,8 @@
     "updater.progress": "{DOWNLOADED} daripada {TOTAL} telah dimuat turun.",
     "updater.relaunching": "Kemas kini dipasang. Memulakan semula RDT Connect…",
     "updater.restartFailed": "Kemas kini telah dipasang, tetapi RDT Connect tidak dapat dimulakan semula secara automatik. Keluar dan buka semula aplikasi.",
-    "updater.upToDate": "RDT Connect sudah dikemas kini."
+    "updater.upToDate": "RDT Connect sudah dikemas kini.",
+    "updater.reopenApp": "Buka Semula Apl",
+    "updater.installedReopen": "Kemas kini dipasang. Pilih “Buka Semula Apl” untuk menggunakan versi baharu."
   }
 }

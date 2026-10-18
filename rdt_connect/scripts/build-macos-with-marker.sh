@@ -22,6 +22,11 @@ case "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" in
   0|1) ;;
   *) echo "ERROR: RDT_SKIP_UPDATER_ARTIFACTS must be 0 or 1." >&2; exit 2 ;;
 esac
+case "${RDT_BUILD_APP_ONLY:-0}" in
+  0|1) ;;
+  *) echo "ERROR: RDT_BUILD_APP_ONLY must be 0 or 1." >&2; exit 2 ;;
+esac
+APP_ONLY="${RDT_BUILD_APP_ONLY:-0}"
 
 # Require package.json, Tauri config, Cargo.toml, and Cargo.lock to agree.
 METADATA="$(python3 - "$ROOT" <<'PY_VERSION_SOURCE'
@@ -64,20 +69,26 @@ PY_VERSION_SOURCE
 IFS=$'\t' read -r PRODUCT VERSION <<< "$METADATA"
 
 DMG_DIR="$ROOT/src-tauri/target/release/bundle/dmg"
-mkdir -p "$DMG_DIR"
 RAW="$DMG_DIR/${PRODUCT}_${VERSION}_aarch64.dmg"
-FINAL="$DMG_DIR/${PRODUCT// /_}_${VERSION}_Tauri_Standard_aarch64.dmg"
+FINAL="$DMG_DIR/${PRODUCT// /_}_${VERSION}_${MARKER}_Tauri_Standard_aarch64.dmg"
+APP_BUNDLE="$ROOT/src-tauri/target/release/bundle/macos/${PRODUCT}.app"
 
-# Refuse collisions before resource preparation or compilation.
-for candidate in "$RAW" "$FINAL"; do
-  if [[ -e "$candidate" || -L "$candidate" ]]; then
-    echo "ERROR: refusing to overwrite existing DMG: $candidate" >&2
-    exit 2
-  fi
-done
+# A custom-layout DMG only needs the .app bundle. Avoid creating the standard
+# Tauri DMG at all in this mode, and never collide with an existing release DMG.
+if [[ "$APP_ONLY" == "0" ]]; then
+  mkdir -p "$DMG_DIR"
+  for candidate in "$RAW" "$FINAL"; do
+    if [[ -e "$candidate" || -L "$candidate" ]]; then
+      echo "ERROR: refusing to overwrite existing DMG: $candidate" >&2
+      exit 2
+    fi
+  done
+  echo "Standard DMG destination: $(basename "$FINAL")"
+else
+  echo "Build mode: .app only; custom DMG assembly follows in a separate step."
+fi
 
 echo "Canonical SemVer: $VERSION"
-echo "Standard DMG destination: $(basename "$FINAL")"
 npm run prepare:desktop-resources
 
 CONF="$ROOT/src-tauri/tauri.conf.json"
@@ -119,10 +130,18 @@ print("Updater artifact generation temporarily disabled for this build.")
 PY_SKIP_UPDATER
 fi
 
-if npm run tauri -- build; then
-  BUILD_STATUS=0
+if [[ "$APP_ONLY" == "1" ]]; then
+  if npm run tauri -- build --bundles app; then
+    BUILD_STATUS=0
+  else
+    BUILD_STATUS=$?
+  fi
 else
-  BUILD_STATUS=$?
+  if npm run tauri -- build; then
+    BUILD_STATUS=0
+  else
+    BUILD_STATUS=$?
+  fi
 fi
 restore_config
 trap - EXIT INT TERM
@@ -130,6 +149,16 @@ trap - EXIT INT TERM
 if [[ "$BUILD_STATUS" -ne 0 ]]; then
   echo "ERROR: Tauri build failed (exit $BUILD_STATUS)." >&2
   exit "$BUILD_STATUS"
+fi
+
+if [[ "$APP_ONLY" == "1" ]]; then
+  if [[ ! -d "$APP_BUNDLE" || ! -f "$APP_BUNDLE/Contents/MacOS/rdt-connect-desktop" ]]; then
+    echo "ERROR: Tauri did not produce the expected .app bundle: $APP_BUNDLE" >&2
+    exit 2
+  fi
+  echo "PASS: app bundle built for marker $RDT_BUILD_ID: $APP_BUNDLE"
+  echo "The next step is python3 scripts/build-custom-dmg.py; it will reject a stale app marker."
+  exit 0
 fi
 
 if [[ ! -f "$RAW" ]]; then

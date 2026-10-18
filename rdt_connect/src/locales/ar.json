@@ -986,6 +986,8 @@
     "updater.progress": "تم تنزيل {DOWNLOADED} من {TOTAL}.",
     "updater.relaunching": "تم تثبيت التحديث. جارٍ إعادة تشغيل RDT Connect…",
     "updater.restartFailed": "تم تثبيت التحديث، لكن تعذّر إعادة تشغيل RDT Connect تلقائيًا. أغلق التطبيق وافتحه مجددًا.",
-    "updater.upToDate": "RDT Connect محدّث إلى أحدث إصدار."
+    "updater.upToDate": "RDT Connect محدّث إلى أحدث إصدار.",
+    "updater.reopenApp": "إعادة فتح التطبيق",
+    "updater.installedReopen": "تم تثبيت التحديث. اختر «إعادة فتح التطبيق» لاستخدام الإصدار الجديد."
   }
 }

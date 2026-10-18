@@ -35,6 +35,30 @@ for (const file of [
   assert.equal(existsSync(file), false, `${file} should be removed`);
 }
 
+assert.ok(readme.startsWith("<!-- RDT_CONNECT_PROMO_START -->"),
+  "RDT Connect promotion must be the very first README content");
+const promoStart = "<!-- RDT_CONNECT_PROMO_START -->";
+const promoEnd = "<!-- RDT_CONNECT_PROMO_END -->";
+assert.equal(readme.split(promoStart).length - 1, 1,
+  "README must contain exactly one top promotion");
+assert.equal(readme.split(promoEnd).length - 1, 1,
+  "README promotion must have one end marker");
+const promo = readme.split(promoStart)[1].split(promoEnd)[0];
+assert.ok(promo.includes(match[1]),
+  "promotional download badge must point at the same verified DMG");
+assert.ok(promo.includes("assets/rdt-connect-server-running.png"),
+  "promotion must show the RDT Connect screenshot");
+assert.ok(promo.includes("Download-RDT%20Connect%20for%20macOS"),
+  "promotion must include its prominent download badge");
+assert.ok(promo.includes("#rdt-connect-downloads"),
+  "promotion must provide a path to installation details");
+assert.ok(readme.indexOf(promoStart) < readme.indexOf("Try_Now"),
+  "promotion must appear before the existing RDT Voice Try Now badge");
+assert.ok(readme.indexOf(promoEnd) < readme.indexOf("See it in action"),
+  "promotion must appear before the demo section");
+assert.ok(readme.indexOf(promoEnd) < readme.indexOf("assets/rdt-voice-ui.png"),
+  "promotion must appear before the original RDT Voice screenshot");
+
 console.log("PASS: README links straight to the published DMG.");
 console.log("PASS: main website CTA keeps its direct-download behavior.");
 console.log("PASS: dedicated page, proxy source, and associated tests are removed.");

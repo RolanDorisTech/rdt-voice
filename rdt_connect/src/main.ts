@@ -2944,19 +2944,6 @@ void listen("rdt-connect-update-relaunch-request", () => {
 }).catch(() => undefined);
 applicationUpdateActionButton.addEventListener("click", () => { void installAvailableApplicationUpdate(); });
 if (headerUpdateActionButton) headerUpdateActionButton.addEventListener("click", () => { void installAvailableApplicationUpdate(); });
-const aboutVersionObserver = new MutationObserver(() => {
-  const value = aboutVersionLabel.textContent ?? "";
-  const match = value.match(/v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/i);
-  if (!match) return;
-  const version = match[1].replace(/^v/i, "");
-  const desired = `Version ${version} (${version})`;
-  if (aboutVersionLabel.textContent !== desired) {
-    aboutVersionLabel.textContent = desired;
-  }
-});
-aboutVersionObserver.observe(aboutVersionLabel, {
-  childList: true, characterData: true, subtree: true,
-});
 void refreshAppBuildInfo();
 
 const legalLinkRoutes: Array<[string, string]> = [

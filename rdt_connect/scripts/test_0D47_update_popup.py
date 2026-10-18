@@ -5,6 +5,15 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 class AboutMenuUpdateContractTests(unittest.TestCase):
+    def test_about_version_retains_runtime_build_id(self):
+        main = (ROOT / "src/main.ts").read_text(encoding="utf-8")
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn('msg.rdt_connect_app_version_label_build_build_id.62522b9b', main)
+        self.assertIn('BUILD_ID: info.buildId', main)
+        self.assertNotIn("aboutVersionObserver", main)
+        self.assertIn("RDT Connect · version/build information loading…", html)
+        self.assertNotIn("Version 0.2.0-dev.10 (0.2.0-dev.10)", html)
+
     def test_original_icon_and_about_navigation(self):
         rust = (ROOT / "src-tauri/src/main.rs").read_text(encoding="utf-8")
         self.assertIn('icons/rdt-menu-bar-icon.png', rust)

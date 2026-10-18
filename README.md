@@ -23,7 +23,7 @@ Click either image below to try the live browser demo:
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
-> **Current browser build:** `v0.2-DEV.9` / HTML build `r35` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
+> **Current browser build:** HTML build `r35` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
 
 > **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.
 
@@ -82,14 +82,17 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download RDT Connect (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/v0.2-dev.9/RDT.Connect_0.2.0-dev.9_aarch64.dmg) | `0.2.0-dev.9` | Not listed | 351 MB |
-| Windows | Installer (.exe) | Coming later | — | — |
+| macOS (Apple Silicon) | [**Download RDT Connect (.dmg)**](https://rolandoristech.github.io/rdt-voice/download.html) | Latest eligible release | Auto-resolved | Varies |
+| Windows | Installer (.exe) | Coming soon | — | — |
+
+The official download page resolves the newest published Connect-tagged release that has one valid uploaded Apple-silicon DMG. Incomplete releases are skipped, so this README link updates automatically when a new eligible Connect release is published.
+
 
 RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.
 
 <p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="800"></p>
 
-**macOS note:** RDT Connect `0.2.0-dev.9` uses ad-hoc signing and is not Apple-notarized. macOS may show a security warning or prevent first launch. See the [first-launch guidance](rdt_connect/README.md#macos-signing-and-first-launch) and [release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/v0.2-dev.9).
+**macOS note:** RDT Connect is distributed as an ad-hoc-signed, non-notarized app, so macOS may show a first-launch security warning. See the [first-launch guidance](rdt_connect/README.md#macos-signing-and-first-launch) and the [RDT Connect release list](https://github.com/RolanDorisTech/rdt-voice/releases). Automatic updating has not been verified; install manually from the DMG.
 
 See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
 

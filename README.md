@@ -92,7 +92,7 @@ The download link automatically resolves to the newest published RDT Connect rel
 
 RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.
 
-<p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="800"></p>
+<p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
 
 **macOS note:** RDT Connect is distributed as an ad-hoc-signed, non-notarized app, so macOS may show a first-launch security warning. See the [first-launch guidance](rdt_connect/README.md#macos-signing-and-first-launch) and the [RDT Connect release list](https://github.com/RolanDorisTech/rdt-voice/releases). Automatic updating has not been verified; install manually from the DMG.
 

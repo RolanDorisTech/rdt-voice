@@ -1224,5 +1224,6 @@
   "Highly recommended": "ขอแนะนำอย่างยิ่ง",
   "Optional": "ไม่บังคับ",
   "v0.2-DEV.8 (previous)": "v0.2-DEV.8 (ก่อนหน้า)",
-  "v0.2-DEV.9 (current)": "v0.2-DEV.9 (ปัจจุบัน)"
+  "v0.2-DEV.9 (current)": "v0.2-DEV.9 (ปัจจุบัน)",
+  "Close recommendation": "ปิดคำแนะนำ"
 }

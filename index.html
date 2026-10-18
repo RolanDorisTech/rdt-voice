@@ -1,5 +1,5 @@
 <!--
-RDT Voice v0.2-DEV.9
+RDT Voice v0.2.0-dev.10
 PolyForm Noncommercial License 1.0.0 - Copyright (c) 2026 Rolan & Doris Tech
 Source: https://github.com/RolanDorisTech/rdt-voice
 Commercial licensing: see COMMERCIAL_LICENSE.md or contact woknewsbusiness@gmail.com
@@ -14,9 +14,9 @@ Built by Rolan & Doris Tech
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-        <title>RDT Voice v0.2-DEV.9</title>
+        <title>RDT Voice v0.2.0-dev.10</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src     'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-nIwYQ4PIiZDlhRQuUbpMJ0LCiLLRfJKRVSYrEfv0Gwo=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-YgxU+hU33psmb5VggM6GQ7jC4S47I+mg9DuPNlKpO/w=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -259,7 +259,7 @@ Built by Rolan & Doris Tech
           overflow:hidden;
           white-space:nowrap;
           vertical-align:bottom;
-          animation:rdtTypeVersion 1.5s steps(5,end) .15s both;
+          animation:rdtTypeVersion 1.5s steps(var(--rdt-version-chars,13),end) .15s both;
         }
         @media(prefers-reduced-motion:reduce){
           .version-badge,.rdt-settings-version{animation:none !important;width:5ch;max-width:none;clip-path:none}
@@ -5083,7 +5083,7 @@ button.rdt-delete-selected-recordings:hover{background:#DC2626 !important;color:
   @media(prefers-reduced-motion:reduce){ .rdt-long-audio-pill{transition:none} }
 /* Reveal the full release label in ten discrete character steps. */
 @keyframes rdtTypeVersion{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
-.version-badge,.rdt-settings-version{display:inline-block;width:max-content !important;max-width:none !important;overflow:hidden !important;white-space:nowrap !important;vertical-align:bottom;animation:rdtTypeVersion 2.4s steps(10,end) .15s both !important}
+.version-badge,.rdt-settings-version{display:inline-block;width:max-content !important;max-width:none !important;overflow:hidden !important;white-space:nowrap !important;vertical-align:bottom;animation:rdtTypeVersion 2.4s steps(var(--rdt-version-chars,13),end) .15s both !important}
 @media(prefers-reduced-motion:reduce){.version-badge,.rdt-settings-version{animation:none !important;width:max-content !important;max-width:none !important;clip-path:none !important}}
 
 .rdt-attachment-menu{background:rgba(20,23,28,.94) !important;border-color:rgba(148,163,184,.38) !important;-webkit-backdrop-filter:blur(20px) saturate(135%) !important;backdrop-filter:blur(20px) saturate(135%) !important;box-shadow:0 14px 38px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035) !important}
@@ -6376,6 +6376,120 @@ button:not(:disabled):active, [role="button"]:active { transform:none !important
     .rdt-dev9-gold-star{animation:none!important;filter:none!important;transform:none!important;text-shadow:0 0 6px rgba(255,215,100,.24),0 0 12px rgba(233,185,73,.12)!important}
     .rdt-dev9-gold-star::after,.rdt-connect-promo .rdt-connect-promo-download::after{animation:none!important;filter:none!important;transform:none!important}
   }
+
+/* RDT_SITE_DEV10_FINAL_OVERRIDES */
+/* One discrete step per actual version character, including dots and hyphens. */
+@keyframes rdtTypeVersionDev10 {
+  0%   { clip-path: inset(0 100% 0 0); animation-timing-function: steps(1,end); }
+  4%   { clip-path: inset(0 92.3077% 0 0); animation-timing-function: steps(1,end); }
+  8%   { clip-path: inset(0 84.6154% 0 0); animation-timing-function: steps(1,end); }
+  12%  { clip-path: inset(0 76.9231% 0 0); animation-timing-function: steps(1,end); }
+  16%  { clip-path: inset(0 69.2308% 0 0); animation-timing-function: steps(1,end); }
+  20%  { clip-path: inset(0 61.5385% 0 0); animation-timing-function: steps(1,end); }
+  25%  { clip-path: inset(0 53.8462% 0 0); animation-timing-function: steps(1,end); }
+  31%  { clip-path: inset(0 46.1538% 0 0); animation-timing-function: steps(1,end); }
+  39%  { clip-path: inset(0 38.4615% 0 0); animation-timing-function: steps(1,end); }
+  48%  { clip-path: inset(0 30.7692% 0 0); animation-timing-function: steps(1,end); }
+  58%  { clip-path: inset(0 23.0769% 0 0); animation-timing-function: steps(1,end); }
+  69%  { clip-path: inset(0 15.3846% 0 0); animation-timing-function: steps(1,end); }
+  82%  { clip-path: inset(0 7.6923% 0 0); animation-timing-function: steps(1,end); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+.version-badge,.rdt-settings-version {
+  width:max-content !important;
+  max-width:none !important;
+  overflow:hidden !important;
+  white-space:nowrap !important;
+  vertical-align:bottom;
+  animation:rdtTypeVersionDev10 2.4s linear .15s both !important;
+}
+@media(prefers-reduced-motion:reduce) {
+  .version-badge,.rdt-settings-version {
+    animation:none !important;
+    clip-path:none !important;
+  }
+}
+
+/* Keep the paired update-version pills on one row, without mobile overflow. */
+.rdt-update-pop {
+  box-sizing:border-box !important;
+  max-width:min(400px,calc(100vw - 24px)) !important;
+}
+.rdt-update-pop .rdt-up-body>div[style*="flex-wrap"] {
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:clamp(4px,1.2vw,8px) !important;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+}
+.rdt-update-pop .rdt-up-pill {
+  white-space:nowrap !important;
+  flex:0 1 auto !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+}
+@media(max-width:420px) {
+  .rdt-update-pop .rdt-up-pill {
+    font-size:clamp(8px,2.65vw,9.5px) !important;
+    padding:4px clamp(4px,1.3vw,7px) !important;
+    letter-spacing:0 !important;
+  }
+  .rdt-update-pop .rdt-up-body>div[style*="flex-wrap"] {
+    gap:4px !important;
+  }
+}
+
+/* The installed-app action keeps a visible, working download fallback beneath it. */
+.rdt-connect-promo-download-fallback {
+  display:flex !important;
+  width:fit-content;
+  max-width:100%;
+  margin:8px auto 0;
+  align-items:center;
+  justify-content:center;
+  color:#7DD3FC;
+  font-size:11px;
+  font-weight:700;
+  line-height:1.4;
+  text-align:center;
+  text-decoration:underline;
+  text-underline-offset:3px;
+  cursor:pointer;
+}
+
+/* Smooth two-way change between Open and Download states. */
+@keyframes rdtConnectCtaSwap {
+  0%   { opacity:1; transform:translateY(0) scale(1); filter:brightness(1); }
+  40%  { opacity:.06; transform:translateY(2px) scale(.985); filter:brightness(1.12); }
+  56%  { opacity:.06; transform:translateY(2px) scale(.985); filter:brightness(1.12); }
+  100% { opacity:1; transform:translateY(0) scale(1); filter:brightness(1); }
+}
+.rdt-connect-promo-download.rdt-connect-cta-swap {
+  animation:rdtConnectCtaSwap .52s cubic-bezier(.22,.61,.36,1) both !important;
+}
+.rdt-connect-promo-download-fallback {
+  overflow:hidden;
+  transition:opacity .30s ease, transform .30s ease,
+             max-height .30s ease, margin-top .30s ease;
+}
+@media(prefers-reduced-motion:reduce) {
+  .rdt-connect-promo-download.rdt-connect-cta-swap { animation:none !important; }
+  .rdt-connect-promo-download-fallback { transition:none !important; }
+}
+
+.rdt-connect-promo-download-fallback:hover {
+  color:#BAE6FD;
+}
+
+
+/* RDT Connect CTA fallback transition */
+.rdt-connect-promo-download-fallback.rdt-cta-hidden{display:none!important;visibility:hidden!important}
+.rdt-cta-label-changing{opacity:0!important;transform:translateY(2px)!important;transition:opacity 140ms ease,transform 140ms ease!important}
+@media(prefers-reduced-motion:reduce){.rdt-cta-label-changing{transition:none!important}}
 </style>
 
 </head>
@@ -7061,16 +7175,20 @@ React.createElement = function (type, props, ...kids) {
 };
 document.documentElement.lang = RDT_LANG;
 // ═══ end RDT i18n runtime ═══
-const BO = "v0.2-DEV.9";
+const BO = "v0.2.0-dev.10";
+document.documentElement.style.setProperty("--rdt-version-chars", String(BO.length));
 const RDT_BUILD = "Build r35";
 const RDT_CONNECT_RELEASES_PAGE = "https://github.com/RolanDorisTech/rdt-voice/releases";
 const RDT_CONNECT_RELEASES_API = "https://api.github.com/repos/RolanDorisTech/rdt-voice/releases?per_page=100";
 let rdtConnectDownloadCacheUrl = "";
 let rdtConnectDownloadCacheAt = 0;
 async function resolveLatestRdtConnectMacDownload(){
-  if(rdtConnectDownloadCacheUrl && Date.now()-rdtConnectDownloadCacheAt < 60000) return rdtConnectDownloadCacheUrl;
+  if(rdtConnectDownloadCacheUrl && Date.now()-rdtConnectDownloadCacheAt < 60000)
+    return rdtConnectDownloadCacheUrl;
+
   const controller = new AbortController();
   const timeout = window.setTimeout(()=>controller.abort(), 5000);
+
   try{
     const response = await fetch(RDT_CONNECT_RELEASES_API, {
       method:"GET",
@@ -7079,28 +7197,39 @@ async function resolveLatestRdtConnectMacDownload(){
       signal:controller.signal
     });
     if(!response.ok) throw new Error("GitHub releases API returned HTTP "+response.status);
+
     const releases = await response.json();
     if(!Array.isArray(releases)) throw new Error("GitHub releases response was not a list");
+
     const ordered = releases
-      .filter(r=>r && !r.draft && r.published_at && /^RDT Connect(?:\s|$)/i.test(String(r.name||"")))
-      .sort((a,b)=>Date.parse(b.published_at||b.created_at||0)-Date.parse(a.published_at||a.created_at||0));
-    const latest = ordered[0];
-    if(!latest) throw new Error("No published RDT Connect release was found");
-    const candidates = (Array.isArray(latest.assets)?latest.assets:[]).filter(asset=>
-      asset && asset.state==="uploaded" &&
-      /^RDT[._]Connect_\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9.-]+)?_aarch64\.dmg$/i.test(String(asset.name||"")) &&
-      typeof asset.browser_download_url === "string"
-    );
-    // Never silently send users to an older build if the newest release is incomplete or ambiguous.
-    if(candidates.length !== 1) throw new Error("The newest RDT Connect release must contain exactly one recognizable Apple silicon DMG");
-    const download = new URL(candidates[0].browser_download_url);
-    if(download.protocol !== "https:" || download.hostname !== "github.com" ||
-       !download.pathname.startsWith("/RolanDorisTech/rdt-voice/releases/download/") ||
-       !download.pathname.toLowerCase().endsWith(".dmg"))
-      throw new Error("The newest RDT Connect DMG URL failed origin validation");
-    rdtConnectDownloadCacheUrl = download.href;
-    rdtConnectDownloadCacheAt = Date.now();
-    return rdtConnectDownloadCacheUrl;
+      .filter(r=>r && !r.draft && r.published_at &&
+        /^RDT Connect(?:\s|$)/i.test(String(r.name||"")))
+      .sort((a,b)=>Date.parse(b.published_at||0)-Date.parse(a.published_at||0));
+
+    // A release entry without a DMG is not downloadable. Find the newest published
+    // RDT Connect release that actually has exactly one recognizable Apple-silicon DMG.
+    for(const release of ordered){
+      const candidates = (Array.isArray(release.assets)?release.assets:[]).filter(asset=>
+        asset && asset.state==="uploaded" &&
+        /^RDT[._]Connect_\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9.-]+)?_aarch64\.dmg$/i.test(String(asset.name||"")) &&
+        typeof asset.browser_download_url==="string"
+      );
+      if(candidates.length !== 1) continue;
+
+      const download = new URL(candidates[0].browser_download_url);
+      if(download.protocol!=="https:" || download.hostname!=="github.com" ||
+         !download.pathname.startsWith("/RolanDorisTech/rdt-voice/releases/download/") ||
+         !download.pathname.toLowerCase().endsWith(".dmg")){
+        rdtDbg("Skipped an RDT Connect DMG with an invalid URL.", release.name);
+        continue;
+      }
+
+      rdtConnectDownloadCacheUrl = download.href;
+      rdtConnectDownloadCacheAt = Date.now();
+      return rdtConnectDownloadCacheUrl;
+    }
+
+    throw new Error("No published RDT Connect release currently has one valid Apple-silicon DMG.");
   }finally{
     window.clearTimeout(timeout);
   }
@@ -7110,11 +7239,72 @@ async function downloadLatestRdtConnectForMac(){
     const downloadUrl = await resolveLatestRdtConnectMacDownload();
     window.location.assign(downloadUrl);
   }catch(error){
-    rdtDbg("Could not resolve latest RDT Connect DMG; opening Releases page instead.", error);
-    window.location.assign(RDT_CONNECT_RELEASES_PAGE);
+    rdtDbg("Could not locate a direct RDT Connect Mac installer.", error);
+    window.alert("The direct Mac installer is temporarily unavailable. No download was started. Please try again later.");
   }
 }
-const RDT_CONNECT_IS_MACOS = /Macintosh|Mac OS X|macOS/i.test(String(navigator.userAgent || "")) || /Mac/i.test(String(navigator.platform || ""));
+
+function activateRdtConnectCta(event){
+  const button = event && event.currentTarget;
+  if(!button || !button.isConnected) return;
+  if(event && event.preventDefault) event.preventDefault();
+  const nodes = [...Array.from(button.querySelectorAll("span,strong,b,em")), button];
+  const label = nodes.find(el => /Open RDT Connect|Download RDT Connect for Mac|Didn't open\? Download RDT Connect/i.test((el.textContent||"").trim())) || button;
+  button.__rdtCtaLabel = label;
+  if(button.__rdtCtaOriginalText == null) button.__rdtCtaOriginalText = (label.textContent||"").trim();
+  let fallback = null, parent = button.parentElement;
+  while(parent && parent !== document.body && !fallback){
+    fallback = parent.querySelector(".rdt-connect-promo-download-fallback");
+    parent = parent.parentElement;
+  }
+  if(!fallback) fallback = document.querySelector(".rdt-connect-promo-download-fallback");
+  const swap = text => {
+    if(!label.isConnected) return;
+    label.classList.add("rdt-cta-label-changing");
+    window.setTimeout(() => {
+      if(!label.isConnected) return;
+      label.textContent = text;
+      window.setTimeout(() => label.classList.remove("rdt-cta-label-changing"),20);
+    },140);
+  };
+  if(!RDT_CONNECT_IS_MACOS){ void downloadLatestRdtConnectForMac(); return; }
+  if(button.dataset.rdtCtaMode === "pending" || button.dataset.rdtCtaMode === "downloading") return;
+  if(button.dataset.rdtCtaMode === "download"){
+    button.dataset.rdtCtaMode="downloading";
+    button.disabled=true;
+    void downloadLatestRdtConnectForMac();
+    window.setTimeout(() => {
+      if(!button.isConnected) return;
+      button.disabled=false;
+      button.dataset.rdtCtaMode="open";
+      swap(button.__rdtCtaOriginalText||"Open RDT Connect");
+      if(fallback) fallback.classList.remove("rdt-cta-hidden");
+    },12000);
+    return;
+  }
+  button.dataset.rdtCtaMode="pending";
+  let handedOff=false;
+  const blur=()=>{handedOff=true;};
+  const visibility=()=>{if(document.hidden) handedOff=true;};
+  window.addEventListener("blur",blur);
+  document.addEventListener("visibilitychange",visibility);
+  try { window.location.href="rdtconnect://open"; } catch (_) {}
+  window.setTimeout(() => {
+    window.removeEventListener("blur",blur);
+    document.removeEventListener("visibilitychange",visibility);
+    if(!button.isConnected) return;
+    if(handedOff || document.hidden){button.dataset.rdtCtaMode="open";return;}
+    button.dataset.rdtCtaMode="download";
+    swap("Didn't open? Download RDT Connect");
+    if(fallback) fallback.classList.add("rdt-cta-hidden");
+  },3000);
+}
+
+const RDT_CONNECT_IS_MACOS = (()=>{
+  const ua = String(navigator.userAgent || "");
+  const platform = String(navigator.userAgentData?.platform || navigator.platform || "");
+  return /Macintosh|Mac OS X|macOS/i.test(ua) || /mac/i.test(platform);
+})();
 const rdtDbg = (...a)=>{ try{ if(window.RDT_DEBUG) console.log(...a); }catch(e){} };
   try{
     const ua=typeof navigator!=="undefined"?String(navigator.userAgent||""):"";
@@ -16378,9 +16568,10 @@ function highlightText(text, search){
                                           React.createElement("span", {className:"rdt-dev9-optional"}, "Optional")
                                         ),
                                         React.createElement("p", null, "Fast, private transcription on your Mac—without setting up a server yourself. RDT Connect handles setup and connects to RDT Voice."),
-                                        React.createElement("button", {type:"button", onClick:downloadLatestRdtConnectForMac, className:"rdt-connect-promo-download"},
-                                          React.createElement("span", null, "Download RDT Connect for Mac"),
-                                          React.createElement("span", {className:"rdt-dev9-download-arrow", "aria-hidden":"true"}, "↓")),
+                                        React.createElement("button", {type:"button", onClick:activateRdtConnectCta, className:"rdt-connect-promo-download"},
+                                          React.createElement("span", null, RDT_CONNECT_IS_MACOS ? "Open RDT Connect" : "Download RDT Connect for Mac"),
+                                          React.createElement("span", {className:"rdt-dev9-download-arrow", "aria-hidden":"true"}, RDT_CONNECT_IS_MACOS ? "↗" : "↓")),
+React.createElement("a", {href:RDT_CONNECT_RELEASES_PAGE, onClick:(e)=>{e.preventDefault();downloadLatestRdtConnectForMac();}, className:"rdt-connect-promo-download-fallback"}, "Download RDT Connect for Mac"),
                                         React.createElement("small", {className:"rdt-connect-platform-note"}, "Apple silicon Macs only."),
                                         React.createElement("small", {className:"rdt-connect-platform-note"}, "Windows and Linux support coming soon!")
                                       )
@@ -17500,7 +17691,7 @@ React.createElement("div",{className:"pt-4 border-t border-[#333]"},
                          React.createElement("div", {className:"font-black tracking-widest text-[#FFEB00] mb-3", style:{fontSize:"12px"}}, "RELEASE NOTES • COMPLETE HISTORY"),
                          React.createElement("div", {className:"space-y-3 leading-relaxed", style:{fontSize:"10px"}},
                            React.createElement("div", null,
-  React.createElement("div", {className:"font-bold text-[#00D4FF] mb-1"}, "v0.2-DEV.9 (current)"),
+  React.createElement("div", {className:"font-bold text-[#00D4FF] mb-1"}, "v0.2.0-dev.10 (current)"),
   React.createElement("ul", {className:"list-disc pl-4 space-y-1 opacity-80"},
     React.createElement("li", null, "Easy Setup is simpler, with a clear RDT Connect recommendation for Apple silicon Macs."),
     React.createElement("li", null, "The RDT Connect download button finds the newest published Mac release automatically."),
@@ -18455,9 +18646,10 @@ React.createElement("div", null,
                   React.createElement("span", {className:"rdt-dev9-optional"}, "Optional")
                 ),
                 React.createElement("p", null, "Easy, private transcription on your Apple silicon Mac."),
-                React.createElement("button", {type:"button", onClick:downloadLatestRdtConnectForMac, className:"rdt-connect-promo-download"},
-                  React.createElement("span", null, "Download RDT Connect for Mac"),
-                  React.createElement("span", {className:"rdt-dev9-download-arrow", "aria-hidden":"true"}, "↓")),
+                React.createElement("button", {type:"button", onClick:activateRdtConnectCta, className:"rdt-connect-promo-download"},
+                  React.createElement("span", null, RDT_CONNECT_IS_MACOS ? "Open RDT Connect" : "Download RDT Connect for Mac"),
+                  React.createElement("span", {className:"rdt-dev9-download-arrow", "aria-hidden":"true"}, RDT_CONNECT_IS_MACOS ? "↗" : "↓")),
+React.createElement("a", {href:RDT_CONNECT_RELEASES_PAGE, onClick:(e)=>{e.preventDefault();downloadLatestRdtConnectForMac();}, className:"rdt-connect-promo-download-fallback"}, "Download RDT Connect for Mac"),
                 React.createElement("small", {className:"rdt-connect-platform-note"}, "Apple silicon Macs only."),
                 React.createElement("small", {className:"rdt-connect-platform-note"}, "Windows and Linux support coming soon!")
               )

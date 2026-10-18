@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "RDT Connect",
-  "version": "0.2.0-dev.9",
+  "version": "0.2.0-dev.10",
   "identifier": "com.rolandoristech.rdtconnect",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -60,6 +60,13 @@
         "https://raw.githubusercontent.com/RolanDorisTech/rdt-voice/main/rdt_connect/updates/dev/latest.json"
       ],
       "dangerousInsecureTransportProtocol": false
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "rdtconnect"
+        ]
+      }
     }
   }
 }

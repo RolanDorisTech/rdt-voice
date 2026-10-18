@@ -1,14 +1,15 @@
 {
   "name": "rdt-connect-desktop",
   "private": true,
-  "version": "0.2.0-dev.9",
+  "version": "0.2.0-dev.10",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc && vite build",
     "tauri": "tauri",
     "prepare:desktop-resources": "bash scripts/prepare-macos-bundle.sh ..",
-    "build:desktop:macos": "bash scripts/build-macos-with-marker.sh"
+    "build:desktop:macos": "bash scripts/build-macos-with-marker.sh",
+    "build:custom-dmg": "python3 scripts/build-custom-dmg.py"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

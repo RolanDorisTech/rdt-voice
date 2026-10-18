@@ -132,7 +132,7 @@ for (const tab of viewTabs) tab.addEventListener("click", () => {
     return;
   }
   setAppView(target);
-  if (target === "settings") { void refreshLocalHttpsStatus(); void refreshModelStorageStatus(); }
+  if (target === "settings") { void refreshLocalHttpsStatus(); void refreshModelStorageStatus(); void refreshModelCacheBadges(); }
 });
 if (developerOptionsToggle) developerOptionsToggle.addEventListener("change", () => {
   setDeveloperOptions(developerOptionsToggle.checked);
@@ -201,6 +201,9 @@ const localHttpsQuickPrompt = $("local-https-quick-prompt");
 const localHttpsQuickStatus = $("local-https-quick-status");
 const localHttpsQuickSetupButton = $("local-https-quick-setup-button") as HTMLButtonElement;
 const localHttpsDetailsButton = $("local-https-details-button") as HTMLButtonElement;
+
+const visualSetupGuideToggle = $("visual-setup-guide-toggle") as HTMLInputElement;
+
 const modelHelp = $("model-help");
 const remoteActionHelp = $("remote-action-help");
 const expandQrButton = $("expand-qr") as HTMLButtonElement;
@@ -240,6 +243,7 @@ const modelSelectMenu = $("model-select-menu");
 const modelSelectCurrentName = $("model-select-current-name");
 const modelSelectCurrentDetail = $("model-select-current-detail");
 const modelSelectCurrentBadge = $("model-select-current-badge");
+let modelSwitchTargetAfterStop: string | null = null;
 const modelOptionBaseLabels = new Map<string, string>(Array.from(modelSelect.options).map((option) => [option.value, option.textContent || option.value]));
 const modelMenuDetails: Record<string, { name: string; description: string; size: string; recommended?: boolean }> = {
   "mlx-community/whisper-tiny": { name: "Tiny", description: "Fastest · smallest download", size: "~74 MB" },
@@ -276,6 +280,96 @@ function syncModelSelectPresentation() {
     item.classList.toggle("selected", selected);
   }
 }
+function syncModelSwitchControl() {
+  const needsSwitch = backend.running && !!backend.model && modelSelect.value !== backend.model;
+  if (serverOperation === "starting") startButtonLabel.textContent = "Starting…";
+  else if (serverOperation === "stopping") startButtonLabel.textContent = "Stopping…";
+  else startButtonLabel.textContent = backend.running ? (needsSwitch ? "Switch Model" : "Stop Server") : "Start Server";
+  startButton.classList.toggle("is-model-switch", needsSwitch && serverOperation === null);
+  startButton.setAttribute("aria-label", backend.running
+    ? (needsSwitch ? "Switch to the selected transcription model" : "Stop the local transcription server")
+    : "Start the local transcription server");
+  if (needsSwitch) {
+    startButton.title = (modelDownloadStatus.active || modelStorageBusy)
+      ? "Finish model downloads and storage changes before switching models."
+      : "Stop the active server and start the selected model only after the stop is verified.";
+  } else {
+    startButton.removeAttribute("title");
+  }
+}
+
+function renderModelCacheSelection() {
+  modelCacheSelectionList.replaceChildren();
+  const options = Array.from(modelSelect.options);
+  const cachedOptions = options.filter((option) => option.dataset.cacheState === "downloaded");
+  const unknown = options.some((option) => !option.dataset.cacheState || option.dataset.cacheState === "unknown");
+  if (cachedOptions.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted field-help";
+    empty.textContent = unknown
+      ? "Cache status is still being checked or could not be verified. Reopen Settings to retry."
+      : "No downloaded RDT Connect MLX models were found in your configured storage locations.";
+    modelCacheSelectionList.appendChild(empty);
+    renderModelCleanupButtons();
+    return;
+  }
+  for (const option of cachedOptions) {
+    const info = modelMenuInfo(option);
+    const row = document.createElement("label");
+    row.className = "model-cache-selection-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.modelValue = option.value;
+    checkbox.checked = false;
+    const copy = document.createElement("span");
+    copy.className = "model-cache-selection-copy";
+    const name = document.createElement("strong");
+    name.textContent = `${info.name} · ${info.size}`;
+    const modelId = document.createElement("code");
+    modelId.textContent = option.value;
+    copy.append(name, modelId);
+    row.append(checkbox, copy);
+    modelCacheSelectionList.appendChild(row);
+  }
+  if (unknown) {
+    const note = document.createElement("p");
+    note.className = "muted field-help";
+    note.textContent = "Some cache locations could not be verified; unknown entries are not offered for deletion.";
+    modelCacheSelectionList.appendChild(note);
+  }
+  syncModelCacheSelectionLocks();
+}
+
+function getSelectedModelCacheIds(): string[] {
+  return Array.from(modelCacheSelectionList.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-model-value]:checked'))
+    .map((checkbox) => checkbox.dataset.modelValue || "")
+    .filter(Boolean);
+}
+
+function syncModelCacheSelectionLocks() {
+  for (const checkbox of Array.from(modelCacheSelectionList.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-model-value]'))) {
+    const model = checkbox.dataset.modelValue || "";
+    const active = backend.running && !!backend.model && model === backend.model;
+    const activeUnknown = backend.running && !backend.model;
+    const copy = checkbox.closest(".model-cache-selection-item")?.querySelector<HTMLElement>(".model-cache-selection-copy");
+    let note = copy?.querySelector<HTMLElement>(".model-cache-active-note") || null;
+    if (active && checkbox.checked) checkbox.checked = false;
+    if (active && copy && !note) {
+      note = document.createElement("small");
+      note.className = "model-cache-active-note";
+      note.textContent = "In use — protected while the server runs";
+      copy.appendChild(note);
+    } else if (!active && note) {
+      note.remove();
+    }
+    checkbox.disabled = modelDownloadStatus.active || modelStorageBusy || busy || active || activeUnknown;
+    checkbox.closest(".model-cache-selection-item")?.classList.toggle("is-active-model-cache", active);
+  }
+  renderModelCleanupButtons();
+}
+
+
+
 function renderModelSelectMenu() {
   modelSelectMenu.replaceChildren();
   for (const option of Array.from(modelSelect.options)) {
@@ -365,9 +459,10 @@ async function refreshModelCacheBadges() {
     option.textContent = result.cached === true ? `${baseLabel} · Downloaded` : baseLabel;
     if (result.cached === true) option.dataset.cacheState = "downloaded";
     else if (result.cached === false) option.dataset.cacheState = "not-downloaded";
-    else delete option.dataset.cacheState;
+    else option.dataset.cacheState = "unknown";
   }
   renderModelSelectMenu();
+  renderModelCacheSelection();
 }
 const modelStorageSummary = $("model-storage-summary");
 const modelStorageLocationsEl = $("model-storage-locations");
@@ -385,7 +480,7 @@ const modelDownloadProgressTrack = $("model-download-progress-track");
 const modelDownloadProgressBar = $("model-download-progress-bar");
 const modelDownloadProgressMeta = $("model-download-progress-meta");
 const modelDownloadStatusEl = $("model-download-status");
-const manageEasyWhisperModelsButton = $("manage-easywhisper-models-button") as HTMLButtonElement;
+const modelCacheSelectionList = $("model-cache-selection-list");
 const deleteRdtModelsButton = $("delete-rdt-models-button") as HTMLButtonElement;
 const modelCleanupStatus = $("model-cleanup-status");
 const startButton = $("start-button") as HTMLButtonElement;
@@ -437,10 +532,13 @@ modelSelect.addEventListener("change", () => {
   syncModelSelectPresentation();
   try { localStorage.setItem("rdt_voice_desktop_model", modelSelect.value); } catch { /* optional preference */ }
   modelIdDetail.textContent = modelSelect.value;
+
   void invoke("remember_recent_server_choice", { model: modelSelect.value, preferredPort: Number(preferredPortInput.value) || 8888 }).catch(() => undefined);
   void refreshModelStorageStatus();
   void refreshModelDownloadStatus();
+  syncModelSwitchControl();
 });
+
 modelSelectTrigger.addEventListener("click", () => {
   if (modelSelectTrigger.getAttribute("aria-expanded") === "true") closeModelSelectMenu(false);
   else openModelSelectMenu();
@@ -809,6 +907,17 @@ function showNotice(message: string, kind: "info" | "good" | "error" | "warning"
   if (activityEntries.length > 500) activityEntries.splice(0, activityEntries.length - 500);
 }
 
+void listen<string>("rdt-backend-state-changed", (event) => {
+  void (async () => {
+    await refreshBackendStatus();
+    await refreshOrphanedBackendStatus();
+    if (event.payload === "stopped" && !backend.running) {
+      showNotice("Server stopped from the menu bar.", "good");
+    }
+    renderBackendStatus();
+  })();
+});
+
 // Menu-bar Start reuses the same native backend checks; bring the window forward if user action is needed.
 void listen<string>("rdt-tray-start-failed", (event) => {
   setAppView("local");
@@ -854,12 +963,15 @@ function showButtonFeedback(button: HTMLButtonElement, label = "Copied") {
   buttonFeedbackTimers.set(button, timer);
 }
 
-// Version menu behaves like a popover: outside click and Escape dismiss it.
+
+// Close the version-number popover when clicking elsewhere or pressing Escape.
 document.addEventListener("click", (event) => {
   const target = event.target;
-  if (versionDetails?.open && target instanceof Node && !versionDetails.contains(target)) versionDetails.open = false;
+  if (versionDetails?.open && target instanceof Node && !versionDetails.contains(target)) {
+    versionDetails.open = false;
+  }
 });
-document.addEventListener("keydown", (event) => {
+document.addEventListener("keydown", (event: KeyboardEvent) => {
   if (event.key === "Escape" && versionDetails?.open) versionDetails.open = false;
 });
 
@@ -907,6 +1019,7 @@ void listen<ModelDownloadStatus>("rdt-model-download-status", (event) => {
     }
   }
   renderModelDownloadUI();
+  scheduleVisualSetupGuideUpdate();
   if (!incoming.active && incoming.phase === "complete") {
     showNotice(incoming.message, "good");
     void refreshModelStorageStatus();
@@ -940,8 +1053,8 @@ function renderBrowserChoiceRow() {
 function setBusy(value: boolean) {
   busy = value;
   // A single primary control starts or stops the one managed local server.
-  startButton.disabled = !startupReady || value || serverOperation !== null || (!backend.running && conflictingBackendPresent) || (!backend.running && modelDownloadStatus.active);
-  startButtonLabel.textContent = serverOperation === "starting" ? "Starting…" : serverOperation === "stopping" ? "Stopping…" : backend.running ? "Stop Server" : "Start Server";
+  startButton.disabled = !startupReady || value || serverOperation !== null || (!backend.running && conflictingBackendPresent) || (!backend.running && modelDownloadStatus.active) || (backend.running && !!backend.model && modelSelect.value !== backend.model && (modelDownloadStatus.active || modelStorageBusy));
+  startButtonLabel.textContent = serverOperation === "starting" ? "Starting…" : serverOperation === "stopping" ? "Stopping…" : backend.running ? (backend.model && modelSelect.value !== backend.model ? "Switch Model" : "Stop Server") : "Start Server";
   startButton.classList.toggle("is-starting", serverOperation === "starting");
   startButton.classList.toggle("is-stopping", serverOperation === "stopping");
   startButton.classList.toggle("server-running", backend.running);
@@ -958,9 +1071,9 @@ function setBusy(value: boolean) {
   copyTokenButton.disabled = value;
   openButton.disabled = value || !browserPreflightPassed();
   testConnectionButton.disabled = value || !backend.running;
-  modelSelect.disabled = value || backend.running || modelDownloadStatus.active;
+  modelSelect.disabled = value || modelDownloadStatus.active;
   modelSelect.title = backend.running
-    ? "Stop server to use this feature. Change the model after the current server stops."
+    ? "Browse models while running; select another model and choose Switch Model to restart safely."
     : "All choices use Apple MLX acceleration on Apple Silicon.";
   modelSelectTooltip.setAttribute("title", modelSelect.title);
   modelSelectTooltip.setAttribute("data-tooltip", modelSelect.title);
@@ -973,6 +1086,7 @@ function setBusy(value: boolean) {
     : "Choose a port from 1024–65535 for the next server.");
   startButton.classList.toggle("is-idle-start", startupReady && !value && !backend.running && serverOperation === null && !conflictingBackendPresent);
   renderFooterServerStatusDot();
+  syncModelSwitchControl();
   updateSettingsLockHelp();
   localHttpsQuickSetupButton.disabled = value || backend.running;
   setupRemoteButton.disabled = value || !backend.running;
@@ -994,6 +1108,13 @@ function emptyMessage(text: string) {
   const p = document.createElement("p"); p.className = "empty-row"; p.textContent = text; return p;
 }
 
+function clearRecoveredStartupErrorIfRunning(): void {
+  if (!backend.running || notice.dataset.state !== "error") return;
+  const detail = document.getElementById("developer-latest-detail")?.textContent || "";
+  const isStartupFailure = /backend exited during startup|backend did not become healthy within|could not launch the packaged whisper backend|could not monitor the backend process|could not check the selected model before starting/i.test(detail);
+  if (isStartupFailure) showNotice("Server started successfully.", "good");
+}
+
 async function refreshBackendStatus(silent = true) {
   try {
     const previous = backend;
@@ -1005,7 +1126,8 @@ async function refreshBackendStatus(silent = true) {
     if (!backend.running || (lastConnectionCheck && (lastConnectionCheck.port !== backend.port || lastConnectionCheck.pid !== backend.pid || lastConnectionCheck.running !== backend.running))) lastConnectionCheck = null;
     if (changed) renderBackendStatus();
     if (backend.running && identityChanged) void refreshConnectionStatus();
-    else if (!backend.running) renderConnectionStatus();
+    if (backend.running) clearRecoveredStartupErrorIfRunning();
+    else renderConnectionStatus();
     if (backend.running && !silent && changed) showNotice("The local Whisper backend is ready.", "good");
   } catch (e) {
     if (!silent) showNotice(String(e), "error");
@@ -1056,11 +1178,14 @@ async function refreshConnectionStatus() {
     connectionStatus.textContent = `CONNECTION CHECK FAILED · ${String(error)}. This result remains visible until another connection check; copying logs will not overwrite it.`;
     connectionStatus.className = "connection-status disconnected";
     connectionSummary.textContent = "Connection needs attention. Enable Developer Options for details.";
-  } finally { testConnectionButton.disabled = busy || !backend.running; openButton.disabled = busy || !browserPreflightPassed(); }
+  } finally {
+     testConnectionButton.disabled = busy || !backend.running; openButton.disabled = busy || !browserPreflightPassed(); }
 }
 testConnectionButton.addEventListener("click", () => void refreshConnectionStatus());
 
 let currentLocalHttps: LocalHttpsStatus | null = null;
+let localHttpsSetupInProgress = false;
+let localHttpsStatusRequestId = 0;
 let selectedTlsCertificate = "";
 let selectedTlsKey = "";
 let selectedTlsCa = "";
@@ -1073,29 +1198,36 @@ function setTlsPath(el: HTMLElement, path: string | null | undefined) {
 function renderLocalHttpsStatus(status: LocalHttpsStatus) {
   currentLocalHttps = status;
   const secureReady = status.mode === "https" && status.configured && status.trusted;
+
+  for (const button of [setupLocalHttpsButton, localHttpsQuickSetupButton]) {
+    button.classList.toggle("https-needs-attention", !secureReady);
+  }
+
   localHttpsQuickPrompt.classList.toggle("hidden", secureReady);
-  localHttpsAdvancedStatusEl.textContent = secureReady ? "✓ Trusted HTTPS is ready on this Mac." : "";
-  localHttpsAdvancedStatusEl.className = secureReady ? "local-https-advanced-status tls-good" : "local-https-advanced-status hidden";
+  localHttpsAdvancedStatusEl.textContent = secureReady
+    ? "✓ Trusted HTTPS is ready on this Mac."
+    : "";
+  localHttpsAdvancedStatusEl.className = secureReady
+    ? "local-https-advanced-status tls-good"
+    : "local-https-advanced-status hidden";
+
+  const label = status.mode.toUpperCase();
+  localHttpsStatusEl.textContent = `${label} · ${status.message}`;
+  localHttpsStatusEl.className = `tls-status ${
+    secureReady ? "tls-good" : status.mode === "http" ? "tls-warning" : "tls-needs-setup"
+  }`;
+
   if (secureReady) {
-    // Persistent success belongs under Advanced. The main page keeps setup progress and recovery errors only.
     localHttpsQuickStatus.textContent = "";
     localHttpsQuickStatus.dataset.userFeedback = "ready";
     localHttpsQuickStatus.className = "local-https-quick-status hidden";
-  } else if (localHttpsQuickStatus.dataset.userFeedback === "status-error") {
-    localHttpsQuickStatus.textContent = `HTTPS needs setup: ${status.message || "The certificate and trust status are not ready."}`;
+  } else {
+    localHttpsQuickStatus.textContent =
+      `Trusted HTTPS setup is required: ${status.message || "The certificate and trust status are not ready."}`;
     localHttpsQuickStatus.dataset.userFeedback = "status-warning";
     localHttpsQuickStatus.className = "local-https-quick-status tls-warning";
-  } else if (["success", "ready"].includes(localHttpsQuickStatus.dataset.userFeedback || "")) {
-    localHttpsQuickStatus.textContent = "";
-    delete localHttpsQuickStatus.dataset.userFeedback;
-    localHttpsQuickStatus.className = "local-https-quick-status hidden";
-  } else if (!localHttpsQuickStatus.dataset.userFeedback) {
-    localHttpsQuickStatus.textContent = "";
-    localHttpsQuickStatus.className = "local-https-quick-status hidden";
   }
-  const label = status.mode.toUpperCase();
-  localHttpsStatusEl.textContent = `${label} · ${status.message}`;
-  localHttpsStatusEl.className = `tls-status ${status.mode === "https" && status.configured && status.trusted ? "tls-good" : status.mode === "http" ? "tls-warning" : "tls-needs-setup"}`;
+
   setTlsPath(localHttpsCertPathEl, selectedTlsCertificate || status.certificatePath);
   setTlsPath(localHttpsKeyPathEl, selectedTlsKey || status.privateKeyPath);
   setTlsPath(localHttpsCaPathEl, selectedTlsCa || status.caCertificatePath);
@@ -1103,32 +1235,65 @@ function renderLocalHttpsStatus(status: LocalHttpsStatus) {
   transportHttpInput.checked = status.mode === "http";
   trustTlsButton.disabled = backend.running || !(selectedTlsCa || status.caCertificatePath) || !status.certificatePath || !status.privateKeyPath;
   removeTlsTrustButton.disabled = backend.running || status.rdtAddedTrustCount < 1;
-  setupLocalHttpsButton.disabled = backend.running;
+  setupLocalHttpsButton.disabled = backend.running || localHttpsSetupInProgress;
+  localHttpsQuickSetupButton.disabled = backend.running || localHttpsSetupInProgress;
   chooseTlsCertButton.disabled = backend.running;
   chooseTlsKeyButton.disabled = backend.running;
   chooseTlsCaButton.disabled = backend.running;
   linkTlsButton.disabled = backend.running || !(selectedTlsCertificate || status.certificatePath) || !(selectedTlsKey || status.privateKeyPath);
   updateSettingsLockHelp();
+
+  scheduleVisualSetupGuideUpdate();
+
 }
 
-async function refreshLocalHttpsStatus(showErrors = false) {
+async function refreshLocalHttpsStatus(
+  showErrors = false,
+  allowDuringSetup = false,
+  showChecking = false
+): Promise<LocalHttpsStatus | null> {
+  if (localHttpsSetupInProgress && !allowDuringSetup) return currentLocalHttps;
+
+  const requestId = ++localHttpsStatusRequestId;
+  if (showChecking && !currentLocalHttps) {
+    localHttpsStatusEl.textContent = "Checking local HTTPS configuration…";
+    localHttpsStatusEl.className = "tls-status tls-needs-setup";
+  }
+
   try {
     const status = await invoke<LocalHttpsStatus>("get_local_https_status");
+
+    // Ignore replies from older requests, or requests made before setup began.
+    if (requestId !== localHttpsStatusRequestId) return currentLocalHttps;
+    if (localHttpsSetupInProgress && !allowDuringSetup) return currentLocalHttps;
+
     if (!selectedTlsCertificate) selectedTlsCertificate = status.certificatePath || "";
     if (!selectedTlsKey) selectedTlsKey = status.privateKeyPath || "";
     if (!selectedTlsCa) selectedTlsCa = status.caCertificatePath || "";
     renderLocalHttpsStatus(status);
+    return status;
   } catch (error) {
+    if (requestId !== localHttpsStatusRequestId) return currentLocalHttps;
+    if (localHttpsSetupInProgress && !allowDuringSetup) return currentLocalHttps;
+
+    // A failed lookup means unknown, not "setup required" or "trusted".
+    currentLocalHttps = null;
     localHttpsStatusEl.textContent = `Could not verify local HTTPS status: ${String(error)}`;
     localHttpsStatusEl.className = "tls-status tls-error";
     localHttpsAdvancedStatusEl.textContent = "";
     localHttpsAdvancedStatusEl.className = "local-https-advanced-status hidden";
-    // Keep the primary recovery action and an in-place explanation visible when status lookup fails.
     localHttpsQuickPrompt.classList.remove("hidden");
-    localHttpsQuickStatus.textContent = "Could not verify HTTPS status. Try setting up trusted HTTPS again.";
+    setupLocalHttpsButton.classList.add("https-needs-attention");
+    localHttpsQuickSetupButton.classList.add("https-needs-attention");
+    localHttpsQuickStatus.textContent =
+      "Could not verify HTTPS status. Check your connection and retry; the current trust state is unknown.";
     localHttpsQuickStatus.dataset.userFeedback = "status-error";
     localHttpsQuickStatus.className = "local-https-quick-status tls-error";
+    scheduleVisualSetupGuideUpdate();
+
+
     if (showErrors) showNotice(`Could not read HTTPS settings: ${String(error)}`, "error");
+    return null;
   }
 }
 
@@ -1137,6 +1302,202 @@ let savedStorageLocations: string[] = [];
 let modelStorageStatus: ModelStorageStatus | null = null;
 let modelDownloadStatus: ModelDownloadStatus = { active: false, model: null, destinationRoot: null, phase: "idle", message: "Choose a Whisper model to check its local availability.", progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
 let modelStorageBusy = false;
+
+const VISUAL_GUIDE_ENABLED_KEY = "rdt_connect_visual_setup_guide_enabled";
+let visualSetupGuideDismissedUntilIdle = false;
+let visualSetupGuideIdleTimer: number | null = null;
+let visualSetupGuideUpdateQueued = false;
+
+// Place each curtain directly under body rather than inside a wrapper
+// stacking context. Inline important styles provide a visible fallback even
+// if stylesheet stacking or WebKit backdrop-filter rules behave unexpectedly.
+const visualSetupGuideOverlay = document.createElement("div");
+visualSetupGuideOverlay.id = "visual-setup-guide-overlay";
+visualSetupGuideOverlay.setAttribute("aria-hidden", "true");
+document.body.appendChild(visualSetupGuideOverlay);
+
+try {
+  visualSetupGuideToggle.checked =
+    localStorage.getItem(VISUAL_GUIDE_ENABLED_KEY) !== "false";
+} catch {
+  visualSetupGuideToggle.checked = true;
+}
+
+function clearVisualSetupGuideSpotlight() {
+  visualSetupGuideOverlay.classList.remove("active");
+  document.body.classList.remove(
+    "visual-setup-guide-model",
+    "visual-setup-guide-https"
+  );
+}
+
+function positionVisualSetupGuideSpotlight(target: HTMLElement) {
+  if (!target || typeof target.getBoundingClientRect !== "function") return;
+
+  const rect = target.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  const viewportWidth = Math.max(
+    window.innerWidth || 0,
+    document.documentElement.clientWidth || 0,
+    1
+  );
+  const viewportHeight = Math.max(
+    window.innerHeight || 0,
+    document.documentElement.clientHeight || 0,
+    1
+  );
+
+  const centerX = Math.max(
+    0,
+    Math.min(viewportWidth, rect.left + rect.width / 2)
+  );
+  const centerY = Math.max(
+    0,
+    Math.min(viewportHeight, rect.top + rect.height / 2)
+  );
+
+  // The mask is fully clear through 62% of each radius.
+  // Add a comfortable margin around the highlighted control.
+  const radiusX = Math.max(110, (rect.width / 2 + 22) / 0.70);
+  const radiusY = Math.max(48, (rect.height / 2 + 18) / 0.70);
+
+  // Set coordinates on the overlay itself, not on the button or body.
+  visualSetupGuideOverlay.style.setProperty("--spot-x", `${centerX}px`);
+  visualSetupGuideOverlay.style.setProperty("--spot-y", `${centerY}px`);
+  visualSetupGuideOverlay.style.setProperty("--spot-rx", `${radiusX}px`);
+  visualSetupGuideOverlay.style.setProperty("--spot-ry", `${radiusY}px`);
+}
+
+function updateVisualSetupGuide() {
+  const localView = document.getElementById("view-local");
+  const localViewVisible = Boolean(
+    localView &&
+    !localView.classList.contains("hidden") &&
+    localView.getClientRects().length > 0
+  );
+
+  // The model stage is independent of HTTPS; readiness is checked for step two.
+  if (
+    !visualSetupGuideToggle.checked ||
+    visualSetupGuideDismissedUntilIdle ||
+    !localViewVisible
+  ) {
+    clearVisualSetupGuideSpotlight();
+    return;
+  }
+
+  const selectedModel = modelSelect.value;
+  const modelReady = Boolean(
+    modelStorageStatus?.model === selectedModel &&
+    modelStorageStatus.modelCached
+  );
+  const downloadMatches = modelDownloadStatus.model === selectedModel;
+  const selectedDownloadActive = Boolean(
+    downloadMatches && modelDownloadStatus.active
+  );
+
+  let target: HTMLButtonElement | null = null;
+  let stage: "model" | "https" | null = null;
+
+  if (!modelReady && !selectedDownloadActive) {
+    if (!modelDownloadButton.hidden && !modelDownloadButton.disabled) {
+      target = modelDownloadButton;
+      stage = "model";
+    }
+  } else if (
+    modelReady &&
+    currentLocalHttps !== null &&
+    !(
+      currentLocalHttps.mode === "https" &&
+      currentLocalHttps.configured &&
+      currentLocalHttps.trusted
+    ) &&
+    !localHttpsQuickPrompt.classList.contains("hidden") &&
+    !localHttpsQuickSetupButton.disabled
+  ) {
+    target = localHttpsQuickSetupButton;
+    stage = "https";
+  }
+
+  if (!target || !stage) {
+    clearVisualSetupGuideSpotlight();
+    return;
+  }
+
+  document.body.classList.toggle("visual-setup-guide-model", stage === "model");
+  document.body.classList.toggle("visual-setup-guide-https", stage === "https");
+
+  // The single masked scrim leaves a clear aperture around the actual button.
+  // This avoids relying on z-index to lift a nested button above the overlay.
+  positionVisualSetupGuideSpotlight(target);
+  visualSetupGuideOverlay.classList.add("active");
+}
+
+function scheduleVisualSetupGuideUpdate() {
+  if (visualSetupGuideUpdateQueued) return;
+  visualSetupGuideUpdateQueued = true;
+  window.requestAnimationFrame(() => {
+    visualSetupGuideUpdateQueued = false;
+    updateVisualSetupGuide();
+  });
+}
+
+function suspendVisualSetupGuide() {
+  visualSetupGuideDismissedUntilIdle = true;
+  if (visualSetupGuideIdleTimer !== null) {
+    window.clearTimeout(visualSetupGuideIdleTimer);
+    visualSetupGuideIdleTimer = null;
+  }
+  clearVisualSetupGuideSpotlight();
+}
+
+function restartVisualSetupGuideIdleTimer() {
+  visualSetupGuideDismissedUntilIdle = true;
+  if (visualSetupGuideIdleTimer !== null) {
+    window.clearTimeout(visualSetupGuideIdleTimer);
+  }
+  clearVisualSetupGuideSpotlight();
+  visualSetupGuideIdleTimer = window.setTimeout(() => {
+    visualSetupGuideIdleTimer = null;
+    visualSetupGuideDismissedUntilIdle = false;
+    scheduleVisualSetupGuideUpdate();
+  }, 4000);
+}
+
+visualSetupGuideToggle.addEventListener("change", () => {
+  try {
+    localStorage.setItem(
+      VISUAL_GUIDE_ENABLED_KEY,
+      String(visualSetupGuideToggle.checked)
+    );
+  } catch { /* optional preference */ }
+  scheduleVisualSetupGuideUpdate();
+});
+
+// Any click while using the Local Server view dismisses the spotlight for
+// four seconds. It then returns only if the current state still calls for it.
+document.addEventListener("click", (event) => {
+  const node = event.target;
+  if (!(node instanceof Element)) return;
+
+  const localView = document.getElementById("view-local");
+  const clickedLocalTab = node.closest('[data-view-target="local"]') !== null;
+
+  if (localView?.contains(node) || clickedLocalTab) {
+    restartVisualSetupGuideIdleTimer();
+  } else {
+    suspendVisualSetupGuide();
+  }
+}, true);
+
+// Covers keyboard-based model changes and viewport movement as well as clicks.
+modelSelect.addEventListener("change", restartVisualSetupGuideIdleTimer);
+window.addEventListener("resize", scheduleVisualSetupGuideUpdate, { passive: true });
+document.addEventListener("scroll", scheduleVisualSetupGuideUpdate, true);
+
+updateVisualSetupGuide();
+
 
 function stopServerSettingTitle(baseTitle: string): string {
   return backend.running ? `Stop server to use this feature. ${baseTitle}` : baseTitle;
@@ -1206,6 +1567,7 @@ function renderModelStorageSettings() {
     down.addEventListener("click", () => { [storageLocationDraft[index], storageLocationDraft[index + 1]] = [storageLocationDraft[index + 1], storageLocationDraft[index]]; renderModelStorageSettings(); });
     const remove = document.createElement("button"); remove.className = "mini-button deny"; remove.type = "button"; remove.textContent = "Remove"; remove.dataset.baseTitle = "Remove this model-storage folder from the list."; remove.title = stopServerSettingTitle(remove.dataset.baseTitle); remove.disabled = storageLocationDraft.length <= 1 || backend.running || modelStorageBusy;
     remove.addEventListener("click", () => { storageLocationDraft.splice(index, 1); renderModelStorageSettings(); });
+    if (storageLocationDraft.length <= 1) { up.hidden = true; down.hidden = true; }
     actions.append(up, down, remove); row.append(priority, pathWrap, actions); modelStorageLocationsEl.appendChild(row);
   });
   modelStorageAddButton.title = "Add a model-storage folder.";
@@ -1237,6 +1599,7 @@ async function refreshModelStorageStatus(showErrors = false) {
     renderModelStorageSummary(status);
     renderModelStorageSettings();
     renderModelDownloadUI();
+    scheduleVisualSetupGuideUpdate();
     renderModelCleanupButtons();
   } catch (error) {
     modelStorageSummary.textContent = `Could not read model-storage settings: ${String(error)}`;
@@ -1244,6 +1607,7 @@ async function refreshModelStorageStatus(showErrors = false) {
     if (showErrors) showNotice(`Could not read model-storage settings: ${String(error)}`, "error");
     renderModelStorageSettings();
     renderModelDownloadUI();
+    scheduleVisualSetupGuideUpdate();
     renderModelCleanupButtons();
   }
 }
@@ -1344,11 +1708,13 @@ function acceptModelDownloadStatus(incoming: ModelDownloadStatus) {
 }
 
 function renderModelDownloadUI() {
+
   const selectedModel = modelSelect.value;
   const statusMatches = modelDownloadStatus.model === selectedModel;
   const download = statusMatches ? modelDownloadStatus : null;
   const cached = modelStorageStatus?.model === selectedModel && modelStorageStatus.modelCached;
   const active = Boolean(download?.active);
+  const runningModelCacheProtected = backend.running && (!backend.model || backend.model === selectedModel);
   const phase = download?.phase || "idle";
   const failed = phase === "failed";
   const cancelled = phase === "cancelled";
@@ -1409,9 +1775,14 @@ function renderModelDownloadUI() {
       ? (modelStorageStatus.modelCached ? "A verified local copy is ready." : "No verified local copy found. Download it here before starting the server.")
       : "Checking whether a local copy is available…";
   }
+  if (backend.running && !backend.model) {
+    modelDownloadStatusEl.textContent = "The running server's active model could not be verified; downloading is paused for safety.";
+  } else if (backend.running && backend.model === selectedModel) {
+    modelDownloadStatusEl.textContent = "This model is running; select a different model to download another cache safely.";
+  }
   modelDownloadStatusEl.classList.toggle("error-text", failed);
   modelDownloadButton.hidden = Boolean(cached || active);
-  modelDownloadButton.disabled = backend.running || active || modelDownloadStatus.phase === "canceling" || !modelStorageStatus;
+  modelDownloadButton.disabled = runningModelCacheProtected || active || modelDownloadStatus.phase === "canceling" || !modelStorageStatus;
   modelDownloadButton.textContent = failed || cancelled ? "Retry download" : `Download model · ${approximateModelSizeLabel(selectedModel)}`;
   // Keep Cancel visible during cancellation so the user can see that work is in progress.
   // If cancellation cannot be verified, the button becomes a retry action rather than disappearing.
@@ -1446,6 +1817,16 @@ function renderModelDownloadUI() {
   renderModelCleanupButtons();
 }
 
+modelCacheSelectionList.addEventListener("change", (event: Event) => {
+  const target = event.target;
+  if (target instanceof HTMLInputElement &&
+      target.matches('input[type="checkbox"][data-model-value]')) {
+    syncModelCacheSelectionLocks();
+  }
+  scheduleVisualSetupGuideUpdate();
+
+});
+
 async function refreshModelDownloadStatus() {
   try {
     const current = await invoke<ModelDownloadStatus>("get_model_download_status");
@@ -1458,18 +1839,34 @@ async function refreshModelDownloadStatus() {
 }
 function renderModelCleanupButtons() {
   const downloadActive = modelDownloadStatus.active;
-  manageEasyWhisperModelsButton.disabled = busy;
-  deleteRdtModelsButton.disabled = backend.running || downloadActive || modelStorageBusy;
-  modelCleanupStatus.textContent = backend.running
-    ? "Stop the local server before deleting RDT Connect models."
-    : downloadActive ? "Finish or cancel the active model download before deleting RDT Connect models."
-    : "EasyWhisper browser storage and RDT Connect MLX cache folders are managed separately.";
+  const selected = getSelectedModelCacheIds();
+  const activeUnknown = backend.running && !backend.model;
+  const activeSelected = backend.running && !!backend.model && selected.includes(backend.model);
+  const blocked = downloadActive || modelStorageBusy || busy || activeUnknown || activeSelected;
+  deleteRdtModelsButton.disabled = blocked || selected.length === 0;
+  for (const checkbox of Array.from(modelCacheSelectionList.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-model-value]'))) {
+    const model = checkbox.dataset.modelValue || "";
+    checkbox.disabled = busy || downloadActive || modelStorageBusy || (backend.running && (!backend.model || model === backend.model));
+  }
+  modelCleanupStatus.textContent = activeUnknown
+    ? "The running server's active model could not be verified, so cache deletion is paused for safety."
+    : downloadActive ? "Finish or cancel the active model download before deleting model caches."
+    : modelStorageBusy ? "Finish saving model-storage changes before deleting model caches."
+    : selected.length > 0 ? `${selected.length} inactive model cache${selected.length === 1 ? " is" : "s are"} selected for confirmation.${backend.running ? " The running model is protected." : ""}`
+    : backend.running ? "Select inactive downloaded model caches. The running model is protected and cannot be selected."
+    : "Select one or more downloaded model caches above. Nothing is preselected.";
+  updateSettingsLockHelp();
 }
 
 modelDownloadButton.addEventListener("click", async () => {
-  if (backend.running) { showNotice("Stop the server before downloading a model.", "warning"); return; }
-  if (modelDownloadStatus.active) { showNotice("A model download is already running.", "warning"); return; }
   const model = modelSelect.value;
+  if (backend.running && (!backend.model || model === backend.model)) {
+    showNotice(backend.model
+      ? "The selected model is currently running. Choose a different model before downloading."
+      : "Cannot verify the running server's active model; download is paused for safety.", "warning");
+    return;
+  }
+  if (modelDownloadStatus.active) { showNotice("A model download is already running.", "warning"); return; }
   modelDownloadButton.disabled = true;
   modelDownloadStatus = { active: true, model, destinationRoot: modelStorageStatus?.activeRoot || null, phase: "checking", message: "Checking model availability and total size…", progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
   renderModelDownloadUI();
@@ -1513,29 +1910,40 @@ modelDownloadCancelButton.addEventListener("click", async () => {
     showNotice(modelDownloadStatus.message, "error");
   } finally { renderModelDownloadUI(); }
 });
-manageEasyWhisperModelsButton.addEventListener("click", async () => {
-  manageEasyWhisperModelsButton.disabled = true;
-  try {
-    const browserId = browserSelect.value || preferredBrowserId || "default";
-    await invoke("open_easywhisper_model_manager", { browserId });
-    showNotice("Opened the EasyWhisper model manager in your selected browser. Review its storage-deletion option before confirming.", "info");
-  } catch (error) { showNotice(`Could not open the EasyWhisper model manager: ${String(error)}`, "error"); }
-  finally { renderModelCleanupButtons(); }
-});
 deleteRdtModelsButton.addEventListener("click", async () => {
-  if (backend.running || modelDownloadStatus.active) { showNotice("Stop the server and finish or cancel downloads before deleting model caches.", "warning"); return; }
-  const approved = window.confirm("Delete cached RDT Connect MLX Whisper models from configured storage folders? This removes only the five supported RDT Connect Whisper cache repositories (Turbo, Large v3, Small, Base, Tiny). It does not delete EasyWhisper browser data or other model repositories. This cannot be undone.");
+  const selectedModels = getSelectedModelCacheIds();
+  if (modelDownloadStatus.active || modelStorageBusy) {
+    showNotice("Finish or cancel model downloads and storage changes before deleting caches.", "warning");
+    return;
+  }
+  if (backend.running && (!backend.model || selectedModels.includes(backend.model))) {
+    showNotice("The active model cache is protected while the server runs. Select only inactive caches.", "warning");
+    return;
+  }
+  if (selectedModels.length === 0) {
+    showNotice("Select one or more downloaded models first. Nothing is preselected.", "warning");
+    return;
+  }
+  const selectedNames = selectedModels.map((model) => {
+    const option = Array.from(modelSelect.options).find((candidate) => candidate.value === model);
+    return option ? modelMenuInfo(option).name : model;
+  });
+  const approved = window.confirm(`Permanently delete only these selected RDT Connect MLX model caches?\n\n${selectedNames.map((name) => `• ${name}`).join("\n")}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.`);
   if (!approved) return;
   deleteRdtModelsButton.disabled = true;
   try {
-    const result = await invoke<ModelCacheDeleteResult>("delete_rdt_model_caches");
+    const result = await invoke<ModelCacheDeleteResult>("delete_rdt_model_caches", { models: selectedModels });
     modelCleanupStatus.textContent = result.message;
     showNotice(result.message, "good");
     await refreshModelStorageStatus();
+    await refreshModelDownloadStatus();
+    await refreshModelCacheBadges();
   } catch (error) {
-    modelCleanupStatus.textContent = `Could not delete model caches: ${String(error)}`;
-    showNotice(`Could not delete model caches: ${String(error)}`, "error");
-  } finally { renderModelCleanupButtons(); }
+    modelCleanupStatus.textContent = `Could not delete selected model caches: ${String(error)}`;
+    showNotice(`Could not delete selected model caches: ${String(error)}`, "error");
+  } finally {
+    renderModelCleanupButtons();
+  }
 });
 
 modelStorageAddButton.addEventListener("click", async () => {
@@ -1586,56 +1994,198 @@ chooseTlsCertButton.addEventListener("click", () => void chooseTlsFile("certific
 chooseTlsKeyButton.addEventListener("click", () => void chooseTlsFile("private-key"));
 chooseTlsCaButton.addEventListener("click", () => void chooseTlsFile("ca"));
 
+
+let httpsSetupSuccessHideTimer: number | null = null;
+let httpsSetupSuccessFadeTimer: number | null = null;
+let httpsSetupSuccessHideStartedAt = 0;
+let httpsSetupSuccessRemainingMs = 4200;
+let httpsSetupSuccessPointerInside = false;
+
+function getHttpsSetupSuccessLayer(): HTMLDivElement | null {
+  return document.getElementById("https-setup-success") as HTMLDivElement | null;
+}
+
+function getHttpsSetupSuccessPanel(): HTMLElement | null {
+  return getHttpsSetupSuccessLayer()?.querySelector<HTMLElement>(".https-setup-success-panel") ?? null;
+}
+
+function finishHttpsSetupSuccessHide() {
+  const overlay = getHttpsSetupSuccessLayer();
+  if (!overlay) return;
+
+  if (httpsSetupSuccessFadeTimer !== null) {
+    window.clearTimeout(httpsSetupSuccessFadeTimer);
+    httpsSetupSuccessFadeTimer = null;
+  }
+  if (httpsSetupSuccessHideTimer !== null) {
+    window.clearTimeout(httpsSetupSuccessHideTimer);
+    httpsSetupSuccessHideTimer = null;
+  }
+
+  overlay.classList.remove("is-visible");
+  overlay.classList.add("is-hiding");
+  httpsSetupSuccessFadeTimer = window.setTimeout(() => {
+    const current = getHttpsSetupSuccessLayer();
+    if (current) {
+      current.hidden = true;
+      current.classList.remove("is-visible", "is-hiding");
+      current.setAttribute("aria-hidden", "true");
+    }
+    httpsSetupSuccessFadeTimer = null;
+  }, 300);
+}
+
+function scheduleHttpsSetupSuccessHide() {
+  const overlay = getHttpsSetupSuccessLayer();
+  if (
+    !overlay ||
+    overlay.hidden ||
+    httpsSetupSuccessPointerInside ||
+    !overlay.classList.contains("is-visible") ||
+    httpsSetupSuccessHideTimer !== null
+  ) return;
+
+  httpsSetupSuccessHideStartedAt = Date.now();
+  httpsSetupSuccessHideTimer = window.setTimeout(() => {
+    httpsSetupSuccessHideTimer = null;
+    finishHttpsSetupSuccessHide();
+  }, Math.max(0, httpsSetupSuccessRemainingMs));
+}
+
+function pauseHttpsSetupSuccessHide() {
+  const overlay = getHttpsSetupSuccessLayer();
+  if (!overlay || overlay.hidden || !overlay.classList.contains("is-visible")) return;
+
+  httpsSetupSuccessPointerInside = true;
+  if (httpsSetupSuccessHideTimer !== null) {
+    window.clearTimeout(httpsSetupSuccessHideTimer);
+    httpsSetupSuccessHideTimer = null;
+    const elapsed = Date.now() - httpsSetupSuccessHideStartedAt;
+    httpsSetupSuccessRemainingMs = Math.max(0, httpsSetupSuccessRemainingMs - elapsed);
+  }
+}
+
+function resumeHttpsSetupSuccessHide() {
+  httpsSetupSuccessPointerInside = false;
+  scheduleHttpsSetupSuccessHide();
+}
+
+function dismissHttpsSetupSuccess() {
+  httpsSetupSuccessRemainingMs = 4200;
+  httpsSetupSuccessPointerInside = false;
+  finishHttpsSetupSuccessHide();
+}
+
+const httpsSetupSuccessPanel = getHttpsSetupSuccessPanel();
+httpsSetupSuccessPanel?.addEventListener("pointerenter", pauseHttpsSetupSuccessHide);
+httpsSetupSuccessPanel?.addEventListener("pointerleave", resumeHttpsSetupSuccessHide);
+
+// Clicks inside the popup leave it visible. A click anywhere outside closes it
+// while still allowing the underlying control to receive its click.
+document.addEventListener("click", (event) => {
+  const overlay = getHttpsSetupSuccessLayer();
+  const panel = getHttpsSetupSuccessPanel();
+  if (!overlay || overlay.hidden || !overlay.classList.contains("is-visible")) return;
+  if (event.target instanceof Node && panel?.contains(event.target)) return;
+  dismissHttpsSetupSuccess();
+}, true);
+
+function showHttpsSetupSuccess() {
+  const overlay = getHttpsSetupSuccessLayer();
+  if (!overlay) return;
+
+  if (httpsSetupSuccessHideTimer !== null) {
+    window.clearTimeout(httpsSetupSuccessHideTimer);
+    httpsSetupSuccessHideTimer = null;
+  }
+  if (httpsSetupSuccessFadeTimer !== null) {
+    window.clearTimeout(httpsSetupSuccessFadeTimer);
+    httpsSetupSuccessFadeTimer = null;
+  }
+
+  overlay.hidden = false;
+  overlay.setAttribute("aria-hidden", "false");
+  overlay.classList.remove("is-visible", "is-hiding");
+
+  httpsSetupSuccessRemainingMs = 4200;
+  httpsSetupSuccessPointerInside = false;
+
+  // Restart the entrance animation when setup is repeated.
+  void overlay.offsetWidth;
+  overlay.classList.add("is-visible");
+
+  // If the pointer is already over the popup, start the timer only after exit.
+  const panel = getHttpsSetupSuccessPanel();
+  if (panel?.matches(":hover")) {
+    httpsSetupSuccessPointerInside = true;
+  } else {
+    scheduleHttpsSetupSuccessHide();
+  }
+}
 async function performLocalHttpsSetup(triggerButton: HTMLButtonElement) {
-  // The button itself is the explicit user action. The Local Server prompt and
-  // Settings copy explain that the CA is added to the login Keychain; avoid a
-  // redundant second click in a flow whose goal is one-click setup.
+  if (localHttpsSetupInProgress) return;
+
+  localHttpsSetupInProgress = true;
+  // Invalidate any status lookup already in flight before setup starts.
+  ++localHttpsStatusRequestId;
+
   setupLocalHttpsButton.disabled = true;
   localHttpsQuickSetupButton.disabled = true;
   triggerButton.setAttribute("aria-busy", "true");
+  localHttpsQuickPrompt.classList.remove("hidden");
   localHttpsQuickStatus.textContent = "Setting up trusted HTTPS…";
   localHttpsQuickStatus.dataset.userFeedback = "pending";
   localHttpsQuickStatus.className = "local-https-quick-status tls-needs-setup";
+  localHttpsStatusEl.textContent = "Setting up trusted HTTPS…";
+  localHttpsStatusEl.className = "tls-status tls-needs-setup";
   showNotice("Setting up trusted HTTPS…", "info");
+
+  let setupError: unknown = null;
+
   try {
     const status = await invoke<LocalHttpsStatus>("setup_local_https_certificate");
     selectedTlsCertificate = status.certificatePath || "";
     selectedTlsKey = status.privateKeyPath || "";
     selectedTlsCa = status.caCertificatePath || "";
-    renderLocalHttpsStatus(status);
-    const trustedReady = status.mode === "https" && status.configured && status.trusted;
-    if (trustedReady) {
-      localHttpsAdvancedStatusEl.textContent = "✓ Trusted HTTPS is ready on this Mac.";
-      localHttpsAdvancedStatusEl.className = "local-https-advanced-status tls-good";
-      localHttpsQuickStatus.textContent = "";
-      localHttpsQuickStatus.dataset.userFeedback = "ready";
-      localHttpsQuickStatus.className = "local-https-quick-status hidden";
-      showNotice("Trusted HTTPS is configured. Its status is available under Advanced.", "good");
-    } else {
-      localHttpsQuickPrompt.classList.remove("hidden");
-      localHttpsQuickStatus.textContent = `HTTPS setup needs attention: ${status.message || "The certificate and trust status could not be verified."}`;
-      localHttpsQuickStatus.dataset.userFeedback = "warning";
-      localHttpsQuickStatus.className = "local-https-quick-status tls-warning";
-      showNotice(`HTTPS setup needs attention: ${status.message || "The certificate and trust status could not be verified."}`, "warning");
-    }
   } catch (error) {
-    localHttpsQuickPrompt.classList.remove("hidden");
-    localHttpsQuickStatus.textContent = `HTTPS setup failed. ${String(error)}. You can retry from this page.`;
-    localHttpsQuickStatus.dataset.userFeedback = "error";
-    localHttpsQuickStatus.className = "local-https-quick-status tls-error";
-    showNotice(`HTTPS setup needs attention: ${String(error)}`, "error");
-    await refreshLocalHttpsStatus();
+    setupError = error;
   } finally {
     triggerButton.removeAttribute("aria-busy");
+    localHttpsSetupInProgress = false;
     setupLocalHttpsButton.disabled = backend.running;
     localHttpsQuickSetupButton.disabled = backend.running;
-    await refreshLocalHttpsStatus();
-    if (currentLocalHttps && currentLocalHttps.mode === "https" && currentLocalHttps.configured && currentLocalHttps.trusted) {
-      localHttpsAdvancedStatusEl.textContent = "✓ Trusted HTTPS is ready on this Mac.";
-      localHttpsAdvancedStatusEl.className = "local-https-advanced-status tls-good";
-      localHttpsQuickStatus.textContent = "";
-      localHttpsQuickStatus.dataset.userFeedback = "ready";
-      localHttpsQuickStatus.className = "local-https-quick-status hidden";
+
+    // One fresh lookup determines the final visible state.
+    const verifiedStatus = await refreshLocalHttpsStatus(false, true);
+
+    if (
+      verifiedStatus &&
+      verifiedStatus.mode === "https" &&
+      verifiedStatus.configured &&
+      verifiedStatus.trusted
+    ) {
+      showNotice(
+        "Trusted HTTPS is configured. Its status is available under Advanced.",
+        "good"
+      );
+      // The celebration confirms a successful Local Server setup action.
+      // It is separate from the optional spotlight guide preference.
+      if (triggerButton === localHttpsQuickSetupButton) {
+        showHttpsSetupSuccess();
+      }
+    } else if (!verifiedStatus) {
+      const detail = setupError ? ` Setup operation reported: ${String(setupError)}` : "";
+      showNotice(
+        `HTTPS setup finished, but its current status could not be verified. The setup button remains available to retry.${detail}`,
+        "warning"
+      );
+    } else if (setupError) {
+      showNotice(`HTTPS setup failed: ${String(setupError)}`, "error");
+    } else {
+      showNotice(
+        `HTTPS setup needs attention: ${verifiedStatus.message || "The certificate and trust status are not ready."}`,
+        "warning"
+      );
     }
   }
 }
@@ -1717,6 +2267,7 @@ function renderBackendStatus() {
   startButton.classList.toggle("server-running", backend.running);
   startButton.classList.toggle("is-idle-start", startupReady && !busy && !backend.running && serverOperation === null && !conflictingBackendPresent);
   startButton.parentElement?.classList.toggle("is-running", backend.running);
+  syncModelSwitchControl();
   renderBrowserChoiceRow();
 // Browser selection and Open RDT Voice appear together only after the server is running.
   renderFooterServerStatusDot();
@@ -1736,8 +2287,12 @@ function renderBackendStatus() {
   renderConnectionStatus();
   localAddress.textContent = backend.localUrl || "Not running";
   logPath.textContent = backend.logPath || "Log file is created when the server starts.";
-  if (backend.running && backend.model) modelSelect.value = backend.model;
+
   setBusy(busy);
+  syncModelCacheSelectionLocks();
+
+  scheduleVisualSetupGuideUpdate();
+
 }
 
 async function refreshOrphanedBackendStatus(showErrors = false) {
@@ -1958,26 +2513,85 @@ async function runAction(action: () => Promise<unknown>, successMessage?: string
       showNotice(detail, "error");
     }
   }
-  finally { await refreshBackendStatus(); await refreshOrphanedBackendStatus(); setBusy(false); renderBackendStatus(); }
+  finally {
+    await refreshBackendStatus();
+    await refreshOrphanedBackendStatus();
+    setBusy(false);
+    renderBackendStatus();
+  }
 }
 
+
+async function startSelectedBackendModel() {
+  const selectedCache = await invoke<ModelStorageStatus>("get_model_storage_status", { model: modelSelect.value });
+  modelStorageStatus = selectedCache;
+  renderModelStorageSummary(selectedCache);
+  renderModelDownloadUI();
+  if (!selectedCache.modelCached) {
+    showNotice("This model isn't downloaded yet. Select Download model above to continue, then try Start Server again.", "warning");
+    modelDownloadButton.classList.remove("needs-download-attention");
+    void modelDownloadButton.offsetWidth;
+    modelDownloadButton.classList.add("needs-download-attention");
+    window.setTimeout(() => modelDownloadButton.classList.remove("needs-download-attention"), 4200);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    modelDownloadButton.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+    modelDownloadButton.focus({ preventScroll: true });
+    return;
+  }
+  await runAction(async () => {
+    backend = await invoke<BackendStatus>("start_backend", { model: modelSelect.value, preferredPort: Number(preferredPortInput.value) || 8888 });
+    renderBackendStatus();
+    await refreshConnectionStatus();
+    if (browserPreflightPassed()) {
+      showNotice(`RDT Connect started on ${backend.localUrl}. Server and authentication are verified; RDT Voice is ready to open.`, "good");
+    } else {
+      showNotice(`The server started, but Open RDT Voice is disabled: ${browserPreflightFailure()}`, "warning");
+    }
+    await refreshRemoteStatus();
+  });
+}
 
 startButton.addEventListener("click", async () => {
   if (busy) return;
   const wasRunning = backend.running;
+  const requestedModel = modelSelect.value;
+  const wantsSwitch = wasRunning && !!backend.model && requestedModel !== backend.model;
+  if (wantsSwitch) {
+    if (modelDownloadStatus.active || modelStorageBusy) {
+      showNotice("Finish or cancel model downloads and storage changes before switching models.", "warning");
+      return;
+    }
+    setBusy(true);
+    try {
+      const selectedCache = await invoke<ModelStorageStatus>("get_model_storage_status", { model: requestedModel });
+      modelStorageStatus = selectedCache;
+      renderModelStorageSummary(selectedCache);
+      if (!selectedCache.modelCached) {
+        showNotice("The selected model is not downloaded yet. The current server was left running; download that model, then try Switch Model again.", "warning");
+        setBusy(false);
+        modelDownloadButton.focus({ preventScroll: true });
+        return;
+      }
+    } catch (error) {
+      showNotice(`Could not verify the selected model cache; the current server was left running. ${String(error)}`, "error");
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    modelSwitchTargetAfterStop = requestedModel;
+  }
   serverOperation = wasRunning ? "stopping" : "starting";
   startButton.classList.add(wasRunning ? "is-stopping" : "is-starting");
   startButton.setAttribute("aria-busy", "true");
   startProgress.classList.remove("hidden");
   startProgress.setAttribute("aria-busy", "true");
-  startProgressText.textContent = wasRunning ? "Stopping your local server…" : "Starting your local server…";
+  startProgressText.textContent = wasRunning ? (wantsSwitch ? "Stopping before switching models…" : "Stopping your local server…") : "Starting your local server…";
   startProgressDescription.textContent = wasRunning
     ? "Closing the managed process and checking that its port is released."
     : "Starting the backend and checking that the local endpoint responds.";
-  showNotice(wasRunning ? "Closing the local server safely…" : "Preparing your local server…", "info");
+  showNotice(wasRunning ? (wantsSwitch ? "Stopping the current server before switching models…" : "Closing the local server safely…") : "Preparing your local server…", "info");
   renderBackendStatus();
   renderBrowserChoiceRow();
-  // Yield two frames so the spinner/progress animation paints before native startup work.
   await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   try {
     if (wasRunning) {
@@ -1988,35 +2602,34 @@ startButton.addEventListener("click", async () => {
         await refreshRemoteStatus();
         showNotice("Local server stopped. Its managed process cleanup was verified; unrelated services were left alone.", "warning");
       });
-    } else {
-      const selectedCache = await invoke<ModelStorageStatus>("get_model_storage_status", { model: modelSelect.value });
-      modelStorageStatus = selectedCache;
-      renderModelStorageSummary(selectedCache);
-      renderModelDownloadUI();
-      if (!selectedCache.modelCached) {
-        showNotice("This model isn't downloaded yet. Select Download model above to continue, then try Start Server again.", "warning");
-        modelDownloadButton.classList.remove("needs-download-attention");
-        void modelDownloadButton.offsetWidth;
-        modelDownloadButton.classList.add("needs-download-attention");
-        window.setTimeout(() => modelDownloadButton.classList.remove("needs-download-attention"), 4200);
-        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        modelDownloadButton.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
-        modelDownloadButton.focus({ preventScroll: true });
-        return;
-      }
-      await runAction(async () => {
-        backend = await invoke<BackendStatus>("start_backend", { model: modelSelect.value, preferredPort: Number(preferredPortInput.value) || 8888 });
-        renderBackendStatus();
-        await refreshConnectionStatus();
-        if (browserPreflightPassed()) {
-          showNotice(`RDT Connect started on ${backend.localUrl}. Server and authentication are verified; RDT Voice is ready to open.`, "good");
-        } else {
-          showNotice(`The server started, but Open RDT Voice is disabled: ${browserPreflightFailure()}`, "warning");
+      if (modelSwitchTargetAfterStop !== null) {
+        const targetModel = modelSwitchTargetAfterStop;
+        modelSwitchTargetAfterStop = null;
+        if (backend.running) {
+          showNotice("The current server could not be confirmed stopped. The replacement model was not started.", "error");
+          return;
         }
-        await refreshRemoteStatus();
-      });
+        if (conflictingBackendPresent || modelDownloadStatus.active || modelStorageBusy) {
+          showNotice("The server stopped, but another backend conflict or active model operation prevents switching. The replacement model was not started.", "warning");
+          return;
+        }
+        modelSelect.value = targetModel;
+        modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        serverOperation = "starting";
+        startButton.classList.remove("is-stopping");
+        startButton.classList.add("is-starting");
+        startProgressText.textContent = "Starting the selected model…";
+        startProgressDescription.textContent = "The previous server is confirmed stopped. Starting the replacement model now.";
+        showNotice("The previous server is stopped. Starting the selected model…", "info");
+        renderBackendStatus();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        await startSelectedBackendModel();
+      }
+    } else {
+      await startSelectedBackendModel();
     }
   } finally {
+    modelSwitchTargetAfterStop = null;
     serverOperation = null;
     startButton.classList.remove("is-starting", "is-stopping");
     startButton.removeAttribute("aria-busy");
@@ -2046,6 +2659,7 @@ function updateMessage(key: string, params: Record<string, string> = {}): string
 }
 function setApplicationUpdateMessage(key: string, params: Record<string, string> = {}): void {
   applicationUpdateMessage.textContent = updateMessage(key, params);
+  applicationUpdateMessage.classList.toggle("is-up-to-date", key === "updater.upToDate");
 }
 function updateErrorDetail(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
@@ -2091,6 +2705,8 @@ function checkForApplicationUpdates(): Promise<void> {
       const detail = updateErrorDetail(error);
       if (isMissingDevelopmentFeed(detail)) {
         setApplicationUpdateMessage("updater.feedMissing");
+      } else if (/could not fetch a valid release json/i.test(detail)) {
+        setApplicationUpdateMessage("updater.checkFailed", { ERROR: "GitHub did not return a valid update manifest. This installed build has not changed." });
       } else {
         setApplicationUpdateMessage("updater.checkFailed", { ERROR: detail });
       }
@@ -2158,12 +2774,11 @@ function setApplicationUpdatePanelOpen(open: boolean) {
   if (open) applicationUpdatePanel.removeAttribute("inert");
   else applicationUpdatePanel.setAttribute("inert", "");
   aboutCheckUpdatesButton.setAttribute("aria-expanded", String(open));
-  headerCheckUpdatesButton.setAttribute("aria-expanded", String(open));
   aboutCheckUpdatesButton.classList.toggle("is-expanded", open);
 }
 function showApplicationUpdates(navigateToSettings: boolean) {
   if (navigateToSettings) {
-    versionDetails && (versionDetails.open = false);
+    if (versionDetails) versionDetails.open = false;
     const settingsTab = viewTabs.find((tab) => tab.dataset.viewTarget === "settings");
     if (settingsTab) settingsTab.click();
     else setAppView("settings");
@@ -2171,7 +2786,15 @@ function showApplicationUpdates(navigateToSettings: boolean) {
   setApplicationUpdatePanelOpen(true);
   void checkForApplicationUpdates();
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  window.requestAnimationFrame(() => applicationUpdatePanel.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" }));
+  const destination = navigateToSettings
+    ? applicationUpdatePanel.closest<HTMLElement>(".about-card")
+    : applicationUpdatePanel;
+  window.requestAnimationFrame(() => {
+    (destination || applicationUpdatePanel).scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: navigateToSettings ? "center" : "nearest",
+    });
+  });
 }
 aboutCheckUpdatesButton.addEventListener("click", () => {
   const expanded = applicationUpdatePanel.classList.contains("is-open");
@@ -2331,7 +2954,7 @@ void (async () => {
   catch { keepInMenuBarInput.checked = true; }
   await refreshOrphanedBackendStatus();
   await refreshBackendStatus();
-  await refreshLocalHttpsStatus();
+  await refreshLocalHttpsStatus(false, false, true);
   await refreshModelStorageStatus();
   await refreshModelDownloadStatus();
   void refreshModelCacheBadges();
@@ -2343,3 +2966,14 @@ void (async () => {
 setInterval(() => {
   if (!busy) void refreshBackendStatus().then(() => { if (!backend.running) void refreshOrphanedBackendStatus(); });
 }, 5000);
+window.addEventListener("focus", () => {
+  if (!busy) void refreshBackendStatus().then(() => { if (!backend.running) void refreshOrphanedBackendStatus(); });
+  void refreshLocalHttpsStatus();
+});
+
+// Recheck while visible so external certificate or Keychain changes are picked up.
+setInterval(() => {
+  if (!busy && document.visibilityState === "visible") {
+    void refreshLocalHttpsStatus();
+  }
+}, 15_000);

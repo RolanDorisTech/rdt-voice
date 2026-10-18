@@ -18,13 +18,14 @@ use std::sync::{
 };
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri::{
     menu::{IsMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, State,
 };
 
-const APP_VERSION_LABEL: &str = "v0.2-DEV.9";
+const APP_VERSION_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const BUILD_ID: &str = env!("RDT_BUILD_ID");
 
 #[derive(Serialize)]
@@ -1769,22 +1770,42 @@ fn get_local_https_status(state: State<'_, BackendState>) -> Result<LocalHttpsSt
 }
 
 #[tauri::command]
-async fn pick_tls_file(app: AppHandle, kind: String) -> Result<Option<String>, String> {
+async fn pick_tls_file(
+    app: AppHandle,
+    state: State<'_, BackendState>,
+    kind: String,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let (title, label, extensions): (&str, &str, &[&str]) = match kind.as_str() {
+    let locale = read_app_language(&state);
+    let (title, label, extensions): (String, String, &[&str]) = match kind.as_str() {
         "certificate" => (
-            "Choose RDT Voice server certificate",
-            "Certificate files",
+            tray_text(
+                &locale,
+                "msg.choose_rdt_voice_server_certificate.047c3ba8",
+                "Choose RDT Voice server certificate",
+                &[],
+            ),
+            tray_text(&locale, "msg.certificate_files.169b49a8", "Certificate files", &[]),
             &["pem", "crt", "cer"],
         ),
         "private-key" => (
-            "Choose matching private key",
-            "Private-key files",
+            tray_text(
+                &locale,
+                "msg.choose_matching_private_key.ec49aa09",
+                "Choose matching private key",
+                &[],
+            ),
+            tray_text(&locale, "msg.private_key_files.611887c1", "Private-key files", &[]),
             &["pem", "key"],
         ),
         "ca" => (
-            "Choose self-signed root CA certificate",
-            "CA certificate files",
+            tray_text(
+                &locale,
+                "msg.choose_self_signed_root_ca_certificate.95a15bb1",
+                "Choose self-signed root CA certificate",
+                &[],
+            ),
+            tray_text(&locale, "msg.ca_certificate_files.0154de22", "CA certificate files", &[]),
             &["pem", "crt", "cer"],
         ),
         _ => return Err("Unknown certificate file type.".into()),
@@ -1813,6 +1834,47 @@ fn setup_local_https_certificate(
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
     }
+
+    // Reuse valid material when setup is repeated. This avoids generating and
+    // trusting a new local CA on every click, including after a successful setup.
+    let existing_config = load_local_tls_config(&state)?;
+    let existing_status = local_https_status_from_config(&existing_config);
+    if existing_status.configured && existing_status.trusted {
+        let mut reusable_config = existing_config;
+        reusable_config.mode = "https".into();
+        save_local_tls_config(&state, &reusable_config)?;
+        let status = local_https_status_from_config(&reusable_config);
+        if status.mode.eq_ignore_ascii_case("https") && status.configured && status.trusted {
+            return Ok(status);
+        }
+        return Err(format!(
+            "The existing local certificate could not be confirmed after selecting HTTPS: {}",
+            status.message
+        ));
+    }
+
+    // If a prior generated certificate is valid but Keychain trust did not
+    // complete, retry trust against that same CA instead of issuing another one.
+    if existing_status.configured && existing_config.generated {
+        if let Some(ca_path) = existing_config.ca_certificate_path.clone() {
+            let mut retry_config = existing_config;
+            retry_config.mode = "https".into();
+            trust_ca_file(&state, &mut retry_config, Path::new(&ca_path)).map_err(|error| {
+                format!(
+                    "RDT Connect kept the existing local certificate files but could not finish Keychain trust. Resolve the Keychain issue and retry setup. Detail: {error}"
+                )
+            })?;
+            let status = local_https_status_from_config(&retry_config);
+            if status.mode.eq_ignore_ascii_case("https") && status.configured && status.trusted {
+                return Ok(status);
+            }
+            return Err(format!(
+                "The existing local certificate and trust status could not be verified: {}",
+                status.message
+            ));
+        }
+    }
+
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -2308,8 +2370,19 @@ fn start_model_download(
 ) -> Result<ModelDownloadStatus, String> {
     validate_model(&model)?;
     let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
-    if state.status().running {
-        return Err("Stop the local server before downloading a model so its cache remains untouched during inference.".into());
+    let server_status = state.status();
+    if server_status.running {
+        let Some(active_model) = server_status.model.as_deref() else {
+            return Err(
+                "Cannot safely download a model while the running server's active model is unknown."
+                    .into(),
+            );
+        };
+        if active_model == model.as_str() {
+            return Err(
+                "Cannot download the active model cache while the local server is running.".into(),
+            );
+        }
     }
     {
         let current = state
@@ -2694,10 +2767,34 @@ fn cancel_model_download(
 #[tauri::command]
 fn delete_rdt_model_caches(
     state: State<'_, BackendState>,
+    models: Vec<String>,
 ) -> Result<ModelCacheDeleteResult, String> {
     let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
-    if state.status().running {
-        return Err("Stop the local server before deleting cached models.".into());
+    let server_status = state.status();
+    if server_status.running && server_status.model.as_deref().is_none() {
+        return Err(
+            "Cannot safely delete model caches while the running server's active model is unknown."
+                .into(),
+        );
+    }
+    if server_status.running
+        && models
+            .iter()
+            .any(|model| server_status.model.as_deref() == Some(model.as_str()))
+    {
+        return Err(
+            "Cannot delete the active model cache while the local server is running.".into(),
+        );
+    }
+    if state
+        .model_download_status
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .active
+    {
+        return Err(
+            "Finish or cancel the active model download before deleting cached models.".into(),
+        );
     }
     if state
         .model_download_status
@@ -2710,6 +2807,16 @@ fn delete_rdt_model_caches(
                 .into(),
         );
     }
+    if models.is_empty() {
+        return Err("Select at least one downloaded RDT Connect model to delete.".into());
+    }
+    if models
+        .iter()
+        .any(|model| !MODEL_IDS.contains(&model.as_str()))
+    {
+        return Err("The deletion request included an unsupported model ID.".into());
+    }
+    let selected_models: Vec<&str> = models.iter().map(String::as_str).collect();
     let roots = load_model_storage_locations(&state)?;
     const MODEL_IDS: [&str; 5] = [
         "mlx-community/whisper-large-v3-turbo",
@@ -2732,7 +2839,10 @@ fn delete_rdt_model_caches(
         if !hub.is_dir() {
             continue;
         }
-        for model in MODEL_IDS {
+        for model in MODEL_IDS
+            .into_iter()
+            .filter(|model| selected_models.contains(model))
+        {
             let key = format!("models--{}", model.replace('/', "--"));
             let repo = hub.join(key);
             let metadata = match fs::symlink_metadata(&repo) {
@@ -3118,12 +3228,22 @@ fn set_model_storage_locations(
 }
 
 #[tauri::command]
-async fn pick_model_storage_directory(app: AppHandle) -> Result<Option<String>, String> {
+async fn pick_model_storage_directory(
+    app: AppHandle,
+    state: State<'_, BackendState>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
+    let locale = read_app_language(&state);
+    let title = tray_text(
+        &locale,
+        "msg.choose_a_hugging_face_model_cache_home.f18816af",
+        "Choose a Hugging Face model-cache home",
+        &[],
+    );
     let picked = app
         .dialog()
         .file()
-        .set_title("Choose a Hugging Face model-cache home")
+        .set_title(title)
         .blocking_pick_folder();
     match picked {
         Some(folder) => {
@@ -4843,7 +4963,6 @@ fn tray_voice_preflight_passes(state: &BackendState, status: &BackendStatus) -> 
         .unwrap_or(false)
 }
 
-
 fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<tauri::Wry>> {
     let status = state.status();
     let locale = read_app_language(state);
@@ -4928,14 +5047,13 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
     // Small, understated native macOS status dot. The status item's text remains the accessible label.
     // While running, this green status row is the single tray-menu Stop action.
     // The main-window Stop Server button remains unchanged and uses the same cleanup routine.
-        let status_item = MenuItem::with_id(
+    let status_item = MenuItem::with_id(
         app,
         "server-status",
         status_text,
         status.running && !starting,
         None::<&str>,
     )?;
-
 
     let voice_item = if tray_voice_preflight_passes(state, &status) {
         Some(MenuItem::with_id(
@@ -5006,14 +5124,30 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
 }
 
 fn refresh_tray_menu(app: &AppHandle) {
-    let Some(state) = app.try_state::<BackendState>() else {
-        return;
-    };
-    let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") else {
-        return;
-    };
-    if let Ok(menu) = build_tray_menu(app, &state) {
-        let _ = tray.set_menu(Some(menu));
+    let refresh_app = app.clone();
+
+    if let Err(error) = app.run_on_main_thread(move || {
+        let Some(state) = refresh_app.try_state::<BackendState>() else {
+            eprintln!("[RDT Connect] Tray refresh skipped: backend state unavailable");
+            return;
+        };
+        let Some(tray) = refresh_app.tray_by_id("rdt-connect-menu-bar") else {
+            eprintln!("[RDT Connect] Tray refresh skipped: menu-bar tray not found");
+            return;
+        };
+
+        match build_tray_menu(&refresh_app, &state) {
+            Ok(menu) => {
+                if let Err(error) = tray.set_menu(Some(menu)) {
+                    eprintln!("[RDT Connect] Could not apply refreshed tray menu: {error}");
+                }
+            }
+            Err(error) => {
+                eprintln!("[RDT Connect] Could not rebuild tray menu: {error}");
+            }
+        }
+    }) {
+        eprintln!("[RDT Connect] Could not schedule tray refresh: {error}");
     }
 }
 
@@ -5037,6 +5171,17 @@ fn restore_dock_icon() {
     unsafe {
         NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image));
     }
+}
+
+fn is_rdt_connect_open_url(url: &url::Url) -> bool {
+    url.scheme() == "rdtconnect"
+        && url.host_str() == Some("open")
+        && matches!(url.path(), "" | "/")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -5322,17 +5467,40 @@ fn main() {
     };
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // Keep single-instance first so duplicate URL launches are forwarded.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             eprintln!("[RDT Connect] Duplicate launch received; activating existing instance.");
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let resources = resolve_resource_dir(app.handle()).map_err(std::io::Error::other)?;
             let state = BackendState::new(resources).map_err(std::io::Error::other)?;
             app.manage(state);
+
+            // Handle the custom URL on both cold launch and later clicks.
+            let initial_deep_links = app
+                .deep_link()
+                .get_current()
+                .map_err(std::io::Error::other)?;
+
+            let deep_link_app = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                if event.urls().iter().any(is_rdt_connect_open_url) {
+                    show_main_window(&deep_link_app);
+                }
+            });
+
+            if initial_deep_links
+                .as_ref()
+                .is_some_and(|urls| urls.iter().any(is_rdt_connect_open_url))
+            {
+                show_main_window(app.handle());
+            }
+
             let state = app.state::<BackendState>();
             let menu = build_tray_menu(app.handle(), &state).map_err(std::io::Error::other)?;
             // Bright-white transparent template mark; full-color branding remains the Dock icon.
@@ -5350,6 +5518,8 @@ fn main() {
                                 eprintln!("[RDT Connect] Menu-bar Stop could not confirm cleanup: {error}");
                                 show_main_window(app);
                                 let _ = app.emit("rdt-connect-stop-failed", error);
+                            } else {
+                                let _ = app.emit("rdt-backend-state-changed", "stopped");
                             }
                         }
                         refresh_tray_menu(app);
@@ -5382,6 +5552,8 @@ fn main() {
                                     if let Err(error) = start_backend(start_app.clone(), choice.model, choice.preferred_port).await {
                                         show_main_window(&start_app);
                                         let _ = start_app.emit("rdt-tray-start-failed", error);
+                                    } else {
+                                        let _ = start_app.emit("rdt-backend-state-changed", "running");
                                     }
                                 }
                                 Ok((choice, Ok(_))) => {

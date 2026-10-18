@@ -82,12 +82,12 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://rolandoristech.github.io/rdt-voice/download.html) | `0.2.0-dev.10` | `0D50` | 371,715,568 bytes |
+| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.10/RDT_Connect_0.2.0-dev.10_aarch64.dmg) | `0.2.0-dev.10` | `0D50` | 371,715,568 bytes |
 | Windows | Installer (.exe) | Coming soon | — | — |
 
 **SHA-256 (Build 0D50):** `732c35f3bbc26c3bfd6904ea3070413573af7d62f9095e07cd5af39efcd6bc0b`
 
-The download link automatically resolves to the newest published RDT Connect release with one valid uploaded Apple-silicon DMG. The version, build, and file size above are maintained manually and must be updated for each release.
+The Download (.dmg) link opens the published DMG directly, without the intermediate website download page or its second Download button. The browser manages the download and its progress. Update the link and release details together for each new version.
 
 
 RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.

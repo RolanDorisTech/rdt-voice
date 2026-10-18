@@ -79,13 +79,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const downloadLink = document.getElementById("download-link");
     const releaseDetails = document.getElementById("release-details");
     const retryButton = document.getElementById("retry-button");
+    const cancelButton = document.getElementById("cancel-download-button");
     const progress = document.getElementById("download-progress");
     const progressFill = document.getElementById("download-progress-fill");
     const downloadHelp = document.getElementById("download-help");
-    if (!status || !downloadLink || !releaseDetails || !retryButton || !progress || !progressFill || !downloadHelp) return;
+    if (!status || !downloadLink || !releaseDetails || !retryButton || !cancelButton || !progress || !progressFill || !downloadHelp) return;
 
     let activeController = null;
     let timerId = null;
+    let activeDownloadController = null;
+    let activeDownloadReader = null;
+    let cancelRequested = false;
 
     function showFailure(message) {
       status.textContent = message ||
@@ -163,6 +167,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     async function downloadWithProgress() {
       let writable = null;
       let reader = null;
+
       try {
         status.textContent = "Choose where to save the installer…";
         const fileHandle = await window.showSaveFilePicker({
@@ -173,11 +178,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           }]
         });
 
+        const controller = new AbortController();
+        activeDownloadController = controller;
+        cancelRequested = false;
+        cancelButton.hidden = false;
+        cancelButton.disabled = false;
+        cancelButton.textContent = "Cancel download";
+
         status.textContent = "Connecting to the download stream…";
         const response = await fetch(downloadLink.dataset.proxyUrl, {
           method: "GET",
           headers: { Accept: "application/octet-stream" },
-          cache: "no-store"
+          cache: "no-store",
+          signal: controller.signal
         });
         if (!response.ok || !response.body) {
           throw new Error(`Download stream returned HTTP ${response.status}`);
@@ -192,49 +205,91 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         writable = await fileHandle.createWritable();
         progressFill.style.width = "0%";
         progress.setAttribute("aria-valuenow", "0");
-        progress.setAttribute("aria-valuetext", total > 0 ? "0% downloaded" : "Receiving data");
+        progress.setAttribute("aria-valuetext", "Download starting");
         progress.hidden = false;
         downloadHelp.hidden = true;
 
         let downloaded = 0;
         reader = response.body.getReader();
+        activeDownloadReader = reader;
+
         while (true) {
           const part = await reader.read();
+          if (cancelRequested) {
+            throw new DOMException("Download canceled", "AbortError");
+          }
           if (part.done) break;
+
           await writable.write(part.value);
+          if (cancelRequested) {
+            throw new DOMException("Download canceled", "AbortError");
+          }
           downloaded += part.value.byteLength;
           updateDownloadProgress(downloaded, total);
         }
 
+        if (cancelRequested) {
+          throw new DOMException("Download canceled", "AbortError");
+        }
+
         await writable.close();
         writable = null;
+
         progressFill.style.width = "100%";
         progress.setAttribute("aria-valuenow", "100");
-        progress.setAttribute("aria-valuetext", `Download complete — ${formatFileSize(downloaded)} written`);
+        progress.setAttribute("aria-valuetext",
+          `Download complete — ${formatFileSize(downloaded)} written`);
         status.textContent = `Download complete — ${formatFileSize(downloaded)} saved.`;
+        progress.hidden = false;
       } catch (error) {
-        if (writable) {
-          try { await writable.abort(); } catch {}
-        }
+        const wasCanceled = cancelRequested ||
+          (error && error.name === "AbortError");
+
         if (reader) {
           try { await reader.cancel(); } catch {}
         }
-        progress.hidden = true;
-
-        if (error && error.name === "AbortError") {
-          status.textContent = "Download canceled.";
-          return;
+        if (writable) {
+          try { await writable.abort(); } catch {}
         }
 
-        console.error("[RDT Connect download progress]", error);
-        downloadLink.dataset.forceNative = "true";
-        downloadLink.textContent = "Download directly (browser progress)";
-        downloadLink.hidden = false;
-        downloadHelp.hidden = false;
-        status.textContent =
-          "In-page streaming is unavailable right now. Click the link below to use the browser-managed download instead.";
+        progress.hidden = true;
+        progressFill.style.width = "0%";
+        progress.setAttribute("aria-valuenow", "0");
+
+        if (wasCanceled) {
+          downloadHelp.hidden = true;
+          status.textContent = "Download canceled. The incomplete file was discarded.";
+        } else {
+          console.error("[RDT Connect download progress]", error);
+          downloadLink.dataset.forceNative = "true";
+          downloadLink.textContent = "Download directly (browser progress)";
+          downloadLink.hidden = false;
+          downloadHelp.hidden = false;
+          status.textContent =
+            "In-page streaming is unavailable right now. Use the browser-managed download instead.";
+        }
+      } finally {
+        activeDownloadController = null;
+        activeDownloadReader = null;
+        cancelRequested = false;
+        cancelButton.hidden = true;
+        cancelButton.disabled = false;
+        cancelButton.textContent = "Cancel download";
       }
     }
+
+    cancelButton.addEventListener("click", () => {
+      if (!activeDownloadController) return;
+      cancelRequested = true;
+      cancelButton.disabled = true;
+      cancelButton.textContent = "Canceling…";
+      status.textContent = "Canceling download…";
+
+      activeDownloadController.abort();
+      if (activeDownloadReader) {
+        void activeDownloadReader.cancel().catch(() => {});
+      }
+    });
 
     downloadLink.addEventListener("click", event => {
       if (typeof window.showSaveFilePicker !== "function" ||

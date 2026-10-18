@@ -98,7 +98,7 @@ try:
                   setTimeout(() => {
                     controller.enqueue(new Uint8Array([5, 6, 7, 8]));
                     controller.close();
-                  }, 40);
+                  }, 350);
                 }
               }), { status: 200, headers: {
                 "Content-Length": "8",
@@ -116,7 +116,13 @@ try:
         check("link points at exact expected asset", lambda: link.get_attribute("href") == URL)
         check("version and exact human-readable size shown", lambda: "0.2.0-dev.10" in page.locator("#release-details").inner_text() and "354.5 MiB (371,715,568 bytes)" in page.locator("#release-details").inner_text())
         check("retry hidden after success", lambda: page.locator("#retry-button").is_hidden())
+        cancel_button = page.locator("#cancel-download-button")
         link.click()
+        page.wait_for_function(
+            "!document.querySelector('#cancel-download-button').hidden",
+            timeout=3000)
+        check("cancel button is visible during active download",
+              lambda: cancel_button.is_visible())
         try:
             page.wait_for_function("document.querySelector('#status').innerText.includes('Download complete')", timeout=10000)
         except Exception:
@@ -130,7 +136,62 @@ try:
         check("progress fill reaches full width", lambda: page.locator("#download-progress-fill").evaluate("el => el.style.width") == "100%")
         check("progress describes bytes rather than animation", lambda: "written" in page.locator("#download-progress").get_attribute("aria-valuetext"))
         check("progress help stays hidden during measured download", lambda: page.locator("#download-help").is_hidden())
+        check("cancel button hides after successful completion", lambda: cancel_button.is_hidden())
         check("page remains usable after handoff", lambda: page.url == "about:blank")
+
+        # Cancellation path: hold the response stream open, cancel it, and
+        # verify the partial writer is aborted instead of reporting success.
+        page3 = browser.new_page()
+        page3.route(
+            "https://api.github.com/repos/RolanDorisTech/rdt-voice/releases?per_page=100",
+            lambda route: route.fulfill(
+                status=200, content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"},
+                body=json.dumps([release])))
+        page3.set_content(html)
+        page3.evaluate("""() => {
+          window.__abortedPartialFile = false;
+          window.showSaveFilePicker = async () => ({
+            createWritable: async () => ({
+              write: async () => {},
+              close: async () => {},
+              abort: async () => { window.__abortedPartialFile = true; }
+            })
+          });
+          const nativeFetch = window.fetch.bind(window);
+          window.fetch = async (input, init) => {
+            const href = typeof input === "string" ? input : input.url;
+            if (href.startsWith("https://rdt-connect-download-proxy.rolandoristech.workers.dev/download/")) {
+              return new Response(new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+                }
+              }), {status: 200, headers: {
+                "Content-Length": "1000",
+                "Content-Type": "application/octet-stream"
+              }});
+            }
+            return nativeFetch(input, init);
+          };
+        }""")
+        page3.add_script_tag(path=str(ROOT / "download.js"))
+        page3.wait_for_function(
+            "document.querySelector('#download-link').hidden === false")
+        page3.locator("#download-link").click()
+        page3.wait_for_function(
+            "!document.querySelector('#cancel-download-button').hidden")
+        page3.locator("#cancel-download-button").click()
+        page3.wait_for_function(
+            "document.querySelector('#status').innerText.includes('Download canceled')",
+            timeout=5000)
+        check("cancel stops active download with explicit status",
+              lambda: "Download canceled" in page3.locator("#status").inner_text())
+        check("partial file writer is aborted",
+              lambda: page3.evaluate("window.__abortedPartialFile") is True)
+        check("progress is hidden after cancellation",
+              lambda: page3.locator("#download-progress").is_hidden())
+        check("cancel button hides after cancellation",
+              lambda: page3.locator("#cancel-download-button").is_hidden())
 
         # Failure path: use a fresh page because download.js declares module-level consts.
         page2 = browser.new_page()

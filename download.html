@@ -43,18 +43,15 @@
     :focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
     [hidden] { display: none !important; }
     #download-progress {
-      position: relative; overflow: hidden; height: .35rem; margin-top: 1rem;
+      overflow: hidden; height: .45rem; margin-top: 1rem;
       border-radius: 999px; background: #334155;
     }
-    #download-progress::before {
-      content: ""; position: absolute; top: 0; bottom: 0; width: 38%;
-      border-radius: inherit; background: #facc15; animation: handoff 1.35s ease-in-out infinite;
+    #download-progress-fill {
+      width: 0%; height: 100%; border-radius: inherit;
+      background: #facc15; transition: width .08s linear;
     }
-    @keyframes handoff { from { left: -40%; } to { left: 105%; } }
     .fallback { margin-top: 1.25rem; font-size: .95rem; }
-    @media (prefers-reduced-motion: reduce) {
-      #download-progress::before { animation: none; left: 31%; width: 38%; }
-    }
+    @media (prefers-reduced-motion: reduce) { #download-progress-fill { transition: none; } }
   </style>
 </head>
 <body>
@@ -66,11 +63,12 @@
       <p id="release-details" hidden></p>
       <div class="actions">
         <a id="download-link" class="download-button" href="https://github.com/RolanDorisTech/rdt-voice/releases" hidden>Download (.dmg)</a>
-        <button id="retry-button" class="retry-button" type="button" hidden>Try again</button>
+        <button id="cancel-download-button" class="retry-button" type="button" hidden>Cancel download</button>
+      <button id="retry-button" class="retry-button" type="button" hidden>Try again</button>
       </div>
-      <div id="download-progress" role="progressbar" aria-label="Download handoff" aria-valuetext="Waiting for a download to start" hidden></div>
+      <div id="download-progress" role="progressbar" aria-label="File download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Waiting for download" hidden><div id="download-progress-fill"></div></div>
     </section>
-    <p id="download-help" class="fallback" hidden>GitHub’s direct download does not report byte-by-byte progress to this page. Check your browser’s Downloads panel for the actual transfer progress.</p>
+    <p id="download-help" class="fallback" hidden>If in-page progress is unavailable in your browser, use its Downloads panel to see native download progress.</p>
     <p class="fallback">If the verified download link is unavailable, you can <a href="https://github.com/RolanDorisTech/rdt-voice/releases">browse the official RDT Connect release list</a>.</p>
   </main>
   <script src="./download.js" defer></script>

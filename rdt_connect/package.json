@@ -1,7 +1,7 @@
 {
   "name": "rdt-connect-desktop",
   "private": true,
-  "version": "0.2.0-dev.10.0D.52",
+  "version": "0.2.0-dev.10.0D.53",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",

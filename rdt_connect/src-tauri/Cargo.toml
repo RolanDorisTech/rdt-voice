@@ -1,6 +1,6 @@
 [package]
 name = "rdt-connect-desktop"
-version = "0.2.0-dev.10.0D.52"
+version = "0.2.0-dev.10.0D.53"
 description = "RDT Connect local transcription server companion"
 authors = ["RolanDorisTech"]
 edition = "2021"

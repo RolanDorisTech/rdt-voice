@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://raw.githubusercontent.com/RolanDorisTech/rdt-voice/main/rdt_connect/updates/dev/latest.windows.json"
+      ]
+    }
+  }
+}

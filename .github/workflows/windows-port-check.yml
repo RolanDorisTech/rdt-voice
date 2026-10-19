@@ -49,4 +49,4 @@ jobs:
 
       - name: Compile native Windows app (no installer yet)
         working-directory: rdt_connect
-        run: npx tauri build --config src-tauri/tauri.windows.conf.json --no-bundle
+        run: npx tauri build --config src-tauri/tauri.windows.check.conf.json --no-bundle

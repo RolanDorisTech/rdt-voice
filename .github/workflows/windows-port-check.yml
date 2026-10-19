@@ -19,8 +19,19 @@ permissions:
   contents: read
 
 jobs:
-  windows-x64-check:
-    runs-on: windows-latest
+  windows-architecture-check:
+    name: Windows ${{ matrix.arch }} compile check
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            rust-target: aarch64-pc-windows-msvc
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
@@ -34,6 +45,9 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Windows Rust target
+        run: rustup target add ${{ matrix.rust-target }}
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -54,12 +68,12 @@ jobs:
 
       - name: Compile native Windows app (no installer yet)
         working-directory: rdt_connect
-        run: npx tauri build --config src-tauri/tauri.windows.check.conf.json --no-bundle
+        run: npx tauri build --target ${{ matrix.rust-target }} --config src-tauri/tauri.windows.check.conf.json --no-bundle
 
       - name: Upload compile-check executable (not a release build)
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: rdt-connect-windows-x64-compile-check
-          path: rdt_connect/src-tauri/target/release/rdt-connect-desktop.exe
+          name: rdt-connect-windows-${{ matrix.arch }}-compile-check
+          path: rdt_connect/src-tauri/target/${{ matrix.rust-target }}/release/rdt-connect-desktop.exe
           if-no-files-found: error
           retention-days: 7

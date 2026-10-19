@@ -108,29 +108,61 @@ restore_config() {
 }
 trap restore_config EXIT INT TERM
 
-# Optional: skip updater archive/signature generation while the signing
-# password is unresolved. The original config is restored even on failure.
-if [[ "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" == "1" ]]; then
-  mkdir -p "$ROOT/build"
-  CONF_BACKUP="$ROOT/build/tauri.conf.restore-${MARKER}-$$.json"
-  [[ ! -e "$CONF_BACKUP" ]] || {
-    echo "ERROR: config backup path already exists: $CONF_BACKUP" >&2
-    exit 2
-  }
-  cp -p "$CONF" "$CONF_BACKUP"
-  python3 - "$CONF" <<'PY_SKIP_UPDATER'
-import json, sys
-from pathlib import Path
-p = Path(sys.argv[1])
-config = json.loads(p.read_text())
-if config.get("bundle", {}).get("createUpdaterArtifacts") is not True:
-    raise SystemExit("ERROR: expected updater-artifact setting to be true before temporary override.")
-config["bundle"]["createUpdaterArtifacts"] = False
-p.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
-print("Updater artifact generation temporarily disabled for this build.")
-PY_SKIP_UPDATER
+# RDT_ABOUT_BUNDLE_VERSION_PATCH
+# Keep macOS's CFBundleVersion numeric while showing the full RDT marker
+# in Credits.html. Changes to tauri.conf.json are temporary and restored.
+mkdir -p "$ROOT/build"
+CONF_BACKUP_CANDIDATE="$ROOT/build/tauri.conf.restore-${MARKER}-$$.json"
+if [[ -e "$CONF_BACKUP_CANDIDATE" || -L "$CONF_BACKUP_CANDIDATE" ]]; then
+  echo "ERROR: config backup path already exists: $CONF_BACKUP_CANDIDATE" >&2
+  exit 2
 fi
+cp -p "$CONF" "$CONF_BACKUP_CANDIDATE"
+CONF_BACKUP="$CONF_BACKUP_CANDIDATE"
 
+python3 - "$CONF" "$MARKER" "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" <<'PY_TEMP_BUNDLE_METADATA'
+import json
+import re
+import sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+marker = sys.argv[2]
+skip_updater = sys.argv[3]
+
+match = re.fullmatch(r"([0-9])([A-Z])([0-9]{2})", marker)
+if not match:
+    raise SystemExit(f"ERROR: cannot derive numeric macOS build version from {marker!r}")
+family = int(match.group(1))
+letter = match.group(2)
+sequence = int(match.group(3))
+bundle_version = ((family * 26 + ord(letter) - ord("D")) * 100) + sequence
+if bundle_version < 1:
+    raise SystemExit(f"ERROR: marker is outside the supported numeric build range: {marker!r}")
+if skip_updater not in {"0", "1"}:
+    raise SystemExit(f"ERROR: invalid updater artifact mode: {skip_updater!r}")
+
+config = json.loads(p.read_text())
+bundle = config.setdefault("bundle", {})
+macos = bundle.setdefault("macOS", {})
+macos["bundleVersion"] = str(bundle_version)
+
+if skip_updater == "1":
+    if bundle.get("createUpdaterArtifacts") is not True:
+        raise SystemExit(
+            "ERROR: expected bundle.createUpdaterArtifacts=true before "
+            "temporary override."
+        )
+    bundle["createUpdaterArtifacts"] = False
+
+p.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
+print(
+    f"Temporary macOS CFBundleVersion: {bundle_version} "
+    f"(source marker {marker})."
+)
+if skip_updater == "1":
+    print("Updater artifact generation temporarily disabled for this build.")
+PY_TEMP_BUNDLE_METADATA
 if [[ "$APP_ONLY" == "1" ]]; then
   if npm run tauri -- build --bundles app; then
     BUILD_STATUS=0

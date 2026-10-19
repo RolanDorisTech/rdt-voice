@@ -1,6 +1,6 @@
 # RDT Voice — Backend guide (shared remote-access and security instructions)
 
-This folder contains the optional Python backend for people who want to run Whisper on a computer they control. In this repository, `server.py` and `requirements.txt` belong in `backend/`; the frontend files (`index.html`, `worker.js`, `pcm-worklet.js`, `models.manifest.json`, and `locales/`) stay at the repository root beside the main README. The backend searches that parent folder automatically, so there is no need to duplicate the frontend bundle inside `backend/`. For r12 QR pairing, the backend serves the selected HTML and its companion assets from the same HTTPS origin so its HttpOnly browser session can authenticate API calls. The browser app can also run from GitHub Pages with EasyWhisper without installing a backend.
+This folder contains the optional Python backend for people who want to run Whisper on a computer they control. In this repository, the Apple Silicon implementation lives at `backend/apple/server.py`; `requirements.txt` and `rdt_model_lock.json` remain in `backend/`. The frontend files (`index.html`, `worker.js`, `pcm-worklet.js`, `models.manifest.json`, and `locales/`) stay at the repository root beside the main README. The relocated server searches the repository root for frontend assets in this layout, so there is no need to duplicate the frontend bundle. For a standalone download, keep `server.py`, `rdt_model_lock.json`, and `requirements.txt` together in one folder. For r12 QR pairing, the backend serves the selected HTML and its companion assets from the same HTTPS origin so its HttpOnly browser session can authenticate API calls. The browser app can also run from GitHub Pages with EasyWhisper without installing a backend.
 
 ## Current platform support
 
@@ -76,7 +76,7 @@ RDT_AUTH=on \
 RDT_TAILSCALE_AUTH=on \
 RDT_TAILSCALE_ALLOWED_USERS="your-tailscale-login@example.com" \
 WHISPER_MODEL_ID="mlx-community/whisper-large-v3-turbo" \
-python server.py --host 127.0.0.1 --port 8888
+python apple/server.py --host 127.0.0.1 --port 8888
 ```
 
 Replace the example identity with the exact login shown by Tailscale. With r12 defaults, an allowlisted Tailscale identity is an **additional restriction**, not a replacement for QR pairing or the bearer-token fallback. This is intentional: if identity-only access were allowed, revoking one browser session would not stop that same Tailscale identity from connecting again. Do not set `RDT_PAIRING_REQUIRE_SESSION=off` for the normal setup.
@@ -123,7 +123,7 @@ If startup reports `ModuleNotFoundError: No module named 'qrcode'`, the Python e
 
 ## One-time QR pairing (experimental r12)
 
-The r12 backend adds an experimental browser-pairing flow. The backend still requires authentication; pairing exchanges a short-lived, single-use code for an HttpOnly browser-session cookie. The persistent bearer-token file remains on the backend computer unless an operator deliberately copies it into a browser as the fallback. In this repository, keep the frontend runtime assets at the repository root and keep `server.py` inside `backend/`. The server locates the parent-folder HTML automatically; the worker, audio worklet, model manifest, and `locales/` folder should stay beside that HTML so they are served from the same origin. Do not maintain a second copy of the frontend inside `backend/`.
+The r12 backend adds an experimental browser-pairing flow. The backend still requires authentication; pairing exchanges a short-lived, single-use code for an HttpOnly browser-session cookie. The persistent bearer-token file remains on the backend computer unless an operator deliberately copies it into a browser as the fallback. In this repository, keep the frontend runtime assets at the repository root and keep the Apple server source at `backend/apple/server.py`. When run from this repository's `backend/apple/server.py`, the server searches the repository root for `index.html`; the worker, audio worklet, model manifest, and `locales/` folder should stay beside that HTML so they are served from the same origin. Do not maintain a second copy of the frontend inside `backend/`.
 
 ### Test from the backend computer
 

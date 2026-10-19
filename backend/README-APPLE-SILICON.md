@@ -49,13 +49,15 @@ rdt-voice/
 ├── models.manifest.json
 ├── locales/
 └── backend/
-    ├── server.py
+    ├── apple/
+    │   └── server.py
+    ├── rdt_model_lock.json
     ├── requirements.txt
     ├── README.md
     └── README-APPLE-SILICON.md
 ```
 
-The frontend files stay at the repository root; `server.py` and `requirements.txt` stay in `backend/`. The backend searches the parent folder for `index.html`, then serves the worker, worklet, model manifest, and locales from that same frontend folder. Do not move or duplicate the frontend assets into `backend/`.
+The frontend files stay at the repository root; `apple/server.py`, `rdt_model_lock.json`, and `requirements.txt` stay under `backend/`. Run commands from `backend/` using `python apple/server.py`. The relocated server searches the repository root for `index.html`, then serves the worker, worklet, model manifest, and locales from that frontend folder. Do not move or duplicate frontend assets into `backend/`.
 
 If you deliberately deploy `backend/` separately from the frontend, keep the frontend folder beside it or set `RDT_VOICE_HTML` to the absolute path of your intended HTML. Its companion assets must remain beside that HTML.
 
@@ -63,7 +65,7 @@ Do not put certificates, private keys, token files, recordings, or `.env` files 
 
 ## 4. Create an isolated Python environment and install dependencies
 
-Run these commands from `backend/`, the directory containing `server.py` and `requirements.txt`:
+Run these commands from `backend/`, the directory containing `requirements.txt`, `rdt_model_lock.json`, and the `apple/` folder:
 
 ```bash
 "$(brew --prefix python@3.12)/bin/python3.12" -m venv .venv
@@ -82,7 +84,7 @@ With the virtual environment active, start Whisper:
 ```bash
 RDT_AUTH=on \
 WHISPER_MODEL_ID="mlx-community/whisper-large-v3-turbo" \
-python server.py --host 127.0.0.1 --port 8888
+python apple/server.py --host 127.0.0.1 --port 8888
 ```
 
 Leave this Terminal window open while using the backend. The first run creates a strong random bearer token outside the repository at:
@@ -133,7 +135,7 @@ SSL_CERTFILE="$PWD/certs/localhost.pem" \
 SSL_KEYFILE="$PWD/certs/localhost-key.pem" \
 RDT_AUTH=on \
 WHISPER_MODEL_ID="mlx-community/whisper-large-v3-turbo" \
-python server.py --host 127.0.0.1 --port 8888
+python apple/server.py --host 127.0.0.1 --port 8888
 ```
 
 Set the Local Server URL in RDT Voice to `https://127.0.0.1:8888`. `mkcert -install` trusts the development certificate authority on **this Mac only**; it does not automatically make a certificate trusted on your phone. Keep `certs/` and all private keys out of GitHub.
@@ -152,7 +154,7 @@ Example (replace the placeholder with the origin you control):
 RDT_ALLOWED_ORIGINS="https://your-own-frontend.example" \
 RDT_AUTH=on \
 WHISPER_MODEL_ID="mlx-community/whisper-large-v3-turbo" \
-python server.py --host 127.0.0.1 --port 8888
+python apple/server.py --host 127.0.0.1 --port 8888
 ```
 
 This extends the allowed origins; it does not publish the server by itself. CORS is not authentication.

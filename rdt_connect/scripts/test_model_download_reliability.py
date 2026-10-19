@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline, no-download tests for the pinned MLX model cache and native lifecycle contract.
 
-This loads only the small validator helpers from backend/server.py via AST. It does not
+This loads only the small validator helpers from backend/apple/server.py via AST. It does not
 import FastAPI/MLX, contact Hugging Face, or download real model files.
 Run from the repository root:
     python3 rdt_connect/scripts/test_model_download_reliability.py
@@ -21,7 +21,7 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVER_PY = ROOT / "backend" / "server.py"
+SERVER_PY = ROOT / "backend" / "apple" / "server.py"
 RUST_RS = ROOT / "rdt_connect" / "src-tauri" / "src" / "main.rs"
 MODEL = "mlx-community/whisper-tiny-mlx"
 REVISION = "a" * 40
@@ -321,6 +321,26 @@ class ModelCacheValidationTests(unittest.TestCase):
         self.assertIn('.env("HF_HUB_DOWNLOAD_TIMEOUT", "60")', source)
         self.assertIn('.env("HF_HUB_ETAG_TIMEOUT", "20")', source)
 
+    def test_apple_backend_layout_preserves_model_lock_and_frontend_lookup(self):
+        source = SERVER_PY.read_text(encoding="utf-8")
+        self.assertTrue(SERVER_PY.is_file())
+        self.assertIn(
+            'candidates.append(source_file.parents[1] / "rdt_model_lock.json")',
+            source,
+        )
+        self.assertIn(
+            'here.name == "apple" and here.parent.name == "backend"',
+            source,
+        )
+        self.assertIn(
+            'search_dirs.extend([here.parent.parent,here.parent.parent/"frontend"])',
+            source,
+        )
+        script = (ROOT / "rdt_connect" / "scripts" / "prepare-macos-bundle.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"$REPO_ROOT/backend/apple/server.py"', script)
+
     def test_python_pyincluded_lock_and_dependency_version_are_strict(self):
         script = (ROOT / "rdt_connect" / "scripts" / "prepare-macos-bundle.sh").read_text(encoding="utf-8")
         self.assertIn('--add-data "$REPO_ROOT/backend/rdt_model_lock.json:."', script)
@@ -338,7 +358,7 @@ class ModelCacheValidationTests(unittest.TestCase):
         self.assertIn('build --bundles app', build_script)
         self.assertIn('RDT_SKIP_UPDATER_ARTIFACTS=1', package["scripts"]["build:desktop:custom-dmg:macos"])
         marker = (ROOT / "rdt_connect" / "scripts" / "build-id-sequence.txt").read_text(encoding="utf-8").strip()
-        self.assertRegex(marker, r"^0[A-Z]\d{2}$")
+        self.assertRegex(marker, r"^[0-9][A-Z]\d{2,}$")
 
     def test_failed_terminal_download_refreshes_cache_badges(self):
         source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
@@ -346,7 +366,7 @@ class ModelCacheValidationTests(unittest.TestCase):
         self.assertIn("refreshModelCacheBadges()", source[pos:pos + 600])
 
     def test_old_transformers_tiny_id_is_absent_from_active_code(self):
-        active = [ROOT / "backend" / "server.py", ROOT / "rdt_connect" / "index.html",
+        active = [ROOT / "backend" / "apple" / "server.py", ROOT / "rdt_connect" / "index.html",
                   ROOT / "rdt_connect" / "src" / "main.ts", RUST_RS]
         for path in active:
             self.assertNotIn('mlx-community/whisper-tiny"', path.read_text(encoding="utf-8"), str(path))

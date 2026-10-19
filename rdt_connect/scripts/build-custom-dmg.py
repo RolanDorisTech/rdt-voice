@@ -172,7 +172,7 @@ def main():
     verify_canonical_versions(ROOT, version)
 
     marker = MARKER_FILE.read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"0[A-Z]\d{2}", marker):
+    if not re.fullmatch(r"[0-9][A-Z]\d{2,}", marker):
         stop(f"invalid build marker: {marker!r}")
 
     bundle = ROOT / "src-tauri" / "target/release/bundle/macos" / f"{product}.app"

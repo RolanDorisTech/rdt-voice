@@ -33,7 +33,7 @@ Click either image below to try the live browser demo:
 
 - 🚀 **[Try RDT Voice](https://rolandoristech.github.io/rdt-voice/)**
 - ⬇️ **[View the current app source](index.html)** · [Download the complete repository ZIP](https://github.com/RolanDorisTech/rdt-voice/archive/refs/heads/main.zip)
-- 🧰 **[Apple Silicon backend setup guide](backend/README-APPLE-SILICON.md)** · [shared backend guide](backend/README.md) · [server source](backend/server.py) · [requirements](backend/requirements.txt)
+- 🧰 **[Apple Silicon backend setup guide](backend/README-APPLE-SILICON.md)** · [shared backend guide](backend/README.md) · [server source](backend/apple/server.py) · [requirements](backend/requirements.txt)
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
@@ -124,7 +124,7 @@ For Apple Silicon Macs, see the [Apple Silicon backend setup guide](backend/READ
 
 ### Platform scope
 
-The `backend/server.py` provided here is specifically for **macOS on Apple Silicon** (M-series Macs). It uses MLX Whisper. MLX is not the backend implementation for Windows or generic Linux systems.
+The `backend/apple/server.py` provided here is specifically for **macOS on Apple Silicon** (M-series Macs). It uses MLX Whisper. MLX is not the backend implementation for Windows or generic Linux systems.
 
 **Separate Windows and Linux backend implementations or step-by-step instructions may be provided in a future update.** In the meantime, those users can use EasyWhisper in a supported browser or connect RDT Voice to another compatible speech-to-text backend they have configured. The requirements, authentication, and HTTPS steps depend on that backend.
 
@@ -157,7 +157,7 @@ brew install python@3.12 ffmpeg
 
 Get these two files from the repository's `backend/` folder and place them together in a folder on the Mac:
 
-- [`server.py`](backend/server.py)
+- [`server.py`](backend/apple/server.py)
 - [`requirements.txt`](backend/requirements.txt)
 
 For example:

@@ -26,7 +26,20 @@ use tauri::{
 };
 use tauri_plugin_deep_link::DeepLinkExt;
 
-const APP_VERSION_LABEL: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+fn app_version_label() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    if let Some((before_counter, counter)) = version.rsplit_once('.') {
+        if !counter.is_empty() && counter.bytes().all(|byte| byte.is_ascii_digit()) {
+            if let Some((base, family)) = before_counter.rsplit_once('.') {
+                let bytes = family.as_bytes();
+                if bytes.len() == 2 && bytes[0].is_ascii_digit() && bytes[1].is_ascii_uppercase() {
+                    return format!("v{base}");
+                }
+            }
+        }
+    }
+    format!("v{version}")
+}
 const BUILD_ID: &str = env!("RDT_BUILD_ID");
 
 #[derive(Serialize)]
@@ -3782,7 +3795,7 @@ async fn pick_model_storage_directory(
 #[tauri::command]
 fn get_app_build_info() -> AppBuildInfo {
     AppBuildInfo {
-        version: APP_VERSION_LABEL.to_string(),
+        version: app_version_label(),
         build_id: BUILD_ID.to_string(),
     }
 }
@@ -3951,7 +3964,7 @@ fn get_app_diagnostics(state: State<'_, BackendState>, preferred_port: u16) -> S
         .map(|value| value.trim().len() >= 32)
         .unwrap_or(false);
     let mut lines = vec![
-        format!("RDT Connect · {APP_VERSION_LABEL} · Build {BUILD_ID}"),
+        format!("RDT Connect · {} · Build {BUILD_ID}", app_version_label()),
         single_instance_diagnostics(),
         format!(
             "Platform: {} / {}",

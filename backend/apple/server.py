@@ -32,7 +32,10 @@ def _rdt_load_model_lock() -> dict:
         # PyInstaller one-dir builds may place --add-data files beside the executable
         # rather than beside the frozen Python module, depending on contents layout.
         candidates.append(pathlib.Path(sys.executable).resolve().parent / "rdt_model_lock.json")
-    candidates.append(pathlib.Path(__file__).resolve().with_name("rdt_model_lock.json"))
+    source_file = pathlib.Path(__file__).resolve()
+    # Support a standalone server+lock folder as well as backend/apple/server.py.
+    candidates.append(source_file.with_name("rdt_model_lock.json"))
+    candidates.append(source_file.parents[1] / "rdt_model_lock.json")
     for candidate in candidates:
         try:
             value = json.loads(candidate.read_text(encoding="utf-8"))
@@ -2242,9 +2245,12 @@ def _find_frontend():
     if env_override:
         p=pathlib.Path(env_override).expanduser()
         if p.is_file(): return p.resolve()
-    # Keep frontend files at the repository root while server.py lives in backend/.
-    # Also support a standalone backend/frontend folder and the legacy cwd layout.
-    search_dirs=[here,here/"frontend",here.parent,here.parent/"frontend",pathlib.Path.cwd()]
+    # Preserve standalone and legacy layouts; the repository frontend is two levels
+    # above this file when the Apple implementation lives in backend/apple/server.py.
+    search_dirs=[here,here/"frontend",here.parent,here.parent/"frontend"]
+    if here.name == "apple" and here.parent.name == "backend":
+        search_dirs.extend([here.parent.parent,here.parent.parent/"frontend"])
+    search_dirs.append(pathlib.Path.cwd())
     seen=set()
     for d in search_dirs:
         try:

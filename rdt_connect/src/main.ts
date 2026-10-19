@@ -2706,9 +2706,10 @@ async function refreshAppBuildInfo() {
   try {
     const info = await invoke<AppBuildInfo>("get_app_build_info");
     if (info && typeof info.version === "string" && typeof info.buildId === "string") {
-      headerVersionLabel.textContent = info.version;
+      const displayVersion = formatProductVersionLabel(info.version);
+      headerVersionLabel.textContent = displayVersion;
       headerBuildId.textContent = info.buildId;
-      aboutVersionLabel.textContent = translateKey("msg.rdt_connect_app_version_label_build_build_id.62522b9b", { APP_VERSION_LABEL: info.version, BUILD_ID: info.buildId }, getActiveLocale());
+      aboutVersionLabel.textContent = translateKey("msg.rdt_connect_app_version_label_build_build_id.62522b9b", { APP_VERSION_LABEL: displayVersion, BUILD_ID: info.buildId }, getActiveLocale());
     }
   } catch {
     // Keep the source-provided version/build fallback visible if the native metadata call fails.
@@ -2760,6 +2761,20 @@ function updateErrorDetail(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   return (raw.replace(/\s+/g, " ").trim() || "Unknown error").slice(0, 260);
 }
+function getVersionDisplayParts(version: string): { base: string; build: string | null } {
+  const normalized = version.trim().replace(/^v/i, "");
+  const match = normalized.match(/^(.*)\.([0-9][A-Z])\.(\d+)$/);
+  if (!match) return { base: normalized, build: null };
+  const counter = match[3].padStart(2, "0");
+  return { base: match[1], build: `${match[2]}${counter}` };
+}
+function formatProductVersionLabel(version: string): string {
+  return `v${getVersionDisplayParts(version).base}`;
+}
+function formatFriendlyUpdateVersion(version: string): string {
+  const { base, build } = getVersionDisplayParts(version);
+  return build ? `v${base} Build ${build}` : `v${base}`;
+}
 function formatUpdateBytes(value: number): string {
   const bytes = Math.max(0, value);
   if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -2785,13 +2800,19 @@ function checkForApplicationUpdates(): Promise<void> {
     }
     setApplicationUpdateMessage("updater.checking");
     try {
-      const update = await checkForTauriUpdate();
+      const update = await checkForTauriUpdate({
+          timeout: 30000,
+          headers: {
+            "Cache-Control": "no-cache, no-store, max-age=0",
+            "Pragma": "no-cache",
+          },
+        });
       if (!update) {
         setApplicationUpdateMessage("updater.upToDate");
         return;
       }
       pendingTauriUpdate = update;
-      setApplicationUpdateMessage("updater.available", { VERSION: update.version });
+      setApplicationUpdateMessage("updater.available", { VERSION: formatFriendlyUpdateVersion(update.version) });
       setApplicationUpdateAction("install");
     } catch (error) {
       const detail = updateErrorDetail(error);

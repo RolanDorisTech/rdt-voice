@@ -11,7 +11,7 @@ if [[ ! -f "$MARKER_FILE" ]]; then
   exit 2
 fi
 MARKER="$(tr -d '[:space:]' < "$MARKER_FILE")"
-if [[ ! "$MARKER" =~ ^0[A-Z][0-9]{2}$ ]]; then
+if [[ ! "$MARKER" =~ ^[0-9][A-Z][0-9]{2,}$ ]]; then
   echo "ERROR: invalid build marker: $MARKER" >&2
   exit 2
 fi
@@ -67,6 +67,7 @@ print(f"{product}\t{version}", end="")
 PY_VERSION_SOURCE
 )"
 IFS=$'\t' read -r PRODUCT VERSION <<< "$METADATA"
+node "$ROOT/scripts/build-versioning.cjs" validate "$VERSION" "$MARKER"
 
 DMG_DIR="$ROOT/src-tauri/target/release/bundle/dmg"
 RAW="$DMG_DIR/${PRODUCT}_${VERSION}_aarch64.dmg"

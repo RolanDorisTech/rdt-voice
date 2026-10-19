@@ -6,7 +6,7 @@ REPO_ROOT="${1:-}"
 if [[ -z "$REPO_ROOT" ]]; then echo "Usage: bash scripts/prepare-macos-bundle.sh /path/to/rdt-voice-repository" >&2; exit 2; fi
 REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then echo "ERROR: Build this macOS MLX bundle on an Apple Silicon Mac using native arm64 Python." >&2; exit 2; fi
-for required in index.html worker.js pcm-worklet.js models.manifest.json backend/server.py backend/rdt_model_lock.json locales assets/opencc-js-1.4.2-full.js assets/rdt_logo_BIG_yellow_halo_trans_bg.png; do
+for required in index.html worker.js pcm-worklet.js models.manifest.json backend/apple/server.py backend/rdt_model_lock.json locales assets/opencc-js-1.4.2-full.js assets/rdt_logo_BIG_yellow_halo_trans_bg.png; do
   if [[ ! -e "$REPO_ROOT/$required" ]]; then echo "ERROR: Required repository item is missing: $REPO_ROOT/$required" >&2; exit 2; fi
 done
 DEFAULT_PY="$HOME/dev/testing/RDT_Voice_Desktop_POC/.venv/bin/python"
@@ -45,7 +45,7 @@ if [[ ! -x "$TAURI_CLI" ]]; then echo "ERROR: Tauri CLI missing. Run npm install
 ICON_DIR="$PROJECT_DIR/src-tauri/icons"; mkdir -p "$ICON_DIR"
 "$TAURI_CLI" icon "$LOGO_SOURCE" --output "$ICON_DIR"
 for icon_file in icon.png icon.icns 32x32.png 128x128.png 128x128@2x.png; do if [[ ! -s "$ICON_DIR/$icon_file" ]]; then echo "ERROR: Tauri icon generation did not create $ICON_DIR/$icon_file." >&2; exit 4; fi; done
-"$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$REPO_ROOT/backend/server.py" "$STAGE/server.py"
+"$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$REPO_ROOT/backend/apple/server.py" "$STAGE/server.py"
 ARGS=(--noconfirm --clean --onedir --add-data "$REPO_ROOT/backend/rdt_model_lock.json:." --name rdt_voice_backend --distpath "$NEXT_RESOURCES" --workpath "$WORK" --specpath "$SPEC" --collect-all mlx --collect-data mlx_whisper --collect-all fastapi --collect-all uvicorn --collect-all huggingface_hub --collect-all qrcode --collect-all multipart --hidden-import qrcode.image.svg --exclude-module torch)
 if "$PY" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("mlx_metal") else 1)'; then ARGS+=(--collect-all mlx_metal); fi
 "$PY" -m PyInstaller "${ARGS[@]}" "$STAGE/server.py"

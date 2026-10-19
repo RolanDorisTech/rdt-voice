@@ -23,10 +23,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -34,6 +34,11 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rdt_connect/src-tauri -> target
 
       - name: Install frontend dependencies
         working-directory: rdt_connect
@@ -50,3 +55,11 @@ jobs:
       - name: Compile native Windows app (no installer yet)
         working-directory: rdt_connect
         run: npx tauri build --config src-tauri/tauri.windows.check.conf.json --no-bundle
+
+      - name: Upload compile-check executable (not a release build)
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rdt-connect-windows-x64-compile-check
+          path: rdt_connect/src-tauri/target/release/rdt-connect-desktop.exe
+          if-no-files-found: error
+          retention-days: 7

@@ -20,11 +20,13 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
-    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{IsMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
     webview::WebviewWindowBuilder,
     AppHandle, Emitter, Manager, State, WebviewUrl,
 };
+#[cfg(target_os = "macos")]
+use tauri::menu::{PredefinedMenuItem, Submenu};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 // Keep OS-specific file protections behind one helper. Unix uses POSIX modes;
@@ -215,6 +217,7 @@ fn stop_trace_snapshot() -> String {
         })
 }
 
+#[cfg(unix)]
 fn signal_name(signal: i32) -> &'static str {
     match signal {
         SIGNAL_TERM => "SIGTERM",
@@ -3224,18 +3227,17 @@ fn start_model_download(
             match child.try_wait() {
                 Ok(Some(status)) => {
                     exit_status = Some(status);
-                    if let Ok(saw_complete) = consume_model_download_log(
+                    // Drain the final log data so the completion status is applied.
+                    // The child has already exited, so the grace-period timestamp is
+                    // not consulted again on this loop path.
+                    let _ = consume_model_download_log(
                         &mut log_reader,
                         &mut pending_line,
                         &app_thread,
                         &status_store,
                         &cancel_requested,
                         true,
-                    ) {
-                        if saw_complete && complete_seen_at.is_none() {
-                            complete_seen_at = Some(Instant::now());
-                        }
-                    }
+                    );
                     break;
                 }
                 Ok(None) => {}

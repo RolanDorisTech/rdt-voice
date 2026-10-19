@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0-dev.10.0D.51",
-  "notes": "Connect v0.2-dev.10 — Build 0D51. Signed macOS Apple Silicon development update for in-place updater testing.",
-  "pub_date": "2026-10-19T17:00:06Z",
+  "version": "0.2.0-dev.10.0D.52",
+  "notes": "Connect v0.2-dev.10 — Build 0D52. Separate About build ID and refreshed signed macOS Apple Silicon update.",
+  "pub_date": "2026-10-19T17:42:06Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzZObXRGS2R4Z25VQ2VOaWJiRjNTbHNLUUdPQzlyOTZUV0s0a1E4K0hHYmlJUkgyVVJRRVJkazBCQ1lKTkdxQ04vZVZXcFVodnpEQjRXQS9LbkFPbHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDE2MDc4CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMC4wRC41MQo4RzJITWhCaERMalU1QW50R3VnOUErQUxqMDhXdkx1SjVWZFBEN1UydVljUjg1QzFMNlVQdDhWWHBhTGJJMHJEVG45VUZlY1E5RjNIQUp2MHpqeDNBZz09Cg==",
-      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d51/RDT.Connect.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdytZWTV4UWl1VVBrUGRWYzdSaU5RMlFzTCtNUlE0NElyUjRkaURxQUE4YitNdTNxUVAzWXovUUd3OUV5a3Z5MHRQNkRjeWhRWWREcHdxUU9QNzQ5SFFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDMxMDkzCWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMC4wRC41Mgp5aDRWRWM3enN2TmNmMTkxdk4xMUIrYnl0S1BPSUtNWVRpamw4WXhoaExYZmlsZDAxbm5FTjQyZXdRK1Rna2ZxckFkUmFMT09ySFJnSUplUEVRSkVCdz09Cg==",
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d52/RDT.Connect.app.tar.gz"
     }
   }
 }

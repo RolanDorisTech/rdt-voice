@@ -7,8 +7,9 @@ use serde_json::{json, Value};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::TcpListener;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::os::unix::io::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -25,6 +26,97 @@ use tauri::{
     AppHandle, Emitter, Manager, State, WebviewUrl,
 };
 use tauri_plugin_deep_link::DeepLinkExt;
+
+// Keep OS-specific file protections behind one helper. Unix uses POSIX modes;
+// Windows secures app-owned data with an explicit current-user ACL via icacls.
+#[cfg(unix)]
+fn set_private_permissions(path: &Path, mode: u32) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+}
+
+#[cfg(windows)]
+fn set_private_permissions(path: &Path, _mode: u32) -> std::io::Result<()> {
+    let username = std::env::var("USERNAME").map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("USERNAME is unavailable: {error}"),
+        )
+    })?;
+    let identity = std::env::var("USERDOMAIN")
+        .map(|domain| format!("{domain}\\{username}"))
+        .unwrap_or(username);
+    let inheritance = if path.is_dir() { "(OI)(CI)F" } else { "F" };
+    let grant = format!("{identity}:{inheritance}");
+    let output = Command::new("icacls.exe")
+        .arg(path)
+        .arg("/inheritance:r")
+        .arg("/grant:r")
+        .arg(&grant)
+        .output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "icacls could not secure {}: {}",
+                path.display(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        ))
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn set_private_permissions(_path: &Path, _mode: u32) -> std::io::Result<()> {
+    Ok(())
+}
+
+const SIGNAL_TERM: i32 = 15;
+const SIGNAL_KILL: i32 = 9;
+
+fn application_support_dir(app_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(home_dir()?.join("Library").join("Application Support").join(app_name));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().ok().map(|home| home.join("AppData").join("Local")))
+            .ok_or_else(|| "Could not determine the current user's local application-data folder.".to_string())?;
+        return Ok(base.join(app_name));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().ok().map(|home| home.join(".local").join("share")))
+            .ok_or_else(|| "Could not determine the current user's application-data folder.".to_string())?;
+        return Ok(base.join(app_name));
+    }
+}
+
+fn application_log_dir(app_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(home_dir()?.join("Library").join("Logs").join(app_name));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(application_support_dir(app_name)?.join("Logs"));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let base = std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().ok().map(|home| home.join(".local").join("state")))
+            .ok_or_else(|| "Could not determine the current user's log folder.".to_string())?;
+        return Ok(base.join(app_name));
+    }
+}
 
 fn app_version_label() -> String {
     let version = env!("CARGO_PKG_VERSION");
@@ -58,12 +150,9 @@ fn stop_trace_mutex() -> &'static Mutex<String> {
 }
 
 fn stop_trace_log_path() -> Option<PathBuf> {
-    home_dir().ok().map(|home| {
-        home.join("Library")
-            .join("Logs")
-            .join("RDT Connect")
-            .join("stop-previous-server.log")
-    })
+    application_log_dir("RDT Connect")
+        .ok()
+        .map(|directory| directory.join("stop-previous-server.log"))
 }
 
 fn unix_epoch_millis() -> u128 {
@@ -128,8 +217,8 @@ fn stop_trace_snapshot() -> String {
 
 fn signal_name(signal: i32) -> &'static str {
     match signal {
-        libc::SIGTERM => "SIGTERM",
-        libc::SIGKILL => "SIGKILL",
+        SIGNAL_TERM => "SIGTERM",
+        SIGNAL_KILL => "SIGKILL",
         _ => "UNKNOWN_SIGNAL",
     }
 }
@@ -297,6 +386,17 @@ struct OrphanScan {
 }
 
 fn home_dir() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        if let Some(home) = std::env::var_os("USERPROFILE") {
+            return Ok(PathBuf::from(home));
+        }
+        if let (Some(drive), Some(path)) = (std::env::var_os("HOMEDRIVE"), std::env::var_os("HOMEPATH")) {
+            let mut combined = PathBuf::from(drive);
+            combined.push(path);
+            return Ok(combined);
+        }
+    }
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| "Could not determine the current user's home folder.".to_string())
@@ -319,25 +419,18 @@ fn resolve_resource_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 impl BackendState {
     fn new(resource_dir: PathBuf) -> Result<Self, String> {
-        let home = home_dir()?;
-        let app_support = home
-            .join("Library")
-            .join("Application Support")
-            .join("RDT Voice Server");
+        let app_support = application_support_dir("RDT Voice Server")?;
         fs::create_dir_all(&app_support)
             .map_err(|e| format!("Could not create the desktop application-support folder: {e}"))?;
         let token_path = app_support.join("server-token");
         let lock_path = app_support.join("rdt-connect-backend.lock");
         let menu_bar_pref_path = app_support.join("show-in-menu-bar");
-        let rdt_support = home
-            .join("Library")
-            .join("Application Support")
-            .join("RDT Connect");
+        let rdt_support = application_support_dir("RDT Connect")?;
         let https_dir = rdt_support.join("https");
         fs::create_dir_all(&https_dir)
             .map_err(|e| format!("Could not create the local HTTPS settings folder: {e}"))?;
-        let _ = fs::set_permissions(&rdt_support, fs::Permissions::from_mode(0o700));
-        let _ = fs::set_permissions(&https_dir, fs::Permissions::from_mode(0o700));
+        let _ = set_private_permissions(&rdt_support, 0o700);
+        let _ = set_private_permissions(&https_dir, 0o700);
         let tls_config_path = rdt_support.join("local-https.json");
         let model_storage_config_path = rdt_support.join("model-storage.json");
         let app_language_pref_path = rdt_support.join("app-language");
@@ -347,15 +440,11 @@ impl BackendState {
             .unwrap_or(true);
         // Keep existing application-support/auth/recordings paths for compatibility,
         // while giving the newly branded app its own visible log directory.
-        let log_dir = home.join("Library").join("Logs").join("RDT Connect");
+        let log_dir = application_log_dir("RDT Connect")?;
         fs::create_dir_all(&log_dir)
             .map_err(|e| format!("Could not create the RDT Connect log folder: {e}"))?;
         let log_path = log_dir.join("backend.log");
-        let legacy_log = home
-            .join("Library")
-            .join("Logs")
-            .join("RDT Voice Server")
-            .join("backend.log");
+        let legacy_log = application_log_dir("RDT Voice Server")?.join("backend.log");
         if !log_path.exists() && legacy_log.is_file() {
             let _ = fs::copy(&legacy_log, &log_path);
         }
@@ -441,6 +530,7 @@ impl BackendState {
     }
 
     fn manager_lock_is_held(&self) -> bool {
+        use fs2::FileExt;
         let file = match OpenOptions::new()
             .create(true)
             .read(true)
@@ -450,13 +540,10 @@ impl BackendState {
             Ok(f) => f,
             Err(_) => return true,
         };
-        let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if rc != 0 {
+        if file.try_lock_exclusive().is_err() {
             return true;
         }
-        unsafe {
-            libc::flock(file.as_raw_fd(), libc::LOCK_UN);
-        }
+        let _ = FileExt::unlock(&file);
         false
     }
 
@@ -479,16 +566,14 @@ impl BackendState {
     }
 
     fn acquire_manager_lock(&self) -> Result<File, String> {
+        use fs2::FileExt;
         let file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
             .open(&self.lock_path)
             .map_err(|e| format!("Could not open RDT Connect's backend lock file: {e}"))?;
-        let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if rc != 0 {
-            return Err("Another RDT Connect instance is already managing a backend. No new process was started; use that instance or stop its server cleanly first.".into());
-        }
+        file.try_lock_exclusive().map_err(|_| "Another RDT Connect instance is already managing a backend. No new process was started; use that instance or stop its server cleanly first.".to_string())?;
         Ok(file)
     }
 
@@ -543,6 +628,7 @@ impl BackendState {
     }
 }
 
+#[cfg(unix)]
 fn process_group_alive(group_id: u32) -> bool {
     let rc = unsafe { libc::kill(-(group_id as i32), 0) };
     if rc == 0 {
@@ -553,12 +639,188 @@ fn process_group_alive(group_id: u32) -> bool {
 
 // A zombie no longer owns a listening socket. For orphan cleanup, don't let a
 // zombie awaiting reaping keep Stop stuck forever after the server has exited.
+
+#[cfg(windows)]
+fn process_group_alive(group_id: u32) -> bool {
+    let snapshot = process_snapshot();
+    // An empty snapshot means process enumeration failed, not that the group
+    // was proven absent. Fail closed so Stop cannot report success on uncertainty.
+    if snapshot.is_empty() {
+        return true;
+    }
+    snapshot.iter().any(|item| item.pid == group_id && !item.stat.starts_with('Z'))
+        || snapshot.iter().any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+        || !windows_descendant_pids(group_id, &snapshot).is_empty()
+}
+
+#[cfg(windows)]
+fn windows_descendant_pids(root_pid: u32, snapshot: &[ProcessSnapshot]) -> std::collections::HashSet<u32> {
+    // ParentProcessId remains useful when the root exits first. Keep this as a
+    // liveness signal only: descendants are not terminated unless their identities
+    // can be revalidated, because a PID can eventually be reused by Windows.
+    let mut ancestry = std::collections::HashSet::from([root_pid]);
+    let mut descendants = std::collections::HashSet::new();
+    loop {
+        let mut added = false;
+        for item in snapshot {
+            if item.pid != root_pid && ancestry.contains(&item.ppid) && ancestry.insert(item.pid) {
+                descendants.insert(item.pid);
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    descendants
+}
+
+#[cfg(windows)]
+fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
+    let is_tree = target < 0;
+    let pid = target.unsigned_abs();
+    if pid < 2 {
+        return Err("Safety check refused to signal an invalid Windows process ID.".into());
+    }
+
+    let snapshot = process_snapshot();
+    if snapshot.is_empty() {
+        return Err("Could not inspect the Windows process table; no termination request was sent.".into());
+    }
+    let process_is_present = snapshot
+        .iter()
+        .any(|item| item.pid == pid && !item.stat.starts_with('Z'));
+    let descendants = windows_descendant_pids(pid, &snapshot);
+    let present = if is_tree {
+        process_is_present
+            || snapshot.iter().any(|item| item.pgid == pid && !item.stat.starts_with('Z'))
+            || !descendants.is_empty()
+    } else {
+        process_is_present
+    };
+    if !present {
+        return Ok(());
+    }
+    if is_tree {
+        // taskkill /T is keyed by the root PID. If that process has exited but
+        // descendants remain, using the old PID could target an unrelated process
+        // after PID reuse. Refuse instead of pretending the surviving tree is gone.
+        let Some(root) = snapshot.iter().find(|item| item.pid == pid && !item.stat.starts_with('Z')) else {
+            if !descendants.is_empty() {
+                return Err("The Windows backend leader exited while descendants remain. RDT Connect cannot safely target the old root PID; no termination request was sent.".into());
+            }
+            return Err("The Windows process-tree root could not be verified; no termination request was sent.".into());
+        };
+        if !is_windows_executable(&root.command, "rdt_voice_backend.exe")
+            && !is_windows_executable(&root.command, "rdt_voice_backend")
+        {
+            return Err("Safety check refused to terminate a Windows process tree because the root PID no longer identifies the expected RDT backend.".into());
+        }
+    }
+
+    append_stop_trace(format!(
+        "WINDOWS PROCESS TERMINATION REQUEST: PID={pid}; tree={is_tree}; force={}",
+        signal == SIGNAL_KILL
+    ));
+    let pid_text = pid.to_string();
+    let mut command = Command::new("taskkill.exe");
+    command.arg("/PID").arg(pid_text);
+    if is_tree {
+        command.arg("/T");
+    }
+    if signal == SIGNAL_KILL {
+        command.arg("/F");
+    }
+    let output = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("Could not run Windows taskkill for PID {pid}: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let after = process_snapshot();
+    if after.is_empty() {
+        return Err(format!(
+            "Windows taskkill did not confirm termination of PID {pid}, and RDT Connect could not inspect the process table to verify the result."
+        ));
+    }
+    let still_present = if is_tree {
+        after.iter().any(|item| item.pid == pid && !item.stat.starts_with('Z'))
+            || after.iter().any(|item| item.pgid == pid && !item.stat.starts_with('Z'))
+            || !windows_descendant_pids(pid, &after).is_empty()
+    } else {
+        after.iter().any(|item| item.pid == pid && !item.stat.starts_with('Z'))
+    };
+    if !still_present {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(format!(
+        "Windows taskkill did not confirm termination of PID {pid}: {}",
+        if detail.is_empty() {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        } else {
+            detail
+        }
+    ))
+}
+
+#[cfg(windows)]
+fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool {
+    // taskkill /T requests termination of the captured root and its child tree;
+    // bounded revalidation decides whether force termination is needed.
+    let _ = send_signal_checked(-(group_id as i32), SIGNAL_TERM);
+    let deadline = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < deadline {
+        if let Some(child_ref) = child.as_mut() {
+            let _ = child_ref.try_wait();
+        }
+        if !process_group_alive(group_id) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    if process_group_alive(group_id) {
+        let _ = send_signal_checked(-(group_id as i32), SIGNAL_KILL);
+    }
+    if let Some(child_ref) = child.as_mut() {
+        let wait_deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < wait_deadline {
+            if matches!(child_ref.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline && process_group_alive(group_id) {
+        thread::sleep(Duration::from_millis(100));
+    }
+    !process_group_alive(group_id)
+}
+
+#[cfg(unix)]
 fn process_group_has_live_member(group_id: u32) -> bool {
     process_snapshot()
         .iter()
         .any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
 }
 
+#[cfg(windows)]
+fn process_group_has_live_member(group_id: u32) -> bool {
+    let snapshot = process_snapshot();
+    if snapshot.is_empty() {
+        return true;
+    }
+    snapshot.iter().any(|item| item.pid == group_id && !item.stat.starts_with('Z'))
+        || snapshot.iter().any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+        || !windows_descendant_pids(group_id, &snapshot).is_empty()
+}
+
+#[cfg(unix)]
 fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
     let target_kind = if target < 0 { "process-group" } else { "PID" };
     append_stop_trace(format!(
@@ -594,9 +856,10 @@ fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
 }
 
 /// Terminate the complete MLX/Python process group, not just PyInstaller's parent.
+#[cfg(unix)]
 fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool {
     unsafe {
-        libc::kill(-(group_id as i32), libc::SIGTERM);
+        libc::kill(-(group_id as i32), SIGNAL_TERM);
     }
     let deadline = Instant::now() + Duration::from_secs(4);
     while Instant::now() < deadline {
@@ -610,7 +873,7 @@ fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool
     }
     if process_group_alive(group_id) {
         unsafe {
-            libc::kill(-(group_id as i32), libc::SIGKILL);
+            libc::kill(-(group_id as i32), SIGNAL_KILL);
         }
     }
     if let Some(child_ref) = child.as_mut() {
@@ -623,6 +886,7 @@ fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool
     !process_group_alive(group_id)
 }
 
+#[cfg(unix)]
 fn describe_port_owner(port: u16) -> String {
     let port_arg = format!("-iTCP:{port}");
     let run_lsof = |program: &str| {
@@ -672,6 +936,7 @@ fn describe_port_owner(port: u16) -> String {
     }
 }
 
+#[cfg(unix)]
 fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
     let port_arg = format!("-iTCP:{port}");
     let mut last_error = String::new();
@@ -724,9 +989,64 @@ fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
     ))
 }
 
+
+#[cfg(windows)]
+fn powershell_json_u32_list(script: &str, description: &str) -> Result<Vec<u32>, String> {
+    let output = Command::new("powershell.exe")
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script])
+        .stdin(Stdio::null()).stderr(Stdio::piped()).output()
+        .map_err(|error| format!("Could not inspect {description} with PowerShell: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("Could not inspect {description}: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if raw.is_empty() || raw == "null" { return Ok(Vec::new()); }
+    let value: Value = serde_json::from_str(&raw)
+        .map_err(|error| format!("Could not parse Windows {description} output: {error}"))?;
+    let values: Vec<Value> = match value {
+        Value::Array(items) => items,
+        Value::Null => Vec::new(),
+        single => vec![single],
+    };
+    Ok(values.into_iter().filter_map(|value| value.as_u64().or_else(|| value.as_str().and_then(|s| s.parse().ok())).map(|n| n as u32)).collect())
+}
+
+#[cfg(windows)]
+fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
+    let script = format!("$ErrorActionPreference='Stop'; $values=@(Get-NetTCPConnection -State Listen -LocalPort {port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique); ConvertTo-Json -InputObject $values -Compress");
+    let mut values = powershell_json_u32_list(&script, &format!("TCP listener ownership for port {port}"))?;
+    values.sort_unstable(); values.dedup(); Ok(values)
+}
+
+#[cfg(windows)]
+fn listening_ports_for_pid(pid: u32) -> Result<Vec<u16>, String> {
+    let script = format!("$ErrorActionPreference='Stop'; $values=@(Get-NetTCPConnection -State Listen -OwningProcess {pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort -Unique); ConvertTo-Json -InputObject $values -Compress");
+    let values = powershell_json_u32_list(&script, &format!("listening TCP ports for PID {pid}"))?;
+    let mut ports: Vec<u16> = values.into_iter().filter_map(|value| u16::try_from(value).ok()).filter(|port| *port > 0).collect();
+    ports.sort_unstable(); ports.dedup(); Ok(ports)
+}
+
+#[cfg(windows)]
+fn describe_port_owner(port: u16) -> String {
+    match listening_pids_on_port(port) {
+        Ok(pids) if pids.is_empty() => "No listener details were returned by the Windows TCP table.".into(),
+        Ok(pids) => {
+            let processes = process_snapshot();
+            let names = pids.iter().take(4).map(|pid| {
+                processes.iter().find(|item| item.pid == *pid)
+                    .map(|item| format!("PID {pid}: {}", item.command.split_whitespace().take(4).collect::<Vec<_>>().join(" ")))
+                    .unwrap_or_else(|| format!("PID {pid}: process details unavailable"))
+            }).collect::<Vec<_>>();
+            format!("Listener found: {}.", names.join(", "))
+        }
+        Err(error) => format!("The owning process could not be identified automatically: {error}"),
+    }
+}
+
 /// Read the actual listening TCP ports owned by a specific PID. This is a
 /// read-only fallback for packaged helper processes (for example a Python
 /// resource_tracker) that inherit a listener but do not have `--port` in argv.
+#[cfg(unix)]
 fn listening_ports_for_pid(pid: u32) -> Result<Vec<u16>, String> {
     let pid_arg = pid.to_string();
     let mut last_error = String::new();
@@ -878,6 +1198,7 @@ fn verify_port_released(port: u16, stopped_pid: u32) -> Result<(), String> {
     }
 }
 
+#[cfg(unix)]
 fn find_existing_backend_pids() -> Vec<String> {
     let output = match Command::new("/usr/bin/pgrep")
         .args(["-fl", "rdt_voice_backend"])
@@ -907,6 +1228,17 @@ fn find_existing_backend_pids() -> Vec<String> {
         .collect()
 }
 
+#[cfg(windows)]
+fn find_existing_backend_pids() -> Vec<String> {
+    process_snapshot()
+        .into_iter()
+        .filter(|item| item.command.to_ascii_lowercase().contains("rdt_voice_backend"))
+        .map(|item| item.pid.to_string())
+        .take(8)
+        .collect()
+}
+
+#[cfg(unix)]
 fn process_command_and_group(pid: u32) -> Option<(String, u32)> {
     let command = Command::new("/bin/ps")
         .args(["-ww", "-p", &pid.to_string(), "-o", "command="])
@@ -938,6 +1270,7 @@ struct ProcessSnapshot {
     command: String,
 }
 
+#[cfg(unix)]
 fn process_snapshot() -> Vec<ProcessSnapshot> {
     let output = match Command::new("/bin/ps")
         // lstart lets us distinguish the captured process from a later process
@@ -972,6 +1305,100 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
         .collect()
 }
 
+
+#[cfg(windows)]
+fn process_command_and_group(pid: u32) -> Option<(String, u32)> {
+    process_snapshot()
+        .into_iter()
+        .find(|item| item.pid == pid)
+        .map(|item| (item.command, item.pgid))
+}
+
+#[cfg(windows)]
+fn windows_executable_path_from_command(command: &str) -> &str {
+    if let Some(rest) = command.strip_prefix('"') {
+        rest.split_once('"').map(|(path, _)| path).unwrap_or(rest)
+    } else {
+        command.split_whitespace().next().unwrap_or(command)
+    }
+}
+
+#[cfg(windows)]
+fn is_windows_executable(command: &str, expected_name: &str) -> bool {
+    let path = windows_executable_path_from_command(command);
+    let name = path.rsplit(|character| character == '\\' || character == '/')
+        .next().unwrap_or(path);
+    name.eq_ignore_ascii_case(expected_name)
+}
+
+#[cfg(windows)]
+fn is_rdt_manager_command(command: &str) -> bool {
+    is_windows_executable(command, "rdt-connect-desktop.exe")
+        || is_windows_executable(command, "rdt-connect-desktop")
+}
+
+#[cfg(unix)]
+fn is_rdt_manager_command(command: &str) -> bool {
+    command.split_whitespace().any(|part| {
+        Path::new(part).file_name().and_then(|name| name.to_str()) == Some("rdt-connect-desktop")
+    })
+}
+
+#[cfg(windows)]
+fn process_snapshot() -> Vec<ProcessSnapshot> {
+    // Win32_Process supplies stable process start times and parent IDs. The
+    // synthetic pgid is the outermost RDT backend ancestor PID; this makes the
+    // existing ownership/descendant checks meaningful on Windows without
+    // treating all processes with the same image name as one group.
+    const SCRIPT: &str = "$ErrorActionPreference='Stop'; Get-CimInstance -ClassName Win32_Process | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | ConvertTo-Json -Compress";
+    let output = match Command::new("powershell.exe")
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return Vec::new(),
+    };
+    let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) else {
+        return Vec::new();
+    };
+    let rows: Vec<&Value> = match &value {
+        Value::Array(rows) => rows.iter().collect(),
+        Value::Object(_) => vec![&value],
+        _ => return Vec::new(),
+    };
+    let mut snapshot: Vec<ProcessSnapshot> = rows.into_iter().filter_map(|row| {
+        let pid = row.get("ProcessId").and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))? as u32;
+        let ppid = row.get("ParentProcessId").and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok())).unwrap_or(0) as u32;
+        let started = row.get("CreationDate").and_then(Value::as_str)?.to_string();
+        let exe = row.get("ExecutablePath").and_then(Value::as_str).unwrap_or_default();
+        let args = row.get("CommandLine").and_then(Value::as_str).unwrap_or_default();
+        let command = if exe.is_empty() { args.to_string() } else if args.is_empty() { format!("\"{exe}\"") } else { format!("\"{exe}\" {args}") };
+        if command.is_empty() { return None; }
+        Some(ProcessSnapshot { pid, ppid, pgid: pid, stat: "R".into(), started, command })
+    }).collect();
+
+    let parent_map: std::collections::HashMap<u32, (u32, bool)> = snapshot.iter()
+        .map(|item| (item.pid, (item.ppid, is_windows_executable(&item.command, "rdt_voice_backend.exe")
+            || is_windows_executable(&item.command, "rdt_voice_backend"))))
+        .collect();
+    for item in &mut snapshot {
+        let mut cursor = item.pid;
+        let mut group_root = item.pid;
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..128 {
+            if !seen.insert(cursor) { break; }
+            let Some((parent, is_backend)) = parent_map.get(&cursor) else { break; };
+            if *is_backend { group_root = cursor; }
+            if *parent == 0 || *parent == cursor { break; }
+            cursor = *parent;
+        }
+        item.pgid = group_root;
+    }
+    snapshot
+}
+
 fn process_tree_snapshot(root_pid: u32) -> Vec<ProcessSnapshot> {
     let all = process_snapshot();
     let Some(root) = all.iter().find(|item| item.pid == root_pid).cloned() else {
@@ -995,10 +1422,24 @@ fn process_tree_snapshot(root_pid: u32) -> Vec<ProcessSnapshot> {
     tree
 }
 
+#[cfg(unix)]
 fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnapshot]) -> bool {
     current.iter().any(|item| {
         item.pid == snapshot.pid
             && item.pgid == snapshot.pgid
+            && item.started == snapshot.started
+            && item.command == snapshot.command
+            && !item.stat.starts_with('Z')
+    })
+}
+
+#[cfg(windows)]
+fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnapshot]) -> bool {
+    // Windows pgid is synthesized from the current parent tree; it can change
+    // when the root exits. PID + creation time + command identifies the captured
+    // process without falsely treating a still-running child as gone.
+    current.iter().any(|item| {
+        item.pid == snapshot.pid
             && item.started == snapshot.started
             && item.command == snapshot.command
             && !item.stat.starts_with('Z')
@@ -1055,14 +1496,14 @@ fn terminate_verified_backend_tree(
     // Still signal each captured member individually as a fallback if the group
     // signal is denied or the process was launched by an older manager build.
     if owns_group {
-        if let Err(error) = send_signal_checked(-(group_id as i32), libc::SIGTERM) {
+        if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_TERM) {
             signal_errors.push(format!("process group {group_id}: {error}"));
         }
     }
     for item in initial.iter().skip(1).rev() {
         let current = process_snapshot();
         if snapshot_process_is_alive(item, &current) {
-            if let Err(error) = send_signal_checked(item.pid as i32, libc::SIGTERM) {
+            if let Err(error) = send_signal_checked(item.pid as i32, SIGNAL_TERM) {
                 signal_errors.push(format!("PID {}: {error}", item.pid));
             }
         }
@@ -1073,7 +1514,7 @@ fn terminate_verified_backend_tree(
             // Also target the exact verified root PID. This is a fallback if the
             // group signal was denied, and harmless if the group signal already
             // began shutting the root down.
-            if let Err(error) = send_signal_checked(pid as i32, libc::SIGTERM) {
+            if let Err(error) = send_signal_checked(pid as i32, SIGNAL_TERM) {
                 signal_errors.push(format!("PID {pid}: {error}"));
             }
         } else {
@@ -1112,14 +1553,14 @@ fn terminate_verified_backend_tree(
         .collect::<Vec<_>>();
     append_stop_trace(format!("TERM TIMEOUT after 4s: remaining captured members=[{}]; live isolated group={}. Escalating verified identities to SIGKILL.", term_remaining.join(", "), if owns_group { process_group_has_live_member(group_id).to_string() } else { "not group-owned".into() }));
     if owns_group {
-        if let Err(error) = send_signal_checked(-(group_id as i32), libc::SIGKILL) {
+        if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_KILL) {
             signal_errors.push(format!("process group {group_id}: {error}"));
         }
     }
     for item in initial.iter().skip(1).rev() {
         let current = process_snapshot();
         if snapshot_process_is_alive(item, &current) {
-            if let Err(error) = send_signal_checked(item.pid as i32, libc::SIGKILL) {
+            if let Err(error) = send_signal_checked(item.pid as i32, SIGNAL_KILL) {
                 signal_errors.push(format!("PID {}: {error}", item.pid));
             }
         }
@@ -1127,7 +1568,7 @@ fn terminate_verified_backend_tree(
     let root_now = process_command_and_group(pid);
     if let Some((command, current_group)) = root_now {
         if current_group == group_id && command_is_expected_backend(&command, expected_exe) {
-            if let Err(error) = send_signal_checked(pid as i32, libc::SIGKILL) {
+            if let Err(error) = send_signal_checked(pid as i32, SIGNAL_KILL) {
                 signal_errors.push(format!("PID {pid}: {error}"));
             }
         }
@@ -1176,6 +1617,7 @@ fn parsed_port_from_command(command: &str) -> Option<u16> {
     })
 }
 
+#[cfg(unix)]
 fn other_manager_instance_exists() -> bool {
     let output = match Command::new("/usr/bin/pgrep")
         .args(["-fl", "rdt-connect-desktop"])
@@ -1203,6 +1645,15 @@ fn other_manager_instance_exists() -> bool {
     })
 }
 
+#[cfg(windows)]
+fn other_manager_instance_exists() -> bool {
+    let snapshot = process_snapshot();
+    // If enumeration fails, conservatively avoid treating the system as clear.
+    snapshot.is_empty() || snapshot.iter().any(|item| {
+        item.pid != std::process::id() && is_rdt_manager_command(&item.command)
+    })
+}
+
 fn command_is_expected_backend(command: &str, expected_exe: &Path) -> bool {
     // Match only this project's packaged executable across Tauri dev/resource-dir layouts.
     // This must never turn into a broad Python/Whisper process matcher.
@@ -1226,11 +1677,25 @@ fn command_is_expected_backend(command: &str, expected_exe: &Path) -> bool {
             .join("rdt_voice_backend")
             .join("rdt_voice_backend"),
     );
-    command.contains("rdt_voice_backend")
+    let command_cmp = if cfg!(windows) {
+        command.replace('/', "\\").to_ascii_lowercase()
+    } else {
+        command.to_string()
+    };
+    command_cmp.contains("rdt_voice_backend")
         && candidates.iter().any(|candidate| {
             let canonical = fs::canonicalize(candidate).unwrap_or_else(|_| candidate.clone());
-            command.contains(&canonical.display().to_string())
-                || command.contains(&candidate.display().to_string())
+            let candidate_text = if cfg!(windows) {
+                candidate.to_string_lossy().replace('/', "\\").to_ascii_lowercase()
+            } else {
+                candidate.display().to_string()
+            };
+            let canonical_text = if cfg!(windows) {
+                canonical.to_string_lossy().replace('/', "\\").to_ascii_lowercase()
+            } else {
+                canonical.display().to_string()
+            };
+            command_cmp.contains(&canonical_text) || command_cmp.contains(&candidate_text)
         })
 }
 
@@ -1453,7 +1918,7 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
         let _ = fs::remove_file(&temporary);
         format!("Could not save HTTPS settings: {e}")
     })?;
-    let _ = fs::set_permissions(&state.tls_config_path, fs::Permissions::from_mode(0o600));
+    let _ = set_private_permissions(&state.tls_config_path, 0o600);
     Ok(())
 }
 
@@ -1925,7 +2390,7 @@ fn setup_local_https_certificate(
         .join(format!("generated-{seconds}-{}", std::process::id()));
     fs::create_dir_all(&dir)
         .map_err(|e| format!("Could not create the certificate folder: {e}"))?;
-    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+    set_private_permissions(&dir, 0o700)
         .map_err(|e| format!("Could not secure the certificate folder: {e}"))?;
     let ca_key = dir.join("rdt-local-ca-key.pem");
     let ca = dir.join("rdt-local-ca.pem");
@@ -1940,7 +2405,7 @@ fn setup_local_https_certificate(
     fs::write(&server_ext, server_extensions)
         .map_err(|e| format!("Could not write server certificate extensions: {e}"))?;
     for file in [&ca_cfg, &server_ext] {
-        let _ = fs::set_permissions(file, fs::Permissions::from_mode(0o600));
+        let _ = set_private_permissions(file, 0o600);
     }
     let run = |args: Vec<String>, what: &str| -> Result<(), String> {
         let output = Command::new("/usr/bin/openssl")
@@ -2016,7 +2481,7 @@ fn setup_local_https_certificate(
         "sign the local HTTPS server certificate",
     )?;
     for file in [&ca_key, &server_key] {
-        fs::set_permissions(file, fs::Permissions::from_mode(0o600))
+        set_private_permissions(file, 0o600)
             .map_err(|e| format!("Could not secure a generated private key: {e}"))?;
     }
     let mut config = load_local_tls_config(&state)?;
@@ -2638,6 +3103,7 @@ fn start_model_download(
         // The supervisor tails it non-blockingly and owns all child cleanup.
         .stdout(Stdio::from(log_writer))
         .stderr(Stdio::null());
+    #[cfg(unix)]
     command.process_group(0);
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -2915,8 +3381,11 @@ fn model_download_group_members_are_owned(
         .filter(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'))
         .collect();
     if members.is_empty() {
-        // The captured group is gone. A different process may now reuse the leader
-        // PID in another group; that is not grounds to signal anything.
+        #[cfg(windows)]
+        if !windows_descendant_pids(identity.pid, &snapshot).is_empty() {
+            return Err("The Windows downloader leader exited while descendant processes remain. RDT Connect cannot safely identify or terminate those helpers yet; no cancellation success was reported.".into());
+        }
+        // No captured group or descendant is visible. Do not target a reused PID.
         return Ok(false);
     }
     if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
@@ -2950,15 +3419,9 @@ fn finish_stopping_model_download_group(
         return Ok(());
     }
     let group_id = identity.pgid;
-    let rc = unsafe { libc::kill(-(group_id as i32), libc::SIGTERM) };
-    if rc != 0 {
-        let error = std::io::Error::last_os_error();
-        if error.raw_os_error() != Some(libc::ESRCH) {
-            return Err(format!(
-                "Could not request graceful cleanup of the verified downloader group: {error}"
-            ));
-        }
-        return Ok(());
+    if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_TERM) {
+        if !process_group_alive(group_id) { return Ok(()); }
+        return Err(format!("Could not request graceful cleanup of the verified downloader group: {error}"));
     }
 
     let term_deadline = Instant::now() + Duration::from_millis(700);
@@ -2976,15 +3439,9 @@ fn finish_stopping_model_download_group(
     if !model_download_group_members_are_owned(identity, expected_exe)? {
         return Ok(());
     }
-    let rc = unsafe { libc::kill(-(group_id as i32), libc::SIGKILL) };
-    if rc != 0 {
-        let error = std::io::Error::last_os_error();
-        if error.raw_os_error() != Some(libc::ESRCH) {
-            return Err(format!(
-                "Could not force-stop the verified downloader group: {error}"
-            ));
-        }
-        return Ok(());
+    if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_KILL) {
+        if !process_group_alive(group_id) { return Ok(()); }
+        return Err(format!("Could not force-stop the verified downloader group: {error}"));
     }
 
     let final_deadline = Instant::now() + Duration::from_secs(2);
@@ -3036,15 +3493,11 @@ fn cancel_model_download(
             Ok(true) => {
                 // The group was created specifically for this download. Its live
                 // members must all match our bundled executable before signaling.
-                let result = unsafe { libc::kill(-(identity.pgid as i32), libc::SIGTERM) };
-                if result != 0 {
-                    let error = std::io::Error::last_os_error();
-                    if error.raw_os_error() != Some(libc::ESRCH) {
+                if let Err(error) = send_signal_checked(-(identity.pgid as i32), SIGNAL_TERM) {
+                    if process_group_alive(identity.pgid) {
                         snapshot.phase = "failed".into();
                         snapshot.message = format!("Could not request cancellation: {error}. Select Try cancel again to retry.");
-                        if let Ok(mut status) = state.model_download_status.lock() {
-                            *status = snapshot.clone();
-                        }
+                        if let Ok(mut status) = state.model_download_status.lock() { *status = snapshot.clone(); }
                         let _ = app.emit("rdt-model-download-status", snapshot.clone());
                         return Ok(snapshot);
                     }
@@ -3525,9 +3978,22 @@ fn model_snapshot_is_complete(root: &Path, model: &str, snapshot_path: &Path) ->
         && marker.get("weight_file").and_then(Value::as_str) == Some(weight_name.as_str())
         && marker.get("sha256").and_then(Value::as_str) == Some(expected_sha.as_str())
         && marker.get("size_bytes").and_then(Value::as_u64) == Some(meta.len())
-        && marker.get("mtime_ns").and_then(Value::as_i64)
-            == Some(meta.mtime() * 1_000_000_000 + meta.mtime_nsec())
+        && model_cache_metadata_matches(&meta, &marker)
+}
+
+#[cfg(unix)]
+fn model_cache_metadata_matches(meta: &fs::Metadata, marker: &Value) -> bool {
+    marker.get("mtime_ns").and_then(Value::as_i64)
+        == Some(meta.mtime() * 1_000_000_000 + meta.mtime_nsec())
         && marker.get("inode").and_then(Value::as_u64) == Some(meta.ino())
+}
+
+#[cfg(windows)]
+fn model_cache_metadata_matches(meta: &fs::Metadata, marker: &Value) -> bool {
+    let modified_ns = meta.modified().ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_nanos()).ok());
+    modified_ns.is_some() && marker.get("mtime_ns").and_then(Value::as_i64) == modified_ns
 }
 
 fn model_cache_has_weights(root: &Path, model: &str) -> bool {
@@ -3731,15 +4197,12 @@ fn save_model_storage_locations(
         .with_extension(format!("json.tmp-{}", std::process::id()));
     fs::write(&temporary, payload)
         .map_err(|e| format!("Could not write model-storage settings: {e}"))?;
-    let _ = fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600));
+    let _ = set_private_permissions(&temporary, 0o600);
     if let Err(e) = fs::rename(&temporary, &state.model_storage_config_path) {
         let _ = fs::remove_file(&temporary);
         return Err(format!("Could not save model-storage settings: {e}"));
     }
-    let _ = fs::set_permissions(
-        &state.model_storage_config_path,
-        fs::Permissions::from_mode(0o600),
-    );
+    let _ = set_private_permissions(&state.model_storage_config_path, 0o600);
     Ok(locations)
 }
 
@@ -4268,9 +4731,7 @@ fn manager_parent_for_backend(state: &BackendState, pid: u32) -> Option<(u32, St
         return None;
     }
     let manager = snapshot.iter().find(|item| item.pid == backend.ppid)?;
-    let is_rdt_manager = manager.command.split_whitespace().any(|part| {
-        Path::new(part).file_name().and_then(|name| name.to_str()) == Some("rdt-connect-desktop")
-    });
+    let is_rdt_manager = is_rdt_manager_command(&manager.command);
     if is_rdt_manager {
         Some((manager.pid, manager.command.clone()))
     } else {
@@ -4280,6 +4741,7 @@ fn manager_parent_for_backend(state: &BackendState, pid: u32) -> Option<(u32, St
 
 /// Return a PID's live process state without treating a zombie awaiting reaping as alive.
 /// `None` is a confirmed absence; failures to inspect the process table are errors.
+#[cfg(unix)]
 fn inspect_manager_pid(pid: u32) -> Result<Option<(String, String)>, String> {
     let output = Command::new("/bin/ps")
         .args(["-ww", "-axo", "pid=,stat=,command="])
@@ -4310,6 +4772,18 @@ fn inspect_manager_pid(pid: u32) -> Result<Option<(String, String)>, String> {
     Ok(None)
 }
 
+#[cfg(windows)]
+fn inspect_manager_pid(pid: u32) -> Result<Option<(String, String)>, String> {
+    let snapshot = process_snapshot();
+    if snapshot.is_empty() {
+        return Err("Could not verify the Windows process table; no manager process was signaled.".into());
+    }
+    Ok(snapshot
+        .into_iter()
+        .find(|item| item.pid == pid && !item.stat.starts_with('Z'))
+        .map(|item| (item.stat, item.command)))
+}
+
 /// A legacy manager cannot receive the stop request from a newer app. After the
 /// exact backend it directly owns is stopped, close only that verified manager
 /// so its stale flock is released and the replacement app can start cleanly.
@@ -4320,9 +4794,7 @@ fn close_legacy_manager_after_stop(pid: u32, expected_command: &str) -> Result<(
     let Some((_, current)) = inspect_manager_pid(pid)? else {
         return Ok(());
     };
-    let is_rdt_manager = current.split_whitespace().any(|part| {
-        Path::new(part).file_name().and_then(|name| name.to_str()) == Some("rdt-connect-desktop")
-    });
+    let is_rdt_manager = is_rdt_manager_command(&current);
     if current != expected_command || !is_rdt_manager {
         return Err("The old manager changed during cleanup, so RDT Connect left it untouched. Refresh diagnostics before retrying.".into());
     }
@@ -4335,7 +4807,7 @@ fn close_legacy_manager_after_stop(pid: u32, expected_command: &str) -> Result<(
                 .unwrap_or_default()
         )
     ));
-    if let Err(error) = send_signal_checked(pid as i32, libc::SIGTERM) {
+    if let Err(error) = send_signal_checked(pid as i32, SIGNAL_TERM) {
         append_stop_trace(format!(
             "LEGACY MANAGER SIGTERM ERROR (continuing existing bounded wait): {error}"
         ));
@@ -4357,7 +4829,7 @@ fn close_legacy_manager_after_stop(pid: u32, expected_command: &str) -> Result<(
     match inspect_manager_pid(pid)? {
         None => return Ok(()),
         Some((_, command)) if command == expected_command => {
-            if let Err(error) = send_signal_checked(pid as i32, libc::SIGKILL) {
+            if let Err(error) = send_signal_checked(pid as i32, SIGNAL_KILL) {
                 append_stop_trace(format!(
                     "LEGACY MANAGER SIGKILL ERROR (continuing existing bounded wait): {error}"
                 ));
@@ -4786,6 +5258,7 @@ fn start_backend_blocking(
         .env("PYTHONUNBUFFERED", "1")
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(stderr_log));
+    #[cfg(unix)]
     command.process_group(0);
 
     let mut child = command
@@ -5400,11 +5873,11 @@ fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
             .map_err(|error| format!("Could not write preference file: {error}"))?;
         file.sync_all()
             .map_err(|error| format!("Could not flush preference file: {error}"))?;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
+        set_private_permissions(&tmp, 0o600)
             .map_err(|error| format!("Could not protect preference file: {error}"))?;
         fs::rename(&tmp, path)
             .map_err(|error| format!("Could not save preference file: {error}"))?;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        set_private_permissions(path, 0o600)
             .map_err(|error| format!("Could not protect saved preference: {error}"))?;
         Ok(())
     })();

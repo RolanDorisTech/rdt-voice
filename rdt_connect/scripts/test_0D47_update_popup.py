@@ -11,7 +11,9 @@ class AboutMenuUpdateContractTests(unittest.TestCase):
         self.assertIn('msg.rdt_connect_app_version_label_build_build_id.62522b9b', main)
         self.assertIn('BUILD_ID: info.buildId', main)
         self.assertNotIn("aboutVersionObserver", main)
-        self.assertIn("RDT Connect · version/build information loading…", html)
+        self.assertIn('id="about-version-label"', html)
+        build_id = (ROOT / "scripts/build-id-sequence.txt").read_text(encoding="utf-8").strip()
+        self.assertIn(f"Build {build_id}", html)
         self.assertNotIn("Version 0.2.0-dev.10 (0.2.0-dev.10)", html)
 
     def test_original_icon_and_about_navigation(self):
@@ -19,8 +21,9 @@ class AboutMenuUpdateContractTests(unittest.TestCase):
         self.assertIn('icons/rdt-menu-bar-icon.png', rust)
         self.assertIn('.icon_as_template(false)', rust)
         self.assertNotIn('rdt-menu-bar-template-0D45.png', rust)
-        self.assertIn('"app-menu-about-rdt-connect" => {', rust)
-        self.assertIn('let _ = app.emit("rdt-connect-open-about", ());', rust)
+        self.assertNotIn('"app-menu-about-rdt-connect" => {', rust)
+        self.assertIn('let app_about = PredefinedMenuItem::about(', rust)
+        self.assertNotIn('let _ = app.emit("rdt-connect-open-about", ());', rust)
         self.assertNotIn('show_about_window(app)', rust)
         self.assertIn('"app-menu-check-updates" => {', rust)
         self.assertIn('if let Err(error) = show_update_window(app)', rust)
@@ -28,6 +31,22 @@ class AboutMenuUpdateContractTests(unittest.TestCase):
         end = rust.index(';', start) + 1
         submenu = rust[start:end]
         self.assertNotRegex(submenu, r'(?i)github|youtube')
+
+    def test_native_about_credits_show_build_and_exact_links(self):
+        credits = (ROOT / "src-tauri/resources/Credits.html").read_text(encoding="utf-8")
+        build_id = (ROOT / "scripts/build-id-sequence.txt").read_text(encoding="utf-8").strip()
+        self.assertIn(f'<p class="build">Build {build_id}</p>', credits)
+        self.assertIn(
+            '<a href="https://github.com/RolanDorisTech/rdt-voice">RDT Voice on GitHub</a>',
+            credits,
+        )
+        self.assertIn(
+            '<a href="https://youtube.com/@RolanDorisTech">Support us on YouTube</a>',
+            credits,
+        )
+        self.assertEqual(credits.count("<a href="), 2)
+        config = (ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+        self.assertIn('"resources/Credits.html": "Credits.html"', config)
 
     def test_original_about_card_and_exact_destinations(self):
         html = (ROOT / "index.html").read_text(encoding="utf-8")

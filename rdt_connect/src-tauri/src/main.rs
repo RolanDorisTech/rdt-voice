@@ -6545,13 +6545,7 @@ fn main() {
             let state = app.state::<BackendState>();
             #[cfg(target_os = "macos")]
             {
-                let app_about = MenuItem::with_id(
-                    app,
-                    "app-menu-about-rdt-connect",
-                    "About RDT Connect",
-                    true,
-                    None::<&str>,
-                )?;
+                let app_about = PredefinedMenuItem::about(app, Some("About RDT Connect"), None)?;
                 let app_updates = MenuItem::with_id(
                     app,
                     "app-menu-check-updates",
@@ -6603,9 +6597,6 @@ fn main() {
 
             app.on_menu_event(|app, event| {
                 match event.id().as_ref() {
-                    "app-menu-about-rdt-connect" => {
-                        let _ = app.emit("rdt-connect-open-about", ());
-                    },
                     "app-menu-check-updates" => {
                         if let Err(error) = show_update_window(app) {
                             eprintln!("[RDT Connect] Could not open update status window: {error}");

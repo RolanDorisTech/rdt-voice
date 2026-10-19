@@ -1,45 +1,36 @@
+# RDT Voice
+
+**Browser-based transcription that lets you choose where your audio is processed.**
+
+RDT Voice runs supported Whisper models in your browser with EasyWhisper, or sends audio to a Whisper-compatible backend that you choose and control. You do not need RDT Connect, an account, or an RDT-operated transcription service to use the browser app.
+
+<p align="center"><strong><a href="https://rolandoristech.github.io/rdt-voice/">Open RDT Voice in your browser ↗</a></strong> · <a href="#quick-start">Quick start</a> · <a href="#rdt-connect-downloads">Optional desktop app</a></p>
+
+- **Browser only:** start with EasyWhisper and the Tiny model if you're unsure what your device can handle.
+- **Your own backend:** connect to a Whisper service at an address you control.
+- **Useful exports:** work with timestamped transcripts and export formats including SRT, VTT, CSV, JSON and TXT.
+- **Current browser release:** version `v0.2.0-dev.10`, UI label `Build r35`. The HTML source marker is `dev9-alpha-r35-star-glow-unboxed-close-stable-version-pill-20261017`. This is an actively developed project, not a claim of exhaustive testing on every browser, device, and model.
+
+The public app is served from the repository root, [`index.html`](index.html). The older [`rdt-voice.html`](rdt-voice.html) file is retained as a historical version and is not the current app.
+
 <!-- RDT_CONNECT_PROMO_START -->
 <div align="left">
-  <h1>Meet RDT Connect</h1>
-  <h3>Your desktop companion for RDT Voice and local Whisper</h3>
-  <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
-  <p><strong>For macOS on Apple Silicon</strong></p>
-  <p><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d52/RDT_Connect_0.2.0-dev.10_0D52_Custom_aarch64.dmg"><img src="https://img.shields.io/badge/Download-RDT%20Connect%20for%20macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS"></a></p>
-  <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
-  <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
+  <h2>Optional desktop companion: RDT Connect</h2>
+  <p>For macOS on Apple Silicon. RDT Connect helps you choose a Whisper model, start or stop your local server, and open RDT Voice in your browser. It is optional; the browser app works without it.</p>
+  <p><strong>Current installer: Build 0D52</strong></p>
+  <p><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d52/RDT_Connect_0.2.0-dev.10_0D52_Custom_aarch64.dmg"><strong>Download the custom macOS DMG</strong></a> · <a href="#rdt-connect-downloads">Installation details and SHA-256</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases/tag/connect-v0.2-dev.10-0d52">Build 0D52 release notes</a></p>
+  <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect with the server running and Open RDT Voice available" width="760"></a>
 </div>
 <!-- RDT_CONNECT_PROMO_END -->
 
+## See RDT Voice in action
+
+Click either image to open the live browser app.
+
+<p align="center"><a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-ui.png" alt="RDT Voice browser transcription interface" width="900"></a></p>
+<p align="center"><a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-EasySetup.png" alt="RDT Voice Easy Setup and model selection" width="600"></a></p>
+
 ---
-
-[![RDT Voice - Try Now](https://img.shields.io/badge/RDT_Voice-Try_Now-brightgreen?style=for-the-badge&logo=github)](https://rolandoristech.github.io/rdt-voice/)
-
-## 🎥 See it in action
-
-Click either image below to try the live browser demo:
-
-<div align="center">
-  <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-ui.png" alt="RDT Voice Main Interface" width="100%"></a>
-  <br><br>
-  <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-EasySetup.png" alt="RDT Voice EasySetup" width="500"></a>
-</div>
-
-<p align="center">👉 <strong><a href="https://rolandoristech.github.io/rdt-voice/">Click here to try RDT Voice in your browser</a></strong></p>
-
-<h1 align="center">RDT Voice</h1>
-<p align="center"><strong>Browser transcription with EasyWhisper and your own Whisper backend</strong></p>
-<hr>
-**Record in your browser. Transcribe on your device or send audio to a Whisper backend you control. Export captions, transcripts, YouTube chapters, and description drafts.**
-
-- 🚀 **[Try RDT Voice](https://rolandoristech.github.io/rdt-voice/)**
-- ⬇️ **[View the current app source](index.html)** · [Download the complete repository ZIP](https://github.com/RolanDorisTech/rdt-voice/archive/refs/heads/main.zip)
-- 🧰 **[Apple Silicon backend setup guide](backend/README-APPLE-SILICON.md)** · [shared backend guide](backend/README.md) · [server source](backend/server.py) · [requirements](backend/requirements.txt)
-
-No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
-
-> **Current browser build:** HTML build `r35` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
-
-> **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.
 
 ## What it does
 
@@ -73,44 +64,35 @@ Open `http://localhost:5173/`. The root `index.html` is the current app. The exi
 
 ### Option C — use RDT Connect (optional desktop app)
 
-**1. Choose a model.**
+RDT Connect is a desktop companion for **macOS on Apple Silicon**. It helps manage a local Whisper server and opens the browser-based RDT Voice interface. It is not required for browser-only transcription.
 
-[![RDT Connect with the server stopped and Start Server button](assets/rdt-connect-server-stopped.png)](#rdt-connect-downloads)
+1. For a first installation, download the custom DMG in [RDT Connect Downloads](#rdt-connect-downloads) and follow the included installation guide.
+2. Open RDT Connect and choose a Whisper model.
+3. Click **Start Server** and wait for the running status.
+4. Click **Open RDT Voice** to open the browser interface.
 
-**2. Start the server.**
-
-[![RDT Connect with the server running and Open RDT Voice button](assets/rdt-connect-server-running.png)](#rdt-connect-downloads)
-
-Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional companion for **macOS on Apple Silicon**. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
-
-1. Open RDT Connect.
-2. Choose a Whisper model.
-3. Click **Start Server**.
-4. Click **Open RDT Voice**.
-
-**3. Open RDT Voice.**
-
-*Click either screenshot to jump to the desktop downloads.*
+<p align="center"><a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-stopped.png" alt="RDT Connect with the server stopped and Start Server available" width="46%"></a> <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect with the server running and Open RDT Voice available" width="46%"></a></p>
 
 ## RDT Connect Downloads
 
+RDT Connect is optional. You can use RDT Voice directly in your browser without installing the desktop app.
+
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d52/RDT_Connect_0.2.0-dev.10_0D52_Custom_aarch64.dmg) | `0.2.0-dev.10` | `0D52` | 377,256,414 bytes |
+| macOS (Apple Silicon) | [**Download custom DMG**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d52/RDT_Connect_0.2.0-dev.10_0D52_Custom_aarch64.dmg) | `0.2.0-dev.10` | `0D52` | 377,256,414 bytes |
 | Windows | Installer (.exe) | Coming soon | — | — |
 
 **SHA-256 (Build 0D52):** `73c3fbb3c67a47017baa93f5a31911bc86dc3b4004778839f93f408634550d7f`
 
-Download (.dmg) links directly to the published GitHub Release asset. The browser's Downloads panel handles download progress and cancellation. Update the link, version, build, and file size when publishing a new installer.
-
-
-RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.
+The DMG above is the custom-packaged installer with the approved Finder background, Applications shortcut, and installation guide. The checksum can be used to verify the downloaded file. The installer is for macOS on Apple Silicon; a Windows installer is not currently available.
 
 <p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
 
-**macOS note:** RDT Connect is distributed as an ad-hoc-signed, non-notarized app, so macOS may show a first-launch security warning. In-app updating has been verified on macOS Apple Silicon by updating Build 0D50 to Build 0D52 through **Check for Updates**. For a first installation, download the custom DMG above; use **Check for Updates** for later eligible signed development builds. See the [RDT Connect release list](https://github.com/RolanDorisTech/rdt-voice/releases).
+**macOS security note:** RDT Connect is an ad-hoc-signed, non-notarized development app, so macOS may show a first-launch security warning. Follow the installation guide above.
 
-See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
+**In-app updates:** updating from Build 0D50 to Build 0D52 through **Check for Updates** was successfully tested on macOS Apple Silicon. Use the in-app updater for eligible signed development releases published to the update feed. The release includes the signed updater archive and signature as well as the custom first-installation DMG.
+
+[View the Connect Build 0D52 release and assets](https://github.com/RolanDorisTech/rdt-voice/releases/tag/connect-v0.2-dev.10-0d52) · [View all releases](https://github.com/RolanDorisTech/rdt-voice/releases)
 
 ## Run your own Whisper backend
 

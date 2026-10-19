@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2.0-dev.10</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-t8R6gOBHX9vyPrZktTSsJ3+MR9Nv0Aes8GZW+46mQLY=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-a7SnF9jleViB3QQZA932NNk0bCk0IjUsx36U5izzrxM=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -5890,7 +5890,7 @@ body{background-size:cover!important;}
              0 12px 34px -10px color-mix(in srgb,var(--rdt-model-accent,#10B981) 24%,transparent)!important;
 }
 .rdt-easy-setup-swipe-panel .rdt-cascade-field:has(.rdt-easy-model-select-card):hover{
-  transform:translateY(-2px)!important;
+
   border-color:#2F3340!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.21),
              0 8px 26px -10px rgba(0,0,0,.55)!important;
@@ -5937,7 +5937,7 @@ body{background-size:cover!important;}
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 12px 34px -10px color-mix(in srgb,var(--rdt-model-accent,#10B981) 24%,transparent)!important;
 }
 .rdt-easy-setup-swipe-panel .rdt-cascade-field:has(.rdt-easy-model-select-card):hover{
-  transform:translateY(-2px)!important;border-color:#2F3340!important;filter:none!important;
+  border-color:#2F3340!important;filter:none!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.21),0 8px 26px -10px rgba(0,0,0,.55)!important;
 }
 .rdt-easy-setup-swipe-panel .rdt-cascade-field.rdt-model-card-selected:has(.rdt-easy-model-select-card):hover{
@@ -6491,6 +6491,116 @@ button:not(:disabled):active, [role="button"]:active { transform:none !important
 .rdt-cta-label-changing{opacity:0!important;transform:translateY(2px)!important;transition:opacity 140ms ease,transform 140ms ease!important}
 @media(prefers-reduced-motion:reduce){.rdt-cta-label-changing{transition:none!important}}
 </style>
+
+
+<style id="rdt-voice-animation-polish-20261019">
+@keyframes rdtTypeVersionPolished20261019 {
+  0%   { clip-path: inset(0 100% 0 0); animation-timing-function: steps(1,end); }
+  3%   { clip-path: inset(0 92.3077% 0 0); animation-timing-function: steps(1,end); }
+  6%   { clip-path: inset(0 84.6154% 0 0); animation-timing-function: steps(1,end); }
+  9%  { clip-path: inset(0 76.9231% 0 0); animation-timing-function: steps(1,end); }
+  12%  { clip-path: inset(0 69.2308% 0 0); animation-timing-function: steps(1,end); }
+  15%  { clip-path: inset(0 61.5385% 0 0); animation-timing-function: steps(1,end); }
+  25%  { clip-path: inset(0 53.8462% 0 0); animation-timing-function: steps(1,end); }
+  31%  { clip-path: inset(0 46.1538% 0 0); animation-timing-function: steps(1,end); }
+  39%  { clip-path: inset(0 38.4615% 0 0); animation-timing-function: steps(1,end); }
+  48%  { clip-path: inset(0 30.7692% 0 0); animation-timing-function: steps(1,end); }
+  58%  { clip-path: inset(0 23.0769% 0 0); animation-timing-function: steps(1,end); }
+  69%  { clip-path: inset(0 15.3846% 0 0); animation-timing-function: steps(1,end); }
+  82%  { clip-path: inset(0 7.6923% 0 0); animation-timing-function: steps(1,end); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
+/* Same prominent lift, overshoot and settle as the main-page cascade. */
+@keyframes rdtEasySetupCascadePop20261019 {
+  0%   { opacity:0; transform:translate3d(0,56px,0) scale(.90); }
+  60%  { opacity:.92; transform:translate3d(0,-8px,0) scale(1.035); }
+  82%  { opacity:1; transform:translate3d(0,3px,0) scale(.997); }
+  100% { opacity:1; transform:translate3d(0,0,0) scale(1); }
+}
+
+/* Keep the animation property constant while resizing. Visibility changes
+   without display:none, so repeatedly dragging the window won't restart it. */
+header .rdt-version-build-wrap {
+  visibility:visible !important;
+}
+header .version-badge {
+  display:inline-block !important;
+  width:max-content !important;
+  max-width:none !important;
+  overflow:hidden !important;
+  white-space:nowrap !important;
+  animation:rdtTypeVersionPolished20261019 2.4s linear .15s both !important;
+}
+@media(max-width:1150px) {
+  header .rdt-version-build-wrap {
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  header .version-badge { animation:none !important; clip-path:none !important; }
+}
+
+/* rdt-consolidated-cascade-20261019: ONE animation per visible layer; every layer shares the same duration/easing/keyframe.
+   Specificity: all rules start with #root, which outranks every legacy !important cascade rule (none use an id).
+   Fill-mode is 'backwards' (final keyframe == natural state) so nothing keeps a forwards transform: no hover/hit-test/sticky side effects. */
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > * { animation:none !important; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list { animation:none !important; transform:none !important; opacity:1 !important; filter:none !important; will-change:auto !important; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-setup-back,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > h3,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > h3 + p,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > details.rdt-about-model-size,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-setup-primary,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field { --rdt-pop-dur:247ms; animation:rdtEasySetupCascadePop20261019 var(--rdt-pop-dur) cubic-bezier(.16,1,.3,1) var(--rdt-pop-delay,0ms) backwards !important; transform-origin:center center !important; will-change:auto !important; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-setup-back { --rdt-pop-delay:0ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > h3 { --rdt-pop-delay:55ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > h3 + p { --rdt-pop-delay:110ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > details.rdt-about-model-size { --rdt-pop-delay:385ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-setup-primary { --rdt-pop-delay:440ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field:nth-child(1) { --rdt-pop-delay:165ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field:nth-child(2) { --rdt-pop-delay:220ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field:nth-child(3) { --rdt-pop-delay:275ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field:nth-child(4) { --rdt-pop-delay:330ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field:nth-child(5) { --rdt-pop-delay:385ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field:nth-child(6) { --rdt-pop-delay:385ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server > * { animation:none !important; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-back,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-heading,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-description,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-connect-promo,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-url,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-token-disclosure,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-local-server-diagnostics,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-easy-setup-actions { --rdt-pop-dur:300ms; animation:rdtEasySetupCascadePop20261019 var(--rdt-pop-dur) cubic-bezier(.16,1,.3,1) var(--rdt-pop-delay,0ms) backwards !important; transform-origin:center center !important; will-change:auto !important; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-back { --rdt-pop-delay:0ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-heading { --rdt-pop-delay:36ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-description { --rdt-pop-delay:72ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-connect-promo { --rdt-pop-delay:108ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-url { --rdt-pop-delay:144ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-token-disclosure { --rdt-pop-delay:180ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-local-server-diagnostics { --rdt-pop-delay:264ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-easy-setup-actions { --rdt-pop-delay:384ms; }
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-token { animation:none !important; transform:none !important; opacity:1 !important; filter:none !important; will-change:auto !important; }
+@media(prefers-reduced-motion:reduce) {
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > *,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up:not(.rdt-cascade-server):has(.rdt-easy-model-list) > .rdt-easy-model-list > .rdt-cascade-field,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server > *,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-back,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-heading,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-description,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-connect-promo,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-url,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-token-disclosure,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-local-server-diagnostics,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-easy-setup-actions,
+#root .rdt-easy-setup-panel .rdt-cascade-dir-up.rdt-cascade-server .rdt-server-cascade-token { animation:none !important; transform:none !important; opacity:1 !important; filter:none !important; will-change:auto !important; }
+}
+</style>
+
+
+
+
 
 </head>
 <body style="background:#2A2A2A;color:#EFEFEF;min-height:100vh;min-height:100dvh" class="select-none">
@@ -18516,7 +18626,7 @@ React.createElement("div", null,
             React.createElement("button", {onClick:()=>{ setEasySetupPath(null); setEasySetupTest(null); }, className:"rdt-setup-back", style:{marginBottom:"10px"}}, "\u2190 Back"),
             React.createElement("h3", {style:{fontSize:"18px", fontWeight:750, letterSpacing:"0.01em", margin:0}}, "Choose a model"),
             React.createElement("p", {style:{fontSize:"12px", color:"#A8AEB8", lineHeight:"1.55", marginTop:"6px", maxWidth:"340px", marginLeft:"auto", marginRight:"auto"}}, "Tiny is a good first choice for phones and long recordings. Larger models may help with accuracy, but need more memory."),
-            React.createElement("div", {style:{marginTop:"16px", textAlign:"left"}},
+            React.createElement("div", {className:"rdt-easy-model-list",style:{marginTop:"16px", textAlign:"left"}},
               EASYWHISPER_MODELS.slice().sort((a,b)=>a.tier-b.tier).map((m, i) => {
                 const isSel = easySetupModel === m.id;
                 const mobileDevice=isRdtMobileDevice();
@@ -18535,8 +18645,11 @@ React.createElement("div", null,
                 return React.createElement("div", {
                   key:m.id,
                   className:"rdt-cascade-field" + (isSel ? " rdt-model-card-selected" : ""),
+                  onClick:()=>setEasySetupModel(m.id),
                   style:{
-                    width:"100%",minWidth:0,boxSizing:"border-box",marginBottom:"8px",padding:"11px 14px",
+                    "--rdt-cascade-delay":(360 + i * 120) + "ms",
+                    position:"relative",
+                    width:"100%",minWidth:0,boxSizing:"border-box",marginBottom:"8px",padding:"11px 14px",cursor:"pointer",
                     borderRadius:"12px",background:isSel?modelTint:"#1A1C20",
                     border:"1.5px solid "+(isSel?modelAccent:"#2F3340"),
                     "--rdt-model-accent":modelAccent,
@@ -18544,12 +18657,10 @@ React.createElement("div", null,
                     transition:"transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease",
                     minHeight:0
                   },
-                  onMouseEnter:(e)=>{ e.currentTarget.style.transform="scale(1.015)"; e.currentTarget.style.boxShadow = isSel ? "0 0 0 2px "+modelAccent+"55, 0 0 18px "+modelAccent+"33" : "0 0 0 2px "+modelAccent+"33, 0 0 14px "+modelAccent+"18"; },
-                  onMouseLeave:(e)=>{ e.currentTarget.style.transform="scale(1)"; e.currentTarget.style.boxShadow = isSel ? "0 0 0 1px "+modelAccent+"22" : "none"; }
                 },
                 React.createElement("button", {
                   type:"button",
-                  onClick:()=>setEasySetupModel(m.id),
+                  onClick:(e)=>{e.stopPropagation();setEasySetupModel(m.id);},
                   className: "rdt-easy-model-select-card",
                   style:{
                     display:"block", width:"100%", minWidth:0, boxSizing:"border-box", textAlign:"left", padding:0, margin:0,
@@ -18588,7 +18699,7 @@ React.createElement("div", null,
                 );
               })
             ),
-            React.createElement("details", {className:"rdt-about-model-size",style:{marginTop:"8px",marginBottom:"4px",textAlign:"left",fontSize:"11px",color:"#A8AEB8",lineHeight:"1.5"}},
+            React.createElement("details", {className:"rdt-about-model-size",style:{"--rdt-cascade-delay":(360 + EASYWHISPER_MODELS.length * 120) + "ms",marginTop:"8px",marginBottom:"4px",textAlign:"left",fontSize:"11px",color:"#A8AEB8",lineHeight:"1.5"}},
               React.createElement("summary", {style:{cursor:"pointer",color:"#CBD5E1",fontWeight:650,padding:"4px 0"}}, "About model size and memory"),
               React.createElement("p", {style:{marginTop:"5px"}}, "Download size varies by browser and device; the ranges shown are estimates. EasyWhisper runs in this browser, and available memory varies by device and open tabs. If a larger model fails or the page reloads, try Tiny or use Local Server. For important recordings, download a copy before trying again.")
             ),
@@ -18632,6 +18743,7 @@ React.createElement("div", null,
               onMouseEnter:(e)=>{ if(!easySetupModel) return; e.currentTarget.style.transform="translateY(-1px)"; e.currentTarget.style.boxShadow=easyWhisperLoadedModel===easySetupModel?"0 0 0 2px rgba(239,68,68,.35), 0 8px 26px rgba(239,68,68,.2)":"0 0 0 2px rgba(16,185,129,0.45), 0 8px 26px rgba(16,185,129,0.28)"; },
               onMouseLeave:(e)=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow=!easySetupModel?"none":easyWhisperLoadedModel===easySetupModel?"0 0 0 1px rgba(239,68,68,.25), 0 6px 20px rgba(239,68,68,.16)":"0 0 0 1px rgba(16,185,129,0.25), 0 6px 20px rgba(16,185,129,0.18)"; },
               style:{
+                "--rdt-cascade-delay":(480 + EASYWHISPER_MODELS.length * 120) + "ms",
                 marginTop:"8px", width:"100%", padding:"12px 24px", borderRadius:"999px",
                 fontSize:"13px", fontWeight:700, letterSpacing:"0.02em",
                 background:!easySetupModel?"#303238":easyWhisperLoadedModel===easySetupModel?"#7F1D1D":"#10B981",

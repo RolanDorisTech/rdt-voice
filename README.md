@@ -96,10 +96,10 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d53/RDT_Connect_0.2.0-dev.10.0D.53_aarch64.dmg) | `0.2.0-dev.10` | `0D53` | 377,194,805 bytes |
+| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d53/RDT_Connect_0.2.0-dev.10.0D.53_aarch64.dmg) | `0.2.0-dev.10.0D.53` | `0D53` | 377,195,289 bytes |
 | Windows | Installer (.exe) | Coming soon | — | — |
 
-**SHA-256 (Build 0D53):** `743c218c7940a96b5e8522f93467588e7b15c08a600baa8e10dc1a06d58bf947`
+**SHA-256 (Build 0D53):** `91ed7d7f28ebaea98a2e3f35b95be2618ff7b00bf606c521052975fedced533d`
 
 Download (.dmg) links directly to the published GitHub Release asset. The browser's Downloads panel handles download progress and cancellation. Update the link, version, build, and file size when publishing a new installer.
 
@@ -108,7 +108,7 @@ RDT Connect is optional. You can use RDT Voice directly in your browser without 
 
 <p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
 
-**macOS note:** RDT Connect is distributed as an ad-hoc-signed, non-notarized app, so macOS may show a first-launch security warning. Build 0D53 is a custom DMG for manual installation. This release does not include updater-signed artifacts; do not rely on **Check for Updates** to install 0D53. In-app updating was previously verified from Build 0D50 to Build 0D52 on macOS Apple Silicon, but that earlier test does not verify updating to this DMG-only release. See the [RDT Connect release list](https://github.com/RolanDorisTech/rdt-voice/releases).
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The custom Build 0D53 DMG uses the established installation layout. The development updater feed provides the signed 0D53 archive and matching signature for eligible existing installations.
 
 See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
 

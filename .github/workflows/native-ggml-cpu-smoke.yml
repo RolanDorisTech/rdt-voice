@@ -1,0 +1,155 @@
+name: Native GGML CPU inference qualification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["windows-port-*", "main"]
+    paths:
+      - "backend/whisper_cpp/**"
+      - "backend/windows/**"
+      - ".github/workflows/native-ggml-cpu-smoke.yml"
+  pull_request:
+    paths:
+      - "backend/whisper_cpp/**"
+      - "backend/windows/**"
+      - ".github/workflows/native-ggml-cpu-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  native-cpu-inference:
+    name: ${{ matrix.label }} — native CPU transcription
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            runner: windows-latest
+            os: windows
+            cmake_arch: x64
+          - label: Windows ARM64
+            runner: windows-11-arm
+            os: windows
+            cmake_arch: ARM64
+          - label: Ubuntu 24.04 x64
+            runner: ubuntu-24.04
+            os: linux
+            cmake_arch: ""
+          - label: Ubuntu 24.04 ARM64
+            runner: ubuntu-24.04-arm
+            os: linux
+            cmake_arch: ""
+
+    steps:
+      - name: Checkout RDT source
+        uses: actions/checkout@v4
+
+      - name: Run cross-platform GGML/backend contract tests
+        shell: pwsh
+        if: runner.os == 'Windows'
+        run: |
+          python -m unittest discover -s backend/whisper_cpp/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Shared GGML registry tests failed.' }
+          python -m unittest discover -s backend/windows/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Backend contract tests failed.' }
+
+      - name: Run cross-platform GGML/backend contract tests
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s backend/whisper_cpp/tests -v
+          python3 -m unittest discover -s backend/windows/tests -v
+
+      - name: Checkout immutable whisper.cpp qualification source
+        shell: pwsh
+        if: runner.os == 'Windows'
+        run: |
+          $pins = Get-Content backend/whisper_cpp/engine-pins.json | ConvertFrom-Json
+          git clone --no-checkout $pins.source_repository "$env:RUNNER_TEMP/whisper.cpp"
+          if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp clone failed' }
+          git -C "$env:RUNNER_TEMP/whisper.cpp" fetch --depth 1 origin $pins.source_commit
+          if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp pinned fetch failed' }
+          git -C "$env:RUNNER_TEMP/whisper.cpp" checkout --detach $pins.source_commit
+          if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp pinned checkout failed' }
+          git -C "$env:RUNNER_TEMP/whisper.cpp" submodule update --init --recursive
+          if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp submodule update failed' }
+
+      - name: Checkout immutable whisper.cpp qualification source
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_repo="$(python -c 'import json; print(json.load(open("backend/whisper_cpp/engine-pins.json"))["source_repository"])')"
+          source_commit="$(python -c 'import json; print(json.load(open("backend/whisper_cpp/engine-pins.json"))["source_commit"])')"
+          git clone --no-checkout "$source_repo" "$RUNNER_TEMP/whisper.cpp"
+          git -C "$RUNNER_TEMP/whisper.cpp" fetch --depth 1 origin "$source_commit"
+          git -C "$RUNNER_TEMP/whisper.cpp" checkout --detach "$source_commit"
+          git -C "$RUNNER_TEMP/whisper.cpp" submodule update --init --recursive
+
+      - name: Verify source and submodule pins (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python backend/whisper_cpp/scripts/verify_engine_checkout.py --source "$env:RUNNER_TEMP/whisper.cpp" --pins backend/whisper_cpp/engine-pins.json --output artifacts/engine-pin-report.json
+
+      - name: Verify source and submodule pins (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 backend/whisper_cpp/scripts/verify_engine_checkout.py --source "$RUNNER_TEMP/whisper.cpp" --pins backend/whisper_cpp/engine-pins.json --output artifacts/engine-pin-report.json
+
+      - name: Configure native CPU worker (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S backend/whisper_cpp/worker -B "$env:RUNNER_TEMP/rdt-whisper-build" -A "${{ matrix.cmake_arch }}" -DWHISPER_CPP_SOURCE="$env:RUNNER_TEMP/whisper.cpp" -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+
+      - name: Configure native CPU worker (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S backend/whisper_cpp/worker -B "$RUNNER_TEMP/rdt-whisper-build" -DWHISPER_CPP_SOURCE="$RUNNER_TEMP/whisper.cpp" -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build native CPU worker
+        shell: pwsh
+        if: runner.os == 'Windows'
+        run: |
+          cmake --build "$env:RUNNER_TEMP/rdt-whisper-build" --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Native worker compile failed' }
+
+      - name: Build native CPU worker
+        if: runner.os == 'Linux'
+        shell: bash
+        run: cmake --build "$RUNNER_TEMP/rdt-whisper-build" --config Release --parallel 2
+
+      - name: Run verified model and real transcription smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python backend/whisper_cpp/scripts/native_cpu_smoke.py --worker "$env:RUNNER_TEMP/rdt-whisper-build/bin/rdt_whisper_worker.exe" --model "$env:RUNNER_TEMP/ggml-tiny-q8_0.bin" --fixture backend/whisper_cpp/tests/fixtures/smoke-multilingual-16k-mono.wav
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows inference smoke failed' }
+
+      - name: Run verified model and real transcription smoke test (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 backend/whisper_cpp/scripts/native_cpu_smoke.py --worker "$RUNNER_TEMP/rdt-whisper-build/bin/rdt_whisper_worker" --model "$RUNNER_TEMP/ggml-tiny-q8_0.bin" --fixture backend/whisper_cpp/tests/fixtures/smoke-multilingual-16k-mono.wav
+
+      - name: Upload native qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ggml-cpu-${{ matrix.os }}-${{ matrix.cmake_arch || 'native' }}
+          path: |
+            artifacts/engine-pin-report.json
+            ${{ runner.temp }}/ggml-tiny-q8_0.bin
+          if-no-files-found: ignore
+          retention-days: 14

@@ -53,7 +53,14 @@ if (-not $WhisperCppSource) {
 & $pythonExe (Join-Path $RepoRoot 'backend/whisper_cpp/scripts/verify_engine_checkout.py') --source $WhisperCppSource --pins $PinFile --output (Join-Path $buildRoot 'engine-pin-report.json')
 if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp source/submodule pin verification failed.' }
 $workerBuild = Join-Path $buildRoot 'worker-build'
-cmake -S (Join-Path $RepoRoot 'backend/whisper_cpp/worker') -B $workerBuild -A $TargetArch -DWHISPER_CPP_SOURCE=$WhisperCppSource -DCMAKE_BUILD_TYPE=Release
+$whisperCmakeLists = Join-Path $WhisperCppSource 'CMakeLists.txt'
+if (-not (Test-Path -LiteralPath $whisperCmakeLists -PathType Leaf)) {
+  throw "Pinned whisper.cpp CMakeLists.txt is missing at: $WhisperCppSource"
+}
+$WhisperCppSource = (Resolve-Path -LiteralPath $WhisperCppSource).Path
+$cmakeWhisperSource = $WhisperCppSource.Replace('\', '/')
+Write-Host "Verified whisper.cpp source root: $cmakeWhisperSource"
+cmake -S (Join-Path $RepoRoot 'backend/whisper_cpp/worker') -B $workerBuild -A $TargetArch "-DWHISPER_CPP_SOURCE=$cmakeWhisperSource" -DCMAKE_BUILD_TYPE=Release
 if ($LASTEXITCODE -ne 0) { throw 'CMake worker configuration failed.' }
 cmake --build $workerBuild --config Release --parallel 2
 if ($LASTEXITCODE -ne 0) { throw 'Native persistent worker build failed.' }

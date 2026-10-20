@@ -78,7 +78,7 @@ $runtimeDirs = @(
 ) | Select-Object -Unique
 
 foreach ($runtimeDir in $runtimeDirs) {
-    Get-ChildItem -LiteralPath $runtimeDir -File -Filter '*.dll' |
+    Get-ChildItem -LiteralPath $runtimeDir -File |
         ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination $DestinationDir -Force
         }

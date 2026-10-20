@@ -367,17 +367,25 @@ struct LocalTlsConfig {
     private_key_path: Option<String>,
     ca_certificate_path: Option<String>,
     generated: bool,
+    // SHA-256 pins are populated for RDT-generated Windows TLS files. They allow
+    // status checks to detect a replaced certificate/key before the key is used.
+    windows_certificate_sha256: Option<String>,
+    windows_private_key_sha256: Option<String>,
+    windows_ca_sha256: Option<String>,
     // Only fingerprints explicitly imported by RDT Connect may be removed by its UI.
     managed_trust_fingerprints: Vec<String>,
 }
 impl Default for LocalTlsConfig {
     fn default() -> Self {
         Self {
-            mode: if cfg!(target_os = "macos") { "https" } else { "http" }.into(),
+            mode: if cfg!(any(target_os = "macos", target_os = "windows")) { "https" } else { "http" }.into(),
             certificate_path: None,
             private_key_path: None,
             ca_certificate_path: None,
             generated: false,
+            windows_certificate_sha256: None,
+            windows_private_key_sha256: None,
+            windows_ca_sha256: None,
             managed_trust_fingerprints: Vec::new(),
         }
     }
@@ -1967,6 +1975,297 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
     Ok(())
 }
 
+fn sha256_file_hex(path: &Path) -> Result<String, String> {
+    let bytes = fs::read(path)
+        .map_err(|error| format!("Could not read a file for integrity verification: {error}"))?;
+    Ok(format!("{:x}", Sha256::digest(&bytes)))
+}
+
+#[cfg(windows)]
+fn powershell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+#[cfg(windows)]
+fn run_powershell_script(script: &str, what: &str) -> Result<std::process::Output, String> {
+    let encoded_script = BASE64.encode(
+        script
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<u8>>(),
+    );
+    let mut command = Command::new("powershell.exe");
+    command
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-EncodedCommand",
+        ])
+        .arg(encoded_script)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command.creation_flags(0x08000000);
+    let output = command
+        .output()
+        .map_err(|error| format!("Could not start Windows PowerShell to {what}: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() { stderr } else { stdout };
+        return Err(format!(
+            "Windows PowerShell could not {what}{}",
+            if detail.is_empty() { ".".into() } else { format!(": {detail}") }
+        ));
+    }
+    Ok(output)
+}
+
+#[cfg(windows)]
+fn powershell_read_certificate(path: &Path) -> Result<String, String> {
+    let path = path
+        .to_str()
+        .ok_or_else(|| "The certificate path is not valid Unicode on Windows.".to_string())?;
+    Ok(format!(
+        r#"function Read-RdtCertificate([string]$p) {{
+  $pem = [System.IO.File]::ReadAllText($p)
+  $m = [regex]::Match($pem, '-----BEGIN CERTIFICATE-----\s*(?<body>[A-Za-z0-9+/=\r\n]+)\s*-----END CERTIFICATE-----')
+  if (-not $m.Success) {{ throw 'certificate_pem_invalid' }}
+  $der = [Convert]::FromBase64String(($m.Groups['body'].Value -replace '\s', ''))
+  return [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$der)
+}}
+$cert = Read-RdtCertificate {path}
+"#,
+        path = powershell_quote(path)
+    ))
+}
+
+#[cfg(windows)]
+fn windows_certificate_thumbprint(cert_path: &Path) -> Result<String, String> {
+    let mut script = powershell_read_certificate(cert_path)?;
+    script.push_str("[Console]::Out.Write($cert.Thumbprint.ToUpperInvariant())\n");
+    let output = run_powershell_script(&script, "read a certificate thumbprint")?;
+    let thumbprint = String::from_utf8_lossy(&output.stdout).trim().to_ascii_uppercase();
+    if thumbprint.len() != 40 || !thumbprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("Windows returned an invalid certificate thumbprint.".into());
+    }
+    Ok(thumbprint)
+}
+
+#[cfg(windows)]
+fn windows_root_store_contains(thumbprint: &str) -> Result<bool, String> {
+    if thumbprint.len() != 40 || !thumbprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("A malformed certificate fingerprint was refused.".into());
+    }
+    let script = format!(
+        r#"$ErrorActionPreference = 'Stop'
+$thumb = {}
+$store = [System.Security.Cryptography.X509Certificates.X509Store]::new([System.Security.Cryptography.X509Certificates.StoreName]::Root, [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+try {{
+  $found = @($store.Certificates | Where-Object {{ $_.Thumbprint.ToUpperInvariant() -eq $thumb }}).Count -gt 0
+  if ($found) {{ [Console]::Out.Write('true') }} else {{ [Console]::Out.Write('false') }}
+}} finally {{ $store.Close() }}
+"#,
+        powershell_quote(&thumbprint.to_ascii_uppercase())
+    );
+    let output = run_powershell_script(&script, "inspect the current-user trusted-root store")?;
+    match String::from_utf8_lossy(&output.stdout).trim() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err("Windows returned an invalid trusted-root store result.".into()),
+    }
+}
+
+#[cfg(windows)]
+fn windows_add_root_to_current_user_store(ca_path: &Path) -> Result<String, String> {
+    // Resolve the fingerprint before any store mutation so an unexpected result
+    // can be rolled back without searching for or touching an unrelated root.
+    let expected_thumbprint = windows_certificate_thumbprint(ca_path)?;
+    let mut script = powershell_read_certificate(ca_path)?;
+    script.push_str(
+        r#"$caExtensions = @($cert.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.19' })
+if ($caExtensions.Count -lt 1 -or -not ([System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]$caExtensions[0]).CertificateAuthority) { throw 'selected_certificate_is_not_a_ca' }
+if ($cert.Subject -ne $cert.Issuer) { throw 'selected_ca_is_not_self_issued' }
+$thumb = $cert.Thumbprint.ToUpperInvariant()
+$store = [System.Security.Cryptography.X509Certificates.X509Store]::new([System.Security.Cryptography.X509Certificates.StoreName]::Root, [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+try {
+  $existing = @($store.Certificates | Where-Object { $_.Thumbprint.ToUpperInvariant() -eq $thumb }).Count -gt 0
+  if ($existing) { throw 'root_certificate_already_present_not_added_by_this_operation' }
+  $publicOnly = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$cert.RawData)
+  $store.Add($publicOnly)
+} finally { $store.Close() }
+[Console]::Out.Write($thumb)
+"#,
+    );
+    let output = run_powershell_script(&script, "add the RDT root CA to the current user's trust store")?;
+    let thumbprint = String::from_utf8_lossy(&output.stdout).trim().to_ascii_uppercase();
+    if thumbprint != expected_thumbprint {
+        let _ = windows_remove_root_from_current_user_store(&expected_thumbprint);
+        return Err("Windows reported a root fingerprint different from the generated CA; the newly added CA was rolled back where possible.".into());
+    }
+    match windows_root_store_contains(&thumbprint) {
+        Ok(true) => Ok(thumbprint),
+        Ok(false) => {
+            let _ = windows_remove_root_from_current_user_store(&expected_thumbprint);
+            Err("Windows did not retain the RDT root CA in the current user's trust store; the new entry was rolled back where possible.".into())
+        }
+        Err(error) => {
+            let rollback = windows_remove_root_from_current_user_store(&expected_thumbprint);
+            Err(format!("Could not verify the current-user root store after adding the RDT CA. Rollback {}. Detail: {error}", if rollback.is_ok() { "completed" } else { "also needs attention" }))
+        }
+    }
+}
+
+#[cfg(windows)]
+fn windows_remove_root_from_current_user_store(thumbprint: &str) -> Result<(), String> {
+    if thumbprint.len() != 40 || !thumbprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("A malformed certificate fingerprint was refused.".into());
+    }
+    let script = format!(
+        r#"$ErrorActionPreference = 'Stop'
+$thumb = {}
+$store = [System.Security.Cryptography.X509Certificates.X509Store]::new([System.Security.Cryptography.X509Certificates.StoreName]::Root, [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+try {{
+  $matches = @($store.Certificates | Where-Object {{ $_.Thumbprint.ToUpperInvariant() -eq $thumb }})
+  foreach ($item in $matches) {{ $store.Remove($item) }}
+}} finally {{ $store.Close() }}
+"#,
+        powershell_quote(&thumbprint.to_ascii_uppercase())
+    );
+    run_powershell_script(&script, "remove the exact RDT-managed root from the current user's trust store")?;
+    if windows_root_store_contains(thumbprint)? {
+        return Err("Windows still reports the RDT-managed root in the current-user trust store.".into());
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn windows_validate_generated_tls_files(config: &LocalTlsConfig, cert: &Path, key: &Path, ca: &Path) -> Result<(), String> {
+    for (path, expected, label) in [
+        (cert, config.windows_certificate_sha256.as_deref(), "server certificate"),
+        (key, config.windows_private_key_sha256.as_deref(), "server private key"),
+        (ca, config.windows_ca_sha256.as_deref(), "root CA certificate"),
+    ] {
+        let expected = expected.ok_or_else(|| format!("The generated Windows {label} has no integrity record. Run Set up trusted local HTTPS again."))?;
+        let actual = sha256_file_hex(path)?;
+        if !expected.eq_ignore_ascii_case(&actual) {
+            return Err(format!("The generated Windows {label} changed after setup. Run Set up trusted local HTTPS again; HTTPS will not start with altered TLS material."));
+        }
+    }
+
+    let mut script = powershell_read_certificate(cert)?;
+    let ca_path = ca.to_str().ok_or_else(|| "The CA path is not valid Unicode on Windows.".to_string())?;
+    // The server certificate/private-key match is checked against the CNG key
+    // before export in windows_generate_tls_files. Pinning the exact private-key
+    // bytes here detects post-setup changes without importing a new CNG key
+    // container on every health/status poll.
+    script.push_str(&format!("$ca = Read-RdtCertificate {}\n", powershell_quote(ca_path)));
+    script.push_str(r#"
+$now = [DateTime]::UtcNow
+if ($cert.NotBefore.ToUniversalTime() -gt $now -or $cert.NotAfter.ToUniversalTime() -le $now) { throw 'server_certificate_expired_or_not_yet_valid' }
+if ($ca.NotBefore.ToUniversalTime() -gt $now -or $ca.NotAfter.ToUniversalTime() -le $now) { throw 'root_ca_expired_or_not_yet_valid' }
+$caExtensions = @($ca.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.19' })
+if ($caExtensions.Count -lt 1 -or -not ([System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]$caExtensions[0]).CertificateAuthority) { throw 'configured_root_is_not_a_ca' }
+if ($ca.Subject -ne $ca.Issuer -or $cert.Issuer -ne $ca.Subject) { throw 'certificate_issuer_mismatch' }
+$sanExtensions = @($cert.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.17' })
+$sanText = if ($sanExtensions.Count -gt 0) { $sanExtensions[0].Format($true) } else { '' }
+if ($sanText -notmatch '(?im)IP\s*Address\s*[=:]\s*127\.0\.0\.1') { throw 'server_certificate_missing_loopback_ip_san' }
+$ekuExtensions = @($cert.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.37' })
+if ($ekuExtensions.Count -lt 1 -or -not (($ekuExtensions[0].EnhancedKeyUsages | Where-Object { $_.Value -eq '1.3.6.1.5.5.7.3.1' }).Count -gt 0)) { throw 'server_certificate_missing_server_auth_eku' }
+$chain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
+$chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
+$chain.ChainPolicy.ExtraStore.Add($ca)
+$chain.ChainPolicy.VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::AllowUnknownCertificateAuthority
+if (-not $chain.Build($cert)) { throw 'server_certificate_chain_validation_failed' }
+$chainRoot = $chain.ChainElements[$chain.ChainElements.Count - 1].Certificate.Thumbprint.ToUpperInvariant()
+if ($chainRoot -ne $ca.Thumbprint.ToUpperInvariant()) { throw 'server_certificate_does_not_chain_to_configured_root' }
+[Console]::Out.Write('OK')
+"#);
+    run_powershell_script(&script, "validate the generated Windows TLS certificate, private-key match, SAN, expiry, chain and pinned files")?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn windows_generate_tls_files(cert_path: &Path, key_path: &Path, ca_path: &Path) -> Result<(), String> {
+    let cert_path = cert_path.to_str().ok_or_else(|| "The certificate path is not valid Unicode on Windows.".to_string())?;
+    let key_path = key_path.to_str().ok_or_else(|| "The private-key path is not valid Unicode on Windows.".to_string())?;
+    let ca_path = ca_path.to_str().ok_or_else(|| "The CA path is not valid Unicode on Windows.".to_string())?;
+    let mut script = String::from(r#"
+$ErrorActionPreference = 'Stop'
+$ca = $null
+$server = $null
+function Write-RdtPem([string]$path, [string]$label, [byte[]]$bytes) {
+  $encoded = [Convert]::ToBase64String($bytes)
+  $lines = New-Object System.Collections.Generic.List[string]
+  for ($offset = 0; $offset -lt $encoded.Length; $offset += 64) {
+    $length = [Math]::Min(64, $encoded.Length - $offset)
+    $lines.Add($encoded.Substring($offset, $length))
+  }
+  $pem = "-----BEGIN $label-----`r`n" + ($lines -join "`r`n") + "`r`n-----END $label-----`r`n"
+  [System.IO.File]::WriteAllText($path, $pem, [System.Text.Encoding]::ASCII)
+}
+function Remove-RdtGeneratedCertificate($item) {
+  if ($null -eq $item) { return }
+  $thumb = $item.Thumbprint
+  $uniqueName = $null
+  try {
+    $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($item)
+    if ($rsa -is [System.Security.Cryptography.RSACng]) { $uniqueName = $rsa.Key.UniqueName }
+    if ($rsa) { $rsa.Dispose() }
+  } catch { }
+  try { Remove-Item -LiteralPath ("Cert:\CurrentUser\My\" + $thumb) -Force -ErrorAction SilentlyContinue } catch { }
+  if ($uniqueName) {
+    try {
+      $storedKey = [System.Security.Cryptography.CngKey]::Open($uniqueName, [System.Security.Cryptography.CngProvider]::MicrosoftSoftwareKeyStorageProvider)
+      $storedKey.Delete()
+      $storedKey.Dispose()
+    } catch { }
+  }
+  try { $item.Dispose() } catch { }
+}
+try {
+  $ca = New-SelfSignedCertificate -Type Custom -Subject 'CN=RDT Connect Local HTTPS CA' -CertStoreLocation 'Cert:\CurrentUser\My' -Provider 'Microsoft Software Key Storage Provider' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(5) -TextExtension @('2.5.29.19={critical}{text}ca=TRUE&pathlength=0','2.5.29.15={critical}{text}keyCertSign,cRLSign')
+  if ($null -eq $ca -or -not $ca.HasPrivateKey) { throw 'root_ca_generation_failed' }
+  $server = New-SelfSignedCertificate -Type Custom -Subject 'CN=127.0.0.1' -Signer $ca -CertStoreLocation 'Cert:\CurrentUser\My' -Provider 'Microsoft Software Key Storage Provider' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -NotAfter (Get-Date).AddDays(365) -TextExtension @('2.5.29.19={critical}{text}ca=FALSE','2.5.29.15={critical}{text}digitalSignature,keyEncipherment','2.5.29.37={text}1.3.6.1.5.5.7.3.1','2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1')
+  if ($null -eq $server -or -not $server.HasPrivateKey) { throw 'server_certificate_generation_failed' }
+  $publicRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($server)
+  $privateRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($server)
+  if ($null -eq $publicRsa -or $privateRsa -isnot [System.Security.Cryptography.RSACng]) { throw 'server_private_key_provider_not_supported' }
+  try {
+    $pub = $publicRsa.ExportParameters($false)
+    $priv = $privateRsa.ExportParameters($false)
+    if ([Convert]::ToBase64String($pub.Modulus) -ne [Convert]::ToBase64String($priv.Modulus) -or [Convert]::ToBase64String($pub.Exponent) -ne [Convert]::ToBase64String($priv.Exponent)) { throw 'server_key_pair_mismatch' }
+    $privateDer = $privateRsa.Key.Export([System.Security.Cryptography.CngKeyBlobFormat]::Pkcs8PrivateBlob)
+  } finally {
+    if ($publicRsa) { $publicRsa.Dispose() }
+    if ($privateRsa) { $privateRsa.Dispose() }
+  }
+  Write-RdtPem @CERT@ 'CERTIFICATE' ([byte[]]$server.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+  Write-RdtPem @CA@ 'CERTIFICATE' ([byte[]]$ca.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+  Write-RdtPem @KEY@ 'PRIVATE KEY' ([byte[]]$privateDer)
+  [Console]::Out.Write('OK')
+} finally {
+  Remove-RdtGeneratedCertificate $server
+  Remove-RdtGeneratedCertificate $ca
+}
+"#);
+    script = script
+        .replace("@CERT@", &powershell_quote(cert_path))
+        .replace("@KEY@", &powershell_quote(key_path))
+        .replace("@CA@", &powershell_quote(ca_path));
+    let output = run_powershell_script(&script, "generate a loopback-only local HTTPS certificate and private key")?;
+    if String::from_utf8_lossy(&output.stdout).trim() != "OK" {
+        return Err("Windows certificate generation did not return an explicit success result.".into());
+    }
+    Ok(())
+}
+
 fn openssl_output(args: &[&str], what: &str) -> Result<std::process::Output, String> {
     if !cfg!(target_os = "macos") {
         return Err("Local HTTPS certificate setup is not qualified on this platform yet. Windows/Linux development builds use HTTP on loopback only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
@@ -2039,7 +2338,7 @@ fn canonical_file(raw: &str, label: &str) -> Result<PathBuf, String> {
 
 fn sha1_fingerprint(cert: &Path) -> Result<String, String> {
     if !cfg!(target_os = "macos") {
-        return Err("Local certificate trust management is only implemented for macOS in Build 0D54. No macOS command was run.".into());
+        return Err("macOS Keychain fingerprinting is unavailable on Windows; the Windows path uses SHA-256 fingerprints and the current-user certificate store. No macOS command was run.".into());
     }
     let output = Command::new("/usr/bin/openssl")
         .args(["x509", "-in"])
@@ -2064,9 +2363,29 @@ fn sha1_fingerprint(cert: &Path) -> Result<String, String> {
     Ok(value)
 }
 
+#[cfg(windows)]
+fn validate_windows_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
+    if !config.generated {
+        return Err("Windows trusted local HTTPS currently accepts only RDT-generated certificates; use Set up trusted local HTTPS so certificate identity, private-key matching, and current-user trust can be verified safely.".into());
+    }
+    let cert_raw = config.certificate_path.as_deref().ok_or_else(|| "HTTPS is the default, but no server certificate is configured. Select Set up trusted local HTTPS; RDT Connect will not silently fall back to HTTP.".to_string())?;
+    let key_raw = config.private_key_path.as_deref().ok_or_else(|| "HTTPS is the default, but no private key is configured. Select Set up trusted local HTTPS; RDT Connect will not silently fall back to HTTP.".to_string())?;
+    let ca_raw = config.ca_certificate_path.as_deref().ok_or_else(|| "The generated Windows HTTPS setup has no recorded root CA. Run Set up trusted local HTTPS again.".to_string())?;
+    let cert = canonical_file(cert_raw, "server certificate")?;
+    let key = canonical_file(key_raw, "private key")?;
+    let ca = canonical_file(ca_raw, "root CA certificate")?;
+    windows_validate_generated_tls_files(config, &cert, &key, &ca)
+}
+
 fn validate_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
-    if !cfg!(target_os = "macos") {
-        return Err("Local HTTPS trust setup is not implemented for this platform in Build 0D54. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    #[cfg(windows)]
+    {
+        return validate_windows_tls_material(config);
+    }
+    #[cfg(all(not(target_os = "macos"), not(windows)))]
+    {
+        let _ = config;
+        return Err("Trusted local HTTPS is not implemented on this platform. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     let cert_raw = config.certificate_path.as_deref().ok_or_else(|| "HTTPS is the default, but no server certificate is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.".to_string())?;
     let key_raw = config.private_key_path.as_deref().ok_or_else(|| "HTTPS is the default, but no private key is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.".to_string())?;
@@ -2170,9 +2489,46 @@ fn certificate_trusted(cert: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(target_os = "macos"))]
-fn certificate_trusted(_cert: &Path) -> bool {
-    false
+#[cfg(windows)]
+fn windows_certificate_trusted(config: &LocalTlsConfig) -> bool {
+    let (Some(cert_raw), Some(ca_raw)) = (config.certificate_path.as_deref(), config.ca_certificate_path.as_deref()) else { return false; };
+    let cert_path = Path::new(cert_raw);
+    let ca_path = Path::new(ca_raw);
+    let Some(ca_path_text) = ca_path.to_str() else { return false; };
+    let Ok(mut script) = powershell_read_certificate(cert_path) else { return false; };
+    script.push_str(&format!("$ca = Read-RdtCertificate {}\n", powershell_quote(ca_path_text)));
+    script.push_str(r#"
+$now = [DateTime]::UtcNow
+if ($cert.NotBefore.ToUniversalTime() -gt $now -or $cert.NotAfter.ToUniversalTime() -le $now) { [Console]::Out.Write('false'); exit 0 }
+if ($ca.NotBefore.ToUniversalTime() -gt $now -or $ca.NotAfter.ToUniversalTime() -le $now) { [Console]::Out.Write('false'); exit 0 }
+if ($ca.Subject -ne $ca.Issuer -or $cert.Issuer -ne $ca.Subject) { [Console]::Out.Write('false'); exit 0 }
+$san = @($cert.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.17' })
+$sanText = if ($san.Count -gt 0) { $san[0].Format($true) } else { '' }
+if ($sanText -notmatch '(?im)IP\s*Address\s*[=:]\s*127\.0\.0\.1') { [Console]::Out.Write('false'); exit 0 }
+$chain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
+$chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
+if (-not $chain.Build($cert)) { [Console]::Out.Write('false'); exit 0 }
+$root = $chain.ChainElements[$chain.ChainElements.Count - 1].Certificate.Thumbprint.ToUpperInvariant()
+if ($root -ne $ca.Thumbprint.ToUpperInvariant()) { [Console]::Out.Write('false'); exit 0 }
+$store = [System.Security.Cryptography.X509Certificates.X509Store]::new([System.Security.Cryptography.X509Certificates.StoreName]::Root, [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+try { $present = @($store.Certificates | Where-Object { $_.Thumbprint.ToUpperInvariant() -eq $root }).Count -gt 0 } finally { $store.Close() }
+if ($present) { [Console]::Out.Write('true') } else { [Console]::Out.Write('false') }
+"#);
+    match run_powershell_script(&script, "verify Windows current-user TLS trust").map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string()) {
+        Ok(value) => value == "true",
+        Err(_) => false,
+    }
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
+fn certificate_trusted(_cert: &Path) -> bool { false }
+
+fn configured_certificate_trusted(config: &LocalTlsConfig) -> bool {
+    #[cfg(windows)] { return windows_certificate_trusted(config); }
+    #[cfg(not(windows))] {
+        config.certificate_path.as_deref().map(Path::new).map(certificate_trusted).unwrap_or(false)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -2257,23 +2613,63 @@ fn trust_ca_file(
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn trust_ca_file(
+    state: &BackendState,
+    config: &mut LocalTlsConfig,
+    ca_path: &Path,
+) -> Result<(), String> {
+    if !config.generated {
+        return Err("Windows will not install a user-selected CA as RDT-managed trust. Use Set up trusted local HTTPS to generate and verify the app-owned certificate.".into());
+    }
+    validate_tls_material(config)?;
+    let expected_ca = config.ca_certificate_path.as_deref().ok_or_else(|| "The Windows HTTPS config has no root CA path.".to_string())?;
+    let ca = canonical_file(ca_path.to_str().ok_or("Invalid CA path")?, "root CA certificate")?;
+    let configured_ca = canonical_file(expected_ca, "configured root CA certificate")?;
+    if ca != configured_ca {
+        return Err("The selected CA is not the root CA recorded for the generated Windows server certificate.".into());
+    }
+    let fingerprint = windows_certificate_thumbprint(&ca)?;
+    let already_tracked = config.managed_trust_fingerprints.iter().any(|item| item.eq_ignore_ascii_case(&fingerprint));
+    if windows_root_store_contains(&fingerprint)? {
+        if already_tracked || configured_certificate_trusted(config) {
+            return Ok(());
+        }
+        return Err("This CA already exists in the current user's trusted-root store, but RDT Connect did not record installing it and the configured HTTPS chain does not verify. It was left unchanged.".into());
+    }
+
+    let installed_fingerprint = windows_add_root_to_current_user_store(&ca)?;
+    if !already_tracked {
+        config.managed_trust_fingerprints.push(installed_fingerprint.clone());
+    }
+    if let Err(error) = save_local_tls_config(state, config) {
+        let _ = windows_remove_root_from_current_user_store(&installed_fingerprint);
+        if !already_tracked {
+            config.managed_trust_fingerprints.retain(|item| !item.eq_ignore_ascii_case(&installed_fingerprint));
+        }
+        return Err(format!("The Windows trust entry was installed but its ownership record could not be saved; the newly installed entry was rolled back. Detail: {error}"));
+    }
+    if !configured_certificate_trusted(config) {
+        let _ = windows_remove_root_from_current_user_store(&installed_fingerprint);
+        config.managed_trust_fingerprints.retain(|item| !item.eq_ignore_ascii_case(&installed_fingerprint));
+        save_local_tls_config(state, config)?;
+        return Err("The root was added to the current user's trust store, but Windows did not verify the full certificate chain for 127.0.0.1. The new trust entry was removed; no HTTP fallback was attempted.".into());
+    }
+    Ok(())
+}
+
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 fn trust_ca_file(
     _state: &BackendState,
     _config: &mut LocalTlsConfig,
     _ca: &Path,
 ) -> Result<(), String> {
-    Err("Native local certificate trust is not implemented on this platform in Build 0D54.".into())
+    Err("Native local certificate trust is not implemented on this platform.".into())
 }
 
 fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
     let configured = validate_tls_material(config).is_ok();
-    let trusted = config
-        .certificate_path
-        .as_deref()
-        .map(Path::new)
-        .map(certificate_trusted)
-        .unwrap_or(false);
+    let trusted = configured && configured_certificate_trusted(config);
     let message = if config.mode.eq_ignore_ascii_case("http") {
         "HTTP is selected for development only. HTTPS is the normal default; no automatic HTTP fallback is used.".to_string()
     } else if !configured {
@@ -2281,9 +2677,17 @@ fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
             "A trusted HTTPS certificate and matching private key are required.".into()
         })
     } else if !trusted {
-        "The certificate and key match, but macOS does not currently trust this certificate for 127.0.0.1. Trust the selected root CA, then recheck.".into()
+        if cfg!(target_os = "windows") {
+            "The certificate is configured, but Windows has not verified it against the current user's trusted-root store. Trust the generated RDT root CA, then recheck.".to_string()
+        } else {
+            "The certificate and key match, but the operating system does not currently trust this certificate for 127.0.0.1. Trust the selected root CA, then recheck.".to_string()
+        }
     } else {
-        "HTTPS is configured: the certificate is valid for 127.0.0.1 and macOS trust verification passed.".into()
+        if cfg!(target_os = "windows") {
+            "HTTPS is configured: the certificate is valid for 127.0.0.1 and Windows current-user trust verification passed.".to_string()
+        } else {
+            "HTTPS is configured: the certificate is valid for 127.0.0.1 and macOS trust verification passed.".to_string()
+        }
     };
     LocalHttpsStatus {
         mode: config.mode.clone(),
@@ -2415,13 +2819,77 @@ async fn pick_tls_file(
     }
 }
 
+#[cfg(windows)]
+fn setup_local_https_certificate_windows(state: &BackendState) -> Result<LocalHttpsStatus, String> {
+    if state.status().running {
+        return Err("Stop the server before changing TLS certificates.".into());
+    }
+    let existing_config = load_local_tls_config(state)?;
+    let existing_status = local_https_status_from_config(&existing_config);
+    if existing_status.configured && existing_status.trusted {
+        let mut config = existing_config;
+        config.mode = "https".into();
+        save_local_tls_config(state, &config)?;
+        let status = local_https_status_from_config(&config);
+        if status.configured && status.trusted && status.mode.eq_ignore_ascii_case("https") { return Ok(status); }
+        return Err(format!("Windows no longer confirms the existing trusted HTTPS configuration: {}", status.message));
+    }
+    // If file integrity and certificate checks still pass, retry only the
+    // current-user trust operation instead of issuing a new CA on each click.
+    if existing_status.configured && existing_config.generated {
+        if let Some(ca_path) = existing_config.ca_certificate_path.clone() {
+            let mut config = existing_config;
+            config.mode = "https".into();
+            trust_ca_file(state, &mut config, Path::new(&ca_path))?;
+            let status = local_https_status_from_config(&config);
+            if status.configured && status.trusted { return Ok(status); }
+            return Err(format!("Windows certificate trust could not be confirmed after retry: {}", status.message));
+        }
+    }
+
+    let seconds = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let dir = state.https_dir.join(format!("generated-windows-{seconds}-{}", std::process::id()));
+    fs::create_dir_all(&dir).map_err(|error| format!("Could not create the Windows HTTPS certificate folder: {error}"))?;
+    set_private_permissions(&dir, 0o700).map_err(|error| format!("Could not restrict access to the Windows HTTPS certificate folder: {error}"))?;
+    let cert = dir.join("rdt-local-server.pem");
+    let key = dir.join("rdt-local-server-key.pem");
+    let ca = dir.join("rdt-local-ca.pem");
+    windows_generate_tls_files(&cert, &key, &ca)?;
+    for path in [&cert, &key, &ca] {
+        if !path.is_file() { return Err("Windows certificate generation did not create every required TLS file.".into()); }
+    }
+    for path in [&cert, &key, &ca] {
+        set_private_permissions(path, 0o600).map_err(|error| format!("Could not apply current-user-only permissions to generated HTTPS material: {error}"))?;
+    }
+    let mut config = load_local_tls_config(state)?;
+    config.mode = "https".into();
+    config.certificate_path = Some(cert.display().to_string());
+    config.private_key_path = Some(key.display().to_string());
+    config.ca_certificate_path = Some(ca.display().to_string());
+    config.generated = true;
+    config.windows_certificate_sha256 = Some(sha256_file_hex(&cert)?);
+    config.windows_private_key_sha256 = Some(sha256_file_hex(&key)?);
+    config.windows_ca_sha256 = Some(sha256_file_hex(&ca)?);
+    save_local_tls_config(state, &config)?;
+    validate_tls_material(&config)?;
+    if let Err(error) = trust_ca_file(state, &mut config, &ca) {
+        return Err(format!("Windows generated and validated the local certificate files, but current-user trust setup did not complete. The files were retained safely so setup can be retried. Detail: {error}"));
+    }
+    let status = local_https_status_from_config(&config);
+    if !status.configured || !status.trusted || !status.mode.eq_ignore_ascii_case("https") {
+        return Err(format!("Windows local HTTPS setup did not pass its final verification: {}. No HTTP fallback was attempted.", status.message));
+    }
+    Ok(status)
+}
+
 #[tauri::command]
 fn setup_local_https_certificate(
     state: State<'_, BackendState>,
 ) -> Result<LocalHttpsStatus, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D54. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
-    }
+    #[cfg(windows)]
+    { return setup_local_https_certificate_windows(&state); }
+    #[cfg(all(not(target_os = "macos"), not(windows)))]
+    { return Err("Trusted local HTTPS is not implemented on this platform. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into()); }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
     }
@@ -2596,8 +3064,11 @@ fn link_local_https_certificate(
     private_key_path: String,
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D54. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    if cfg!(windows) {
+        return Err("Windows currently supports RDT-generated trusted local HTTPS only. Select Set up trusted local HTTPS; external certificate linking is intentionally disabled until Windows custom-certificate verification is implemented.".into());
+    }
+    if cfg!(all(not(target_os = "macos"), not(windows))) {
+        return Err("Trusted local HTTPS is not implemented on this platform. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
@@ -2627,8 +3098,8 @@ fn trust_local_https_ca(
     state: State<'_, BackendState>,
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("Local CA trust management is not implemented for Windows/Linux Build 0D54. No system trust store was modified.".into());
+    if cfg!(all(not(target_os = "macos"), not(windows))) {
+        return Err("Native local CA trust management is not implemented on this platform. No system trust store was modified.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
@@ -2653,7 +3124,7 @@ fn trust_local_https_ca(
     let status = local_https_status_from_config(&config);
     if !status.trusted {
         return Err(format!(
-            "The CA was added, but macOS trust verification still failed: {}",
+            "The CA operation completed, but operating-system trust verification still failed: {}",
             status.message
         ));
     }
@@ -2662,11 +3133,32 @@ fn trust_local_https_ca(
 
 #[tauri::command]
 fn remove_rdt_https_trust(state: State<'_, BackendState>) -> Result<LocalHttpsStatus, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("Removing RDT-managed CA trust is not implemented for Windows/Linux Build 0D54. No system trust store was modified.".into());
+    if cfg!(all(not(target_os = "macos"), not(windows))) {
+        return Err("Removing RDT-managed CA trust is not implemented on this platform. No system trust store was modified.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
+    }
+    #[cfg(windows)]
+    {
+        let mut config = load_local_tls_config(&state)?;
+        if config.managed_trust_fingerprints.is_empty() {
+            return Err("RDT Connect has no tracked CA trust entry to remove. It will not remove certificates installed independently by you or another app.".into());
+        }
+        let mut remaining = Vec::new();
+        let mut errors = Vec::new();
+        for fingerprint in config.managed_trust_fingerprints.drain(..) {
+            match windows_remove_root_from_current_user_store(&fingerprint) {
+                Ok(()) => {},
+                Err(error) => { errors.push(format!("fingerprint {fingerprint}: {error}")); remaining.push(fingerprint); }
+            }
+        }
+        config.managed_trust_fingerprints = remaining;
+        save_local_tls_config(&state, &config)?;
+        if !errors.is_empty() {
+            return Err(format!("Some tracked RDT root certificates could not be removed from the current-user trust store. Failed entries remain tracked. {}", errors.join("; ")));
+        }
+        return Ok(local_https_status_from_config(&config));
     }
     let mut config = load_local_tls_config(&state)?;
     if config.managed_trust_fingerprints.is_empty() {
@@ -2710,8 +3202,8 @@ fn set_local_transport(
         return Err("Stop the local server before changing its transport.".into());
     }
     let normalized = mode.trim().to_ascii_lowercase();
-    if normalized == "https" && !cfg!(target_os = "macos") {
-        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D54. Use HTTP only on 127.0.0.1 for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    if normalized == "https" && cfg!(all(not(target_os = "macos"), not(windows))) {
+        return Err("Trusted local HTTPS is not implemented on this platform. Use HTTP only on 127.0.0.1 for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if normalized != "https" && normalized != "http" {
         return Err("Choose HTTPS or HTTP development mode.".into());
@@ -2719,13 +3211,7 @@ fn set_local_transport(
     let mut config = load_local_tls_config(&state)?;
     if normalized == "https" {
         validate_tls_material(&config)?;
-        if !config
-            .certificate_path
-            .as_deref()
-            .map(Path::new)
-            .map(certificate_trusted)
-            .unwrap_or(false)
-        {
+        if !configured_certificate_trusted(&config) {
             return Err("HTTPS is not yet trusted for 127.0.0.1. Set up trusted HTTPS or trust the selected root CA in Settings.".into());
         }
     }
@@ -4018,9 +4504,7 @@ fn open_easywhisper_model_manager(browser_id: Option<String>) -> Result<(), Stri
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = browser_id; // Windows uses the registered default HTTP(S) handler.
-        Command::new("explorer.exe").arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
-            .map(|_| ()).map_err(|e| format!("Could not open the model manager in the default browser: {e}"))
+        open_url_windows(url, browser_id.as_deref())
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -5354,14 +5838,13 @@ fn start_backend_blocking(
     }
     let tls_config = load_local_tls_config(&state)?;
     let use_https = !tls_config.mode.eq_ignore_ascii_case("http");
-    if use_https && !cfg!(target_os = "macos") {
-        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D54. Change Local transport to HTTP for loopback-only development. Remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    if use_https && cfg!(all(not(target_os = "macos"), not(windows))) {
+        return Err("Trusted local HTTPS is not implemented on this platform. Change Local transport to HTTP for loopback-only development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if use_https {
         validate_tls_material(&tls_config)?;
-        let cert = Path::new(tls_config.certificate_path.as_deref().unwrap_or(""));
-        if !certificate_trusted(cert) {
-            return Err("HTTPS is selected, but macOS does not trust the local certificate for 127.0.0.1. Open Settings → Local HTTPS and trust the issuer CA. No HTTP fallback was attempted.".into());
+        if !configured_certificate_trusted(&tls_config) {
+            return Err("HTTPS is selected, but the operating system has not verified the configured local certificate for 127.0.0.1. Open Settings → Local HTTPS and complete trusted certificate setup. No HTTP fallback was attempted.".into());
         }
     }
     // If the managed backend died unexpectedly, remove only a Serve route that
@@ -5642,6 +6125,7 @@ struct BrowserOption {
     name: String,
 }
 
+#[cfg(target_os = "macos")]
 fn browser_app_is_installed(browser_id: &str) -> bool {
     let app_name = match browser_id {
         "safari" => "Safari.app",
@@ -5666,6 +6150,121 @@ fn browser_app_is_installed(browser_id: &str) -> bool {
     roots.iter().any(|root| root.join(app_name).is_dir())
 }
 
+#[cfg(windows)]
+fn windows_browser_executable(browser_id: &str) -> Option<PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    let exe_names: &[&str] = match browser_id {
+        "chrome" => &["chrome.exe"],
+        "firefox" => &["firefox.exe"],
+        "edge" => &["msedge.exe"],
+        "brave" => &["brave.exe"],
+        "vivaldi" => &["vivaldi.exe"],
+        "opera" => &["launcher.exe", "opera.exe"],
+        "duckduckgo" => &["DuckDuckGo.exe"],
+        "mullvad" => &["mullvad-browser.exe", "mullvadbrowser.exe", "firefox.exe"],
+        _ => return None,
+    };
+
+    // App Paths is the supported Windows registration mechanism and includes
+    // user-level installations. Verify every registry result exists before use.
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for exe in exe_names {
+        let app_path_keys = [
+            (HKEY_CURRENT_USER, format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}")),
+            (HKEY_LOCAL_MACHINE, format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}")),
+            (HKEY_LOCAL_MACHINE, format!(r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\{exe}")),
+        ];
+        for (hive, key_path) in app_path_keys {
+            if let Ok(key) = RegKey::predef(hive).open_subkey(&key_path) {
+                if let Ok(value) = key.get_value::<String, _>("") {
+                    let clean = value.trim().trim_matches('"');
+                    if !clean.is_empty() {
+                        candidates.push(PathBuf::from(clean));
+                    }
+                }
+            }
+        }
+    }
+
+    let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    let program_files = std::env::var_os("PROGRAMFILES").map(PathBuf::from);
+    let program_files_x86 = std::env::var_os("PROGRAMFILES(X86)").map(PathBuf::from);
+    let mut add = |base: &Option<PathBuf>, relative: &str| {
+        if let Some(base) = base {
+            candidates.push(base.join(relative));
+        }
+    };
+    match browser_id {
+        "chrome" => {
+            add(&local, r"Google\Chrome\Application\chrome.exe");
+            add(&program_files, r"Google\Chrome\Application\chrome.exe");
+            add(&program_files_x86, r"Google\Chrome\Application\chrome.exe");
+        }
+        "firefox" => {
+            add(&local, r"Programs\Mozilla Firefox\firefox.exe");
+            add(&program_files, r"Mozilla Firefox\firefox.exe");
+            add(&program_files_x86, r"Mozilla Firefox\firefox.exe");
+        }
+        "edge" => {
+            add(&local, r"Microsoft\Edge\Application\msedge.exe");
+            add(&program_files, r"Microsoft\Edge\Application\msedge.exe");
+            add(&program_files_x86, r"Microsoft\Edge\Application\msedge.exe");
+        }
+        "brave" => {
+            add(&local, r"BraveSoftware\Brave-Browser\Application\brave.exe");
+            add(&program_files, r"BraveSoftware\Brave-Browser\Application\brave.exe");
+            add(&program_files_x86, r"BraveSoftware\Brave-Browser\Application\brave.exe");
+        }
+        "vivaldi" => {
+            add(&local, r"Vivaldi\Application\vivaldi.exe");
+            add(&program_files, r"Vivaldi\Application\vivaldi.exe");
+            add(&program_files_x86, r"Vivaldi\Application\vivaldi.exe");
+        }
+        "opera" => {
+            add(&local, r"Programs\Opera\launcher.exe");
+            add(&program_files, r"Opera\launcher.exe");
+            add(&program_files_x86, r"Opera\launcher.exe");
+        }
+        "duckduckgo" => {
+            add(&local, r"Programs\DuckDuckGo\DuckDuckGo.exe");
+            add(&program_files, r"DuckDuckGo\DuckDuckGo.exe");
+        }
+        "mullvad" => {
+            for executable in ["mullvad-browser.exe", "mullvadbrowser.exe", "firefox.exe"] {
+                add(&local, &format!(r"Programs\Mullvad Browser\Browser\{executable}"));
+                add(&program_files, &format!(r"Mullvad Browser\Browser\{executable}"));
+            }
+        }
+        _ => {}
+    }
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+#[cfg(windows)]
+fn browser_app_is_installed(browser_id: &str) -> bool {
+    windows_browser_executable(browser_id).is_some()
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn browser_app_is_installed(browser_id: &str) -> bool {
+    let executable = match browser_id {
+        "chrome" => "google-chrome",
+        "firefox" => "firefox",
+        "edge" => "microsoft-edge",
+        "brave" => "brave-browser",
+        "vivaldi" => "vivaldi",
+        "opera" => "opera",
+        "duckduckgo" => "duckduckgo",
+        "mullvad" => "mullvad-browser",
+        _ => return false,
+    };
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .any(|root| root.join(executable).is_file())
+}
+
+#[cfg(target_os = "macos")]
 fn browser_bundle_id(browser_id: &str) -> Option<&'static str> {
     match browser_id {
         "safari" => Some("com.apple.Safari"),
@@ -5680,6 +6279,88 @@ fn browser_bundle_id(browser_id: &str) -> Option<&'static str> {
         "mullvad" => Some("net.mullvad.mullvadbrowser"),
         _ => None,
     }
+}
+
+#[cfg(windows)]
+fn open_url_windows(url: &str, browser_id: Option<&str>) -> Result<(), String> {
+    use std::ffi::c_void;
+
+    // Only open explicit, fixed product URLs and secure web/email targets.
+    let parsed = url::Url::parse(url).map_err(|error| format!("The external URL is invalid: {error}"))?;
+    let allowed = match parsed.scheme() {
+        "https" => matches!(parsed.host_str(), Some("rolandoristech.github.io" | "github.com" | "youtube.com" | "www.youtube.com")),
+        "mailto" => parsed.path() == "woknewsbusiness@gmail.com",
+        _ => false,
+    };
+    if !allowed {
+        return Err("RDT Connect refused to open an external URL outside its approved destinations.".into());
+    }
+
+    let selected = browser_id.unwrap_or("default");
+    if selected != "default" {
+        if let Some(executable) = windows_browser_executable(selected) {
+            Command::new(&executable)
+                .arg(url)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map(|_| ())
+                .map_err(|error| format!("Could not open the URL in the selected browser: {error}"))?;
+            return Ok(());
+        }
+        // A browser saved by an earlier installation may since have been removed.
+        // Do not break Open RDT Voice: fall through to the registered system default.
+    }
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut c_void,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show_command: i32,
+        ) -> isize;
+    }
+    let operation: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
+    let target: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(), operation.as_ptr(), target.as_ptr(),
+            std::ptr::null(), std::ptr::null(), 1,
+        )
+    };
+    if result <= 32 {
+        return Err(format!("Windows could not open the URL with the registered default browser (ShellExecuteW={result})."));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn open_url_external(url: &str, browser_id: Option<&str>) -> Result<(), String> {
+    let selected = browser_id.unwrap_or("default");
+    let mut command = Command::new("/usr/bin/open");
+    if selected != "default" {
+        let bundle_id = browser_bundle_id(selected).ok_or_else(|| "Choose a supported browser from the Local Server browser list.".to_string())?;
+        if !browser_app_is_installed(selected) {
+            return Err("The selected browser is no longer installed. Choose another browser and retry.".into());
+        }
+        command.arg("-b").arg(bundle_id);
+    }
+    command.arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+        .map(|_| ()).map_err(|error| format!("Could not open the URL in the selected browser: {error}"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_url_external(url: &str, _browser_id: Option<&str>) -> Result<(), String> {
+    let parsed = url::Url::parse(url).map_err(|error| format!("The external URL is invalid: {error}"))?;
+    if !matches!(parsed.scheme(), "https" | "mailto") {
+        return Err("RDT Connect refused to open an unsupported external URL.".into());
+    }
+    Command::new("xdg-open").arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+        .map(|_| ()).map_err(|error| format!("Could not open the URL in the default browser: {error}"))
 }
 
 #[tauri::command]
@@ -5770,9 +6451,7 @@ fn open_voice_window(
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = browser_id; // A stored macOS browser choice must not be passed to Windows shell commands.
-        Command::new("explorer.exe").arg(launch_url.as_str()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
-            .map_err(|e| format!("Could not open RDT Voice in the default browser: {e}"))?;
+        open_url_windows(launch_url.as_str(), browser_id.as_deref())?;
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -6641,13 +7320,7 @@ fn open_about_link(kind: String, locale: Option<String>) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer.exe")
-            .arg(&target)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map(|_| ())
+        open_url_windows(&target, Some("default"))
             .map_err(|error| format!("Could not open the selected About link: {error}"))
     }
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -6681,16 +7354,9 @@ fn open_youtube_channel() -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer.exe")
-            .arg(URL)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| {
-                format!("Could not open the Rolan & Doris Tech YouTube channel: {error}")
-            })
+        open_url_windows(URL, Some("default")).map_err(|error| {
+            format!("Could not open the Rolan & Doris Tech YouTube channel: {error}")
+        })
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {

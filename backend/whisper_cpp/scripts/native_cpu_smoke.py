@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Download a pinned multilingual Tiny GGML artifact and test real native inference.
+"""Download a pinned multilingual GGML artifact and test real native inference.
 
-This is run only on native GitHub-hosted architecture runners. It fails closed if
-immutable metadata, candidate SHA-256, full downloaded byte count, worker handshake,
-segment text, timestamps, or the architecture report do not match expectations.
+Runs on native GitHub-hosted architecture runners. It uses the single shared model
+registry, and fails closed unless immutable metadata, SHA-256, size, worker handshake,
+architecture, segment text and timestamps all pass.
 """
 from __future__ import annotations
 
@@ -22,16 +22,16 @@ import time
 import urllib.parse
 import urllib.request
 
-REPO = "ggerganov/whisper.cpp"
-REVISION = "fb5ed9369c26eaf08392504d8446da431e0fffb9"
-MODEL_FILE = "ggml-tiny-q8_0.bin"
-EXPECTED_SHA256 = "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"
-MAX_BYTES = 150_000_000
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from backend.whisper_cpp.model_registry import MAX_MODEL_BYTES, MODELS, REVISION, SOURCE_REPO
+
 MAX_LINE = 64 * 1024
 
 
 def request_json(url: str) -> object:
-    request = urllib.request.Request(url, headers={"User-Agent": "RDT-Connect-native-CPU-smoke/0D53", "Accept": "application/json"})
+    request = urllib.request.Request(url, headers={"User-Agent": "RDT-Connect-native-CPU-smoke/0D54", "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=30) as response:
         if response.status != 200:
             raise RuntimeError(f"metadata_http_{response.status}")
@@ -41,39 +41,46 @@ def request_json(url: str) -> object:
     return json.loads(data.decode("utf-8"))
 
 
-def verified_model(dest: Path) -> Path:
+def verified_model(dest: Path, model_id: str) -> Path:
+    try:
+        spec = MODELS[model_id]
+    except KeyError as exc:
+        raise RuntimeError("unsupported_smoke_model_id") from exc
+    if dest.name != spec["file"]:
+        raise RuntimeError(f"model_destination_filename_mismatch expected={spec['file']}")
+    expected_sha = str(spec["sha256"])
     query = urllib.parse.urlencode({"recursive": "true", "expand": "true"})
-    metadata_url = f"https://huggingface.co/api/models/{REPO}/tree/{REVISION}?{query}"
+    metadata_url = f"https://huggingface.co/api/models/{SOURCE_REPO}/tree/{REVISION}?{query}"
     listing = request_json(metadata_url)
     if not isinstance(listing, list):
         raise RuntimeError("unexpected_metadata_schema")
-    entry = next((x for x in listing if isinstance(x, dict) and x.get("path") == MODEL_FILE), None)
+    entry = next((x for x in listing if isinstance(x, dict) and x.get("path") == spec["file"]), None)
     if not entry:
-        raise RuntimeError("pinned_tiny_artifact_missing")
+        raise RuntimeError(f"pinned_artifact_missing model={model_id}")
     lfs = entry.get("lfs") or {}
     digest = str(lfs.get("oid", "")).removeprefix("sha256:").lower()
     if len(digest) != 64:
         digest = str(lfs.get("sha256", "")).lower()
-    if digest != EXPECTED_SHA256:
+    if digest != expected_sha:
         raise RuntimeError("immutable_metadata_sha256_does_not_match_approved_candidate")
     try:
         expected_size = int(entry["size"])
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError("immutable_metadata_missing_file_size") from exc
-    if expected_size <= 0 or expected_size > MAX_BYTES:
+    if expected_size <= 0 or expected_size > MAX_MODEL_BYTES:
         raise RuntimeError("immutable_metadata_file_size_out_of_range")
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.is_file() and dest.stat().st_size == expected_size and _sha256(dest) == EXPECTED_SHA256:
-        print(f"MODEL_CACHE_HIT bytes={expected_size} sha256={EXPECTED_SHA256}", flush=True)
+    if dest.is_file() and dest.stat().st_size == expected_size and _sha256(dest) == expected_sha:
+        print(f"MODEL_CACHE_HIT model={model_id} bytes={expected_size} sha256={expected_sha}", flush=True)
         return dest
     part = dest.with_name(dest.name + ".part")
     part.unlink(missing_ok=True)
-    url = f"https://huggingface.co/{REPO}/resolve/{REVISION}/{MODEL_FILE}"
-    request = urllib.request.Request(url, headers={"User-Agent": "RDT-Connect-native-CPU-smoke/0D53"})
+    url = f"https://huggingface.co/{SOURCE_REPO}/resolve/{REVISION}/{spec['file']}"
+    request = urllib.request.Request(url, headers={"User-Agent": "RDT-Connect-native-CPU-smoke/0D54"})
     digest_stream = hashlib.sha256()
     downloaded = 0
-    with urllib.request.urlopen(request, timeout=60) as response, part.open("xb") as output:
+    with urllib.request.urlopen(request, timeout=120) as response, part.open("xb") as output:
         if response.status != 200:
             raise RuntimeError(f"model_http_{response.status}")
         content_length = response.headers.get("Content-Length")
@@ -84,7 +91,7 @@ def verified_model(dest: Path) -> Path:
             if not chunk:
                 break
             downloaded += len(chunk)
-            if downloaded > expected_size or downloaded > MAX_BYTES:
+            if downloaded > expected_size or downloaded > MAX_MODEL_BYTES:
                 raise RuntimeError("model_download_exceeded_metadata_size")
             digest_stream.update(chunk)
             output.write(chunk)
@@ -94,11 +101,11 @@ def verified_model(dest: Path) -> Path:
     if downloaded != expected_size:
         part.unlink(missing_ok=True)
         raise RuntimeError(f"model_size_mismatch expected={expected_size} actual={downloaded}")
-    if actual_sha != EXPECTED_SHA256:
+    if actual_sha != expected_sha:
         part.unlink(missing_ok=True)
         raise RuntimeError("downloaded_model_sha256_mismatch")
     os.replace(part, dest)
-    print(f"MODEL_VERIFIED bytes={downloaded} sha256={actual_sha} revision={REVISION}", flush=True)
+    print(f"MODEL_VERIFIED model={model_id} bytes={downloaded} sha256={actual_sha} revision={REVISION}", flush=True)
     return dest
 
 
@@ -114,7 +121,7 @@ def _b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
+def native_transcription(worker: Path, model: Path, fixture: Path, model_id: str) -> None:
     if not worker.is_file() or not fixture.is_file():
         raise RuntimeError("worker_or_fixture_missing")
     proc = subprocess.Popen([str(worker), "--model", str(model)], stdin=subprocess.PIPE,
@@ -181,7 +188,11 @@ def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
         return item.decode("utf-8", "strict").rstrip("\r\n")
 
     try:
-        ready = next_line(timeout=120).split("\t")
+        # Large multilingual models can take several minutes to mmap and initialize
+        # on Windows ARM64. Do not misclassify slow but healthy initialization as
+        # a failed release candidate; inference still has its own bounded deadline.
+        ready_timeout = {"tiny": 120, "base": 180, "small": 240, "large-v3-turbo": 420, "large-v3": 600}[model_id]
+        ready = next_line(timeout=ready_timeout).split("\t")
         if len(ready) != 3 or ready[0] != "READY" or ready[2] != "whisper.cpp/v1.9.5":
             raise RuntimeError(f"worker_handshake_invalid: {ready[:3]}")
         arch = ready[1]
@@ -195,7 +206,7 @@ def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
         if arch != expected:
             raise RuntimeError(f"worker_architecture_mismatch expected={expected} actual={arch}")
         print(f"WORKER_ARCHITECTURE={arch}", flush=True)
-        request_id = "native-smoke-0d53"
+        request_id = f"native-smoke-{model_id}"
         language = _b64(b"auto")
         audio_path = _b64(os.fsencode(fixture.resolve()))
         assert proc.stdin is not None
@@ -203,7 +214,7 @@ def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
         proc.stdin.flush()
         segments: list[tuple[float, float, str]] = []
         language_name: str | None = None
-        deadline = time.monotonic() + 300
+        deadline = time.monotonic() + (900 if model_id == "large-v3" else 600)
         while time.monotonic() < deadline:
             line = next_line(timeout=max(1, deadline - time.monotonic()))
             parts = line.split("\t")
@@ -258,10 +269,12 @@ def main() -> int:
     parser.add_argument("--worker", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--model-id", choices=tuple(MODELS), default="tiny")
     args = parser.parse_args()
     try:
-        model = verified_model(args.model)
-        native_transcription(args.worker.resolve(), model.resolve(), args.fixture.resolve())
+        model = verified_model(args.model, args.model_id)
+        print(f"MODEL_ID={args.model_id}", flush=True)
+        native_transcription(args.worker.resolve(), model.resolve(), args.fixture.resolve(), args.model_id)
     except Exception as exc:
         print(f"NATIVE_CPU_SMOKE_FAILED: {type(exc).__name__}: {str(exc)[:240]}", file=sys.stderr, flush=True)
         return 1

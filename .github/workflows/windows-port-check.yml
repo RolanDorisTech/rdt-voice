@@ -58,6 +58,15 @@ jobs:
         working-directory: rdt_connect
         run: npm ci
 
+      - name: Stamp isolated Windows build version (2A01 namespace)
+        working-directory: rdt_connect
+        shell: pwsh
+        run: |
+          node scripts/stamp-platform-build.cjs windows
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
+          node scripts/test-platform-build-stamping.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }
+
       - name: Build frontend
         working-directory: rdt_connect
         run: npm run build

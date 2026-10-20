@@ -40,11 +40,19 @@ jobs:
           $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-arm64-lgpl.zip'
           $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg-arm64-extracted'
           $destination = Join-Path $env:RUNNER_TEMP 'rdt-ffmpeg-arm64'
-          $uri = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-lgpl.zip'
+          # Pin an immutable release asset and verify its SHA-256 before extraction.
+          # Source: BtbN/FFmpeg-Builds release autobuild-2026-10-19-13-06,
+          # checksums.sha256; never consume the mutable /download/latest/ alias.
+          $uri = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-19-13-06/ffmpeg-N-127696-g8b3525e718-winarm64-lgpl.zip'
+          $expectedSha256 = 'd4fd29fa9128fc1ba623e23b2ea1f13f283c646eb108c8583854371b2ba3d9d4'
 
           Invoke-WebRequest -Uri $uri -OutFile $archive
-          Write-Host "Downloaded FFmpeg archive SHA-256:"
-          Get-FileHash $archive -Algorithm SHA256 | Format-List
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+            throw "Pinned FFmpeg archive SHA-256 mismatch: expected $expectedSha256; actual $actualSha256."
+          }
+          Write-Host "FFMPEG_ARCHIVE_SHA256_VERIFIED=$actualSha256"
 
           Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
           $ffmpeg = Get-ChildItem $extract -Filter ffmpeg.exe -File -Recurse | Select-Object -First 1
@@ -99,6 +107,20 @@ jobs:
         working-directory: rdt_connect
         shell: pwsh
         run: npm ci
+
+      - name: Stamp isolated Windows build version (2A01 namespace)
+        working-directory: rdt_connect
+        shell: pwsh
+        run: |
+          node scripts/stamp-platform-build.cjs windows
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
+          node scripts/test-platform-build-stamping.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }
+
+      - name: Test build versioning
+        working-directory: rdt_connect
+        shell: pwsh
+        run: npm run test:versioning
 
       - name: Build frontend
         working-directory: rdt_connect

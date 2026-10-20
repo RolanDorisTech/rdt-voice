@@ -3020,6 +3020,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "url",
+ "winreg",
 ]
 
 [[package]]

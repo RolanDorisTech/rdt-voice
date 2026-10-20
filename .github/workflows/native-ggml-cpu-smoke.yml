@@ -2,16 +2,24 @@ name: Native GGML CPU inference qualification
 
 on:
   workflow_dispatch:
+    inputs:
+      qualify_all_models:
+        description: "On Windows ARM64, run real inference with all five pinned GGML models (release-candidate qualification)."
+        type: boolean
+        required: false
+        default: true
   push:
     branches: ["windows-port-*", "main"]
     paths:
       - "backend/whisper_cpp/**"
       - "backend/windows/**"
+      - "rdt_connect/**"
       - ".github/workflows/native-ggml-cpu-smoke.yml"
   pull_request:
     paths:
       - "backend/whisper_cpp/**"
       - "backend/windows/**"
+      - "rdt_connect/**"
       - ".github/workflows/native-ggml-cpu-smoke.yml"
 
 permissions:
@@ -21,7 +29,7 @@ jobs:
   native-cpu-inference:
     name: ${{ matrix.label }} — native CPU transcription
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.qualify_all_models && matrix.os == 'windows' && matrix.cmake_arch == 'ARM64' && 120 || 45 }}
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +63,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Shared GGML registry tests failed.' }
           python -m unittest discover -s backend/windows/tests -v
           if ($LASTEXITCODE -ne 0) { throw 'Backend contract tests failed.' }
+          python rdt_connect/scripts/test_windows_desktop_contract.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows browser/TLS static contract tests failed.' }
 
       - name: Run cross-platform GGML/backend contract tests
         if: runner.os == 'Linux'
@@ -181,6 +191,36 @@ jobs:
           python backend/whisper_cpp/scripts/native_cpu_smoke.py --worker "$env:RUNNER_TEMP/rdt-whisper-build/bin/rdt_whisper_worker.exe" --model "$env:RUNNER_TEMP/ggml-tiny-q8_0.bin" --fixture backend/whisper_cpp/tests/fixtures/smoke-multilingual-16k-mono.wav
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows inference smoke failed' }
 
+      - name: Qualify all five pinned GGML models with real transcription (Windows ARM64)
+        if: runner.os == 'Windows' && matrix.cmake_arch == 'ARM64' && github.event_name == 'workflow_dispatch' && inputs.qualify_all_models == true
+        shell: pwsh
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $worker = Join-Path $env:RUNNER_TEMP 'rdt-whisper-build\bin\rdt_whisper_worker.exe'
+          $fixture = 'backend/whisper_cpp/tests/fixtures/smoke-multilingual-16k-mono.wav'
+          $models = @(
+            @{ Id = 'tiny'; File = 'ggml-tiny-q8_0.bin' },
+            @{ Id = 'base'; File = 'ggml-base-q8_0.bin' },
+            @{ Id = 'small'; File = 'ggml-small-q8_0.bin' },
+            @{ Id = 'large-v3-turbo'; File = 'ggml-large-v3-turbo-q5_0.bin' },
+            @{ Id = 'large-v3'; File = 'ggml-large-v3-q5_0.bin' }
+          )
+          foreach ($model in $models) {
+            $modelPath = Join-Path $env:RUNNER_TEMP $model.File
+            $log = Join-Path (Resolve-Path artifacts) ("native-inference-{0}.log" -f $model.Id)
+            Write-Host "QUALIFY_MODEL_START id=$($model.Id)"
+            & python backend/whisper_cpp/scripts/native_cpu_smoke.py --worker $worker --model $modelPath --model-id $model.Id --fixture $fixture 2>&1 | Tee-Object -FilePath $log
+            $smokeExit = $LASTEXITCODE
+            if ($smokeExit -ne 0) {
+              Add-Content -LiteralPath $log -Value "QUALIFICATION_RESULT model=$($model.Id) status=FAIL exit=$smokeExit"
+              throw "Real native inference failed for pinned model '$($model.Id)' (exit $smokeExit)."
+            }
+            Add-Content -LiteralPath $log -Value "QUALIFICATION_RESULT model=$($model.Id) status=PASS"
+            Write-Host "QUALIFY_MODEL_PASS id=$($model.Id)"
+          }
+
       - name: Run verified model and real transcription smoke test (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -195,6 +235,7 @@ jobs:
           name: native-ggml-cpu-${{ matrix.os }}-${{ matrix.cmake_arch || 'native' }}
           path: |
             artifacts/engine-pin-report.json
+            artifacts/native-inference-*.log
             ${{ runner.temp }}/ggml-tiny-q8_0.bin
           if-no-files-found: ignore
           retention-days: 14

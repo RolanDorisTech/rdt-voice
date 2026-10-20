@@ -1,4 +1,4 @@
-# RDT Connect Windows GGML backend — Build 0D53
+# RDT Connect Windows GGML backend — Build 0D54
 # Forked intentionally from the current Apple service; Windows inference is isolated below.
 # Adaptive silence filtering, local transcription, and request safeguards
 import os, re, math, bisect, tempfile, subprocess, wave, pathlib, datetime, uuid, platform, asyncio, time, threading, secrets, hmac, shutil, ipaddress, queue, sqlite3, hashlib, json, signal, sys

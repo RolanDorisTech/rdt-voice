@@ -2039,7 +2039,7 @@ fn canonical_file(raw: &str, label: &str) -> Result<PathBuf, String> {
 
 fn sha1_fingerprint(cert: &Path) -> Result<String, String> {
     if !cfg!(target_os = "macos") {
-        return Err("Local certificate trust management is only implemented for macOS in Build 0D53. No macOS command was run.".into());
+        return Err("Local certificate trust management is only implemented for macOS in Build 0D54. No macOS command was run.".into());
     }
     let output = Command::new("/usr/bin/openssl")
         .args(["x509", "-in"])
@@ -2066,7 +2066,7 @@ fn sha1_fingerprint(cert: &Path) -> Result<String, String> {
 
 fn validate_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
     if !cfg!(target_os = "macos") {
-        return Err("Local HTTPS trust setup is not implemented for this platform in Build 0D53. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+        return Err("Local HTTPS trust setup is not implemented for this platform in Build 0D54. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     let cert_raw = config.certificate_path.as_deref().ok_or_else(|| "HTTPS is the default, but no server certificate is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.".to_string())?;
     let key_raw = config.private_key_path.as_deref().ok_or_else(|| "HTTPS is the default, but no private key is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.".to_string())?;
@@ -2263,7 +2263,7 @@ fn trust_ca_file(
     _config: &mut LocalTlsConfig,
     _ca: &Path,
 ) -> Result<(), String> {
-    Err("Native local certificate trust is not implemented on this platform in Build 0D53.".into())
+    Err("Native local certificate trust is not implemented on this platform in Build 0D54.".into())
 }
 
 fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
@@ -2420,7 +2420,7 @@ fn setup_local_https_certificate(
     state: State<'_, BackendState>,
 ) -> Result<LocalHttpsStatus, String> {
     if !cfg!(target_os = "macos") {
-        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D53. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D54. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
@@ -2597,7 +2597,7 @@ fn link_local_https_certificate(
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
     if !cfg!(target_os = "macos") {
-        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D53. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D54. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
@@ -2628,7 +2628,7 @@ fn trust_local_https_ca(
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
     if !cfg!(target_os = "macos") {
-        return Err("Local CA trust management is not implemented for Windows/Linux Build 0D53. No system trust store was modified.".into());
+        return Err("Local CA trust management is not implemented for Windows/Linux Build 0D54. No system trust store was modified.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
@@ -2663,7 +2663,7 @@ fn trust_local_https_ca(
 #[tauri::command]
 fn remove_rdt_https_trust(state: State<'_, BackendState>) -> Result<LocalHttpsStatus, String> {
     if !cfg!(target_os = "macos") {
-        return Err("Removing RDT-managed CA trust is not implemented for Windows/Linux Build 0D53. No system trust store was modified.".into());
+        return Err("Removing RDT-managed CA trust is not implemented for Windows/Linux Build 0D54. No system trust store was modified.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
@@ -2711,7 +2711,7 @@ fn set_local_transport(
     }
     let normalized = mode.trim().to_ascii_lowercase();
     if normalized == "https" && !cfg!(target_os = "macos") {
-        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D53. Use HTTP only on 127.0.0.1 for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D54. Use HTTP only on 127.0.0.1 for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if normalized != "https" && normalized != "http" {
         return Err("Choose HTTPS or HTTP development mode.".into());
@@ -2934,16 +2934,47 @@ fn apply_model_download_output_line(
     }
 
     if let Some(error_kind) = trimmed.strip_prefix("RDT_MODEL_DOWNLOAD_ERROR:") {
-        publish_model_download_status(
-            app,
-            store,
-            "failed",
-            &format!(
-                "Download failed ({}) — check the connection and retry.",
-                error_kind.chars().take(48).collect::<String>()
-            ),
-            true,
+        let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+            "GGML Whisper"
+        } else {
+            "MLX Whisper"
+        };
+        let code = error_kind.chars().take(48).collect::<String>();
+        let explanation = match code.as_str() {
+            "http_401" | "http_403" =>
+                "Hugging Face denied access to the model metadata or file",
+            "http_404" | "pinned_model_artifact_missing" =>
+                "the pinned model artifact was not found at the expected revision",
+            "http_429" =>
+                "Hugging Face rate-limited the request; wait briefly and retry",
+            "tls_certificate_verification_failed" =>
+                "Windows could not verify the HTTPS certificate; check system date, time and trust settings",
+            "tls_connection_failed" =>
+                "the HTTPS connection could not be established",
+            "dns_resolution_failed" =>
+                "the model host could not be resolved; check internet connectivity and DNS",
+            "network_timeout" =>
+                "the network request timed out; check connectivity and retry",
+            "network_connection_failed" =>
+                "the connection to the model host failed; check connectivity and any firewall or proxy",
+            "pinned_metadata_sha256_does_not_match_approved_candidate"
+            | "model_sha256_mismatch"
+            | "model_size_mismatch"
+            | "model_content_length_mismatch" =>
+                "model integrity verification failed; the file was not accepted",
+            "model_metadata_missing_size_or_sha256"
+            | "invalid_model_metadata"
+            | "model_metadata_too_large" =>
+                "the model host returned unusable metadata; no model was accepted",
+            "model_in_use" =>
+                "the selected model is in use by a server or another operation",
+            _ =>
+                "the downloader reported an error; use the displayed code to diagnose it",
+        };
+        let message = format!(
+            "{family} model download failed: {explanation} (code: {code}).              The model is not marked Downloaded; correct the issue and retry."
         );
+        publish_model_download_status(app, store, "failed", &message, true);
         return;
     }
 
@@ -3475,14 +3506,41 @@ fn start_model_download(
                 false,
             );
         } else {
-            let message = if recovered_after_complete {
-                "The downloader stalled after announcing completion, but independent pinned MLX cache verification failed. The model is not marked Downloaded; retry the download."
-            } else if exit_status.is_some_and(|status| status.success()) {
-                "The downloader exited successfully, but the MLX cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
+            let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+                "GGML Whisper"
             } else {
-                "Model download did not finish with a complete, verified MLX cache. The model is not marked Downloaded; check the connection and retry."
+                "MLX Whisper"
             };
-            publish_model_download_status(&app_thread, &status_store, "failed", message, false);
+            let previous_message = status_store
+                .lock()
+                .map(|status| status.message.clone())
+                .unwrap_or_default();
+
+            // The line parser records a safe, actionable downloader error.
+            // Do not hide that error when the child process exits.
+            let message = if previous_message.contains(" model download failed:") {
+                previous_message
+            } else if recovered_after_complete {
+                format!(
+                    "The downloader stalled after announcing completion, but independent pinned {family} cache verification failed. The model is not marked Downloaded; retry the download."
+                )
+            } else if exit_status.as_ref().is_some_and(|status| status.success()) {
+                format!(
+                    "The downloader exited successfully, but the {family} cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
+                )
+            } else {
+                let exit_code = exit_status
+                    .as_ref()
+                    .and_then(|status| status.code())
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "unknown".into());
+                format!(
+                    "Model download did not finish with a complete, verified {family} cache (downloader exit code: {exit_code}). The model is not marked Downloaded; check connectivity and retry."
+                )
+            };
+            publish_model_download_status(
+                &app_thread, &status_store, "failed", &message, false
+            );
         }
         clear_model_download_log_path(&log_path_store, &log_path);
     });
@@ -5297,7 +5355,7 @@ fn start_backend_blocking(
     let tls_config = load_local_tls_config(&state)?;
     let use_https = !tls_config.mode.eq_ignore_ascii_case("http");
     if use_https && !cfg!(target_os = "macos") {
-        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D53. Change Local transport to HTTP for loopback-only development. Remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D54. Change Local transport to HTTP for loopback-only development. Remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if use_https {
         validate_tls_material(&tls_config)?;

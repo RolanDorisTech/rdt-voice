@@ -13,6 +13,8 @@ import json
 import os
 import pathlib
 import re
+import socket
+import ssl
 import sys
 import time
 import urllib.error
@@ -294,7 +296,27 @@ def download_model(model_id: str, *, retries: int = 2) -> pathlib.Path:
 
 
 def _safe_error_code(exc: BaseException) -> str:
-    # Never print arbitrary exception text (which may contain file paths, headers or tokens).
+    # Expose only safe categories. Never print arbitrary exception text,
+    # request headers, access tokens or local paths.
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"http_{exc.code}"
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        if isinstance(reason, ssl.SSLCertVerificationError):
+            return "tls_certificate_verification_failed"
+        if isinstance(reason, ssl.SSLError):
+            return "tls_connection_failed"
+        if isinstance(reason, (socket.gaierror, socket.herror)):
+            return "dns_resolution_failed"
+        if isinstance(reason, (TimeoutError, socket.timeout)):
+            return "network_timeout"
+        return "network_connection_failed"
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        return "tls_certificate_verification_failed"
+    if isinstance(exc, ssl.SSLError):
+        return "tls_connection_failed"
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return "network_timeout"
     message = str(exc).split(":", 1)[0].strip().lower().replace(" ", "_")
     if message and re.fullmatch(r"[a-z0-9_-]{1,64}", message):
         return message

@@ -1,4 +1,4 @@
-# Windows backend (Build 0D53)
+# Windows backend (Build 0D54)
 
 This is a Windows-only fork of the current `backend/apple/server.py` API service. It does not import MLX or the Apple model lock. It uses five logical model IDs (`tiny`, `base`, `small`, `large-v3-turbo`, `large-v3`), immutable Hugging Face artifact URLs, full SHA-256/byte-size verification, `.part` staging and atomic promotion, and a persistent RDT-owned `whisper.cpp` CPU worker.
 

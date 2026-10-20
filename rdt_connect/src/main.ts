@@ -2190,6 +2190,19 @@ function showHttpsSetupSuccess() {
 async function performLocalHttpsSetup(triggerButton: HTMLButtonElement) {
   if (localHttpsSetupInProgress) return;
 
+  if (isNativeGgmlCatalog()) {
+    const message =
+      "Trusted local HTTPS certificate setup is not implemented in this Windows/Linux test build. For a local transcription test, explicitly choose HTTP under Settings → Local transport. HTTP is restricted to 127.0.0.1; do not use it for LAN or remote access.";
+    localHttpsQuickPrompt.classList.remove("hidden");
+    localHttpsQuickStatus.textContent = message;
+    localHttpsQuickStatus.dataset.userFeedback = "unsupported";
+    localHttpsQuickStatus.className = "local-https-quick-status tls-error";
+    localHttpsStatusEl.textContent = message;
+    localHttpsStatusEl.className = "tls-status tls-error";
+    showNotice(message, "warning");
+    return;
+  }
+
   localHttpsSetupInProgress = true;
   // Invalidate any status lookup already in flight before setup starts.
   ++localHttpsStatusRequestId;

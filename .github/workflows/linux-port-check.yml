@@ -67,6 +67,14 @@ jobs:
         working-directory: rdt_connect
         run: npm ci
 
+      - name: Stamp isolated Linux build version (4A01 namespace)
+        working-directory: rdt_connect
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/stamp-platform-build.cjs linux
+          node scripts/test-platform-build-stamping.cjs
+
       - name: Build frontend
         working-directory: rdt_connect
         run: npm run build

@@ -1662,18 +1662,30 @@ function friendlyModelName(model: string): string {
     "mlx-community/whisper-small-mlx": "Whisper Small",
     "mlx-community/whisper-base-mlx": "Whisper Base",
     "mlx-community/whisper-tiny-mlx": "Whisper Tiny",
+    "tiny": "Whisper Tiny",
+    "base": "Whisper Base",
+    "small": "Whisper Small",
+    "large-v3-turbo": "Whisper Large v3 Turbo",
+    "large-v3": "Whisper Large v3",
   };
   return names[model] || model.split("/").pop() || "Whisper model";
 }
 function approximateModelSizeLabel(model: string): string {
+  const catalogSize = modelMenuDetails[model]?.size;
+  if (catalogSize) return catalogSize;
   const sizes: Record<string, string> = {
     "mlx-community/whisper-large-v3-turbo": "~1.61 GB",
     "mlx-community/whisper-large-v3-mlx": "~3.08 GB",
     "mlx-community/whisper-small-mlx": "~481 MB",
     "mlx-community/whisper-base-mlx": "~144 MB",
     "mlx-community/whisper-tiny-mlx": "~74 MB",
+    "tiny": "~43.5 MB",
+    "base": "~81.8 MB",
+    "small": "~264 MB",
+    "large-v3-turbo": "~574 MB",
+    "large-v3": "~1.08 GB",
   };
-  return sizes[model] || "an approximate size";
+  return sizes[model] || "Size unavailable";
 }
 function formatModelBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";

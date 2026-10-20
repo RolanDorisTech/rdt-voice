@@ -1050,7 +1050,9 @@ fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
 
 #[cfg(windows)]
 fn powershell_json_u32_list(script: &str, description: &str) -> Result<Vec<u32>, String> {
-    let output = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    command.creation_flags(0x08000000);
+    let output = command
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script])
         .stdin(Stdio::null()).stderr(Stdio::piped()).output()
         .map_err(|error| format!("Could not inspect {description} with PowerShell: {error}"))?;
@@ -1409,7 +1411,9 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
     // existing ownership/descendant checks meaningful on Windows without
     // treating all processes with the same image name as one group.
     const SCRIPT: &str = "$ErrorActionPreference='Stop'; Get-CimInstance -ClassName Win32_Process | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | ConvertTo-Json -Compress";
-    let output = match Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    command.creation_flags(0x08000000);
+    let output = match command
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
         .stdin(Stdio::null())
         .stderr(Stdio::null())

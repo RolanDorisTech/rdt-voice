@@ -521,6 +521,7 @@ def _tailscale_cli_candidate_probes(check_all: bool = True) -> list:
             completed = subprocess.run(
                 [candidate, "status", "--json"], capture_output=True, text=True,
                 timeout=2.5, check=False,
+                creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0),
             )
             stdout = completed.stdout or ""
             stderr = completed.stderr or ""
@@ -581,7 +582,8 @@ def _tailscale_cli_path() -> Optional[str]:
 
 def _tailscale_run_json(cli: str, args: List[str], timeout: float = 5.0) -> dict:
     command_label = " ".join(str(arg) for arg in args)
-    result = subprocess.run([cli, *args], capture_output=True, text=True, timeout=timeout, check=False)
+    result = subprocess.run([cli, *args], capture_output=True, text=True, timeout=timeout, check=False,
+                            creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0))
     stdout = result.stdout or ""
     stderr = result.stderr or ""
     stdout_bytes = len(stdout.encode("utf-8", "replace"))
@@ -639,7 +641,8 @@ def _tailscale_diagnostic_probe(cli: str, args: List[str], timeout: float = 5.0,
             return len(value)
         return len((value or "").encode("utf-8", "replace"))
     try:
-        completed = subprocess.run([cli, *args], capture_output=True, text=True, timeout=timeout, check=False)
+        completed = subprocess.run([cli, *args], capture_output=True, text=True, timeout=timeout, check=False,
+                                    creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0))
     except subprocess.TimeoutExpired as exc:
         info.update(state="timeout", stdout_bytes=size(exc.stdout), stderr_bytes=size(exc.stderr))
         info["elapsed_ms"] = round((time.monotonic() - started) * 1000)
@@ -1046,7 +1049,8 @@ def auth_tailscale_setup(request: Request):
             target = f"https+insecure://127.0.0.1:{local_port}"
         else:
             target = f"http://127.0.0.1:{local_port}"
-        result = subprocess.run([cli, "serve", f"--https={serve_port}", "--bg", target], capture_output=True, text=True, timeout=20, check=False)
+        result = subprocess.run([cli, "serve", f"--https={serve_port}", "--bg", target], capture_output=True, text=True, timeout=20, check=False,
+                                 creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0))
         if result.returncode != 0:
             message = (result.stderr or result.stdout or "Tailscale could not create the private route.").strip().splitlines()
             raise HTTPException(status_code=502, detail=(message[-1][:220] if message else "Tailscale could not create the private route."))

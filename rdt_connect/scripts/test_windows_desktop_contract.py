@@ -97,6 +97,17 @@ class WindowsTlsContractTests(unittest.TestCase):
         self.assertIn("creation_flags(0x08000000)", block)
 
 
+class WindowsTlsUiContractTests(unittest.TestCase):
+    def test_native_ggml_ui_reaches_trusted_https_setup_command(self) -> None:
+        ui_source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
+        start = ui_source.index("async function performLocalHttpsSetup(")
+        end = ui_source.index("setupLocalHttpsButton.addEventListener", start)
+        block = ui_source[start:end]
+        self.assertNotIn("if (isNativeGgmlCatalog())", block)
+        self.assertNotIn("Trusted local HTTPS certificate setup is not implemented", block)
+        self.assertIn('invoke<LocalHttpsStatus>("setup_local_https_certificate")', block)
+
+
 class WindowsPackagingContractTests(unittest.TestCase):
     def test_ffmpeg_input_is_immutable_and_checksum_is_enforced(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "windows-arm64-installer.yml").read_text(encoding="utf-8")
@@ -111,7 +122,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
 class WindowsVersionStampContractTests(unittest.TestCase):
     def test_platform_marker_files_use_reserved_namespaces(self) -> None:
         connect = ROOT / "rdt_connect" / "scripts"
-        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A01")
+        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A02")
         self.assertEqual((connect / "build-id-sequence-linux.txt").read_text(encoding="utf-8").strip(), "4A01")
         self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "0D54")
 

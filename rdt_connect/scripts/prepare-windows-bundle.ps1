@@ -74,6 +74,7 @@ $args = @('-m','PyInstaller','--noconfirm','--clean','--onedir','--name','rdt_vo
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller onedir backend build failed.' }
 $backendStage = Join-Path $dist 'rdt_voice_backend'
 if (-not (Test-Path (Join-Path $backendStage 'rdt_voice_backend.exe'))) { throw 'PyInstaller did not produce rdt_voice_backend.exe.' }
+& (Join-Path $RepoRoot 'rdt_connect/scripts/copy-msvc-runtime.ps1') -TargetArch $TargetArch -DestinationDir $backendStage
 Copy-Item $worker (Join-Path $backendStage 'rdt_whisper_worker.exe') -Force
 Copy-Item (Join-Path $FfmpegDir 'ffmpeg.exe') $backendStage -Force
 Copy-Item (Join-Path $FfmpegDir 'ffprobe.exe') $backendStage -Force

@@ -75,6 +75,14 @@ jobs:
         working-directory: rdt_connect
         run: npm run test:versioning
 
+      - name: Stage placeholders for compile-only resources
+        run: |
+          set -euo pipefail
+          for resource in rdt_voice_backend rdt_voice_web third_party_notices; do
+            mkdir -p "rdt_connect/src-tauri/resources/$resource"
+            printf 'CI-only placeholder; not a runtime bundle.\n' > "rdt_connect/src-tauri/resources/$resource/.ci-placeholder"
+          done
+
       - name: Compile Linux desktop application (not a runtime test)
         working-directory: rdt_connect
         run: cargo build --locked --manifest-path src-tauri/Cargo.toml --release

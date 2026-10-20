@@ -2153,6 +2153,7 @@ fn validate_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn certificate_trusted(cert: &Path) -> bool {
     let path = match cert.to_str() {
         Some(v) => v,
@@ -3144,8 +3145,11 @@ fn start_model_download(
             model: Some(model),
             destination_root: Some(cache_status.active_root),
             phase: "complete".into(),
-            message: if cfg!(any(target_os = "windows", target_os = "linux")) { "A verified local GGML Whisper model is already available; no download is needed.".into() } else { "A verified local MLX model copy is already available; no download is needed.".into() }
-                .into(),
+            message: if cfg!(any(target_os = "windows", target_os = "linux")) {
+                "A verified local GGML Whisper model is already available; no download is needed.".to_string()
+            } else {
+                "A verified local MLX model copy is already available; no download is needed.".to_string()
+            },
             progress_percent: 100,
             downloaded_bytes: 0,
             total_bytes: Some(0),
@@ -3457,7 +3461,7 @@ fn start_model_download(
             } else {
                 format!("The downloader ended unexpectedly, but the {family} model files are complete and passed verification. The model is ready to use.")
             };
-            publish_model_download_status(&app_thread, &status_store, "complete", message, false);
+            publish_model_download_status(&app_thread, &status_store, "complete", &message, false);
         } else if canceled {
             publish_model_download_status(
                 &app_thread,

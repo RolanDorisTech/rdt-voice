@@ -118,8 +118,29 @@ def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
     if not worker.is_file() or not fixture.is_file():
         raise RuntimeError("worker_or_fixture_missing")
     proc = subprocess.Popen([str(worker), "--model", str(model)], stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
     lines: queue.Queue[bytes | None | BaseException] = queue.Queue(maxsize=64)
+    stderr_buffer = bytearray()
+    stderr_lock = threading.Lock()
+
+    def read_stderr() -> None:
+        assert proc.stderr is not None
+        while True:
+            chunk = proc.stderr.read(4096)
+            if not chunk:
+                return
+            with stderr_lock:
+                stderr_buffer.extend(chunk)
+                if len(stderr_buffer) > 12000:
+                    del stderr_buffer[:-12000]
+
+    def stderr_summary() -> str:
+        with stderr_lock:
+            raw = bytes(stderr_buffer)
+        return raw.decode("utf-8", "replace").strip()[-3000:]
+
+    stderr_reader = threading.Thread(target=read_stderr, daemon=True)
+    stderr_reader.start()
 
     def read_stdout() -> None:
         assert proc.stdout is not None
@@ -145,7 +166,16 @@ def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
         except queue.Empty as exc:
             raise RuntimeError("worker_response_timeout") from exc
         if item is None:
-            raise RuntimeError("worker_exited_before_protocol_complete")
+            try:
+                return_code = proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                return_code = "still-running"
+            stderr_reader.join(timeout=2)
+            detail = stderr_summary()
+            suffix = f"; exit_code={return_code}"
+            if detail:
+                suffix += f"; stderr_tail={detail}"
+            raise RuntimeError("worker_exited_before_protocol_complete" + suffix)
         if isinstance(item, BaseException):
             raise RuntimeError("worker_stdout_protocol_error") from item
         return item.decode("utf-8", "strict").rstrip("\r\n")
@@ -217,6 +247,7 @@ def native_transcription(worker: Path, model: Path, fixture: Path) -> None:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=5)
+        stderr_reader.join(timeout=2)
         for stream in (proc.stdin, proc.stdout, proc.stderr):
             if stream:
                 stream.close()

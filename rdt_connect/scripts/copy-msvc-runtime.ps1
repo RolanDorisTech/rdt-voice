@@ -9,67 +9,86 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
-$vswhere = Join-Path ${env:ProgramFiles(x86)} `
-    'Microsoft Visual Studio\Installer\vswhere.exe'
-if (-not (Test-Path $vswhere)) {
-    throw "Cannot find Visual Studio locator: $vswhere"
-}
-
-# Do not require a particular component ID: hosted runner images vary.
-# CMake has already selected a compiler capable of building this target.
-$vsInstall = (& $vswhere -latest -products '*' `
-    -property installationPath | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or -not $vsInstall) {
-    throw "Cannot locate the Visual Studio toolchain for $TargetArch."
-}
-
-$redistRoot = Join-Path $vsInstall 'VC\Redist\MSVC'
-$versions = Get-ChildItem -LiteralPath $redistRoot -Directory |
-    Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
-    Sort-Object { [version]$_.Name } -Descending
-
 $arch = if ($TargetArch -eq 'ARM64') { 'arm64' } else { 'x64' }
+
+# Search all standard Visual Studio installation locations.
+# Do not depend on vswhere product/component filters: hosted images vary.
+$programFilesDirs = @(
+    $env:ProgramFiles
+    ${env:ProgramFiles(x86)}
+) | Where-Object { $_ } | Select-Object -Unique
+
+$redistPatterns = @(
+    foreach ($base in $programFilesDirs) {
+        Join-Path $base 'Microsoft Visual Studio\*\*\VC\Redist\MSVC'
+    }
+)
+
+$redistRoots = @(
+    Get-ChildItem -Path $redistPatterns -Directory -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending
+)
+
+if (-not $redistRoots) {
+    throw "No Visual Studio MSVC redistributable folders found. Searched: $($redistPatterns -join '; ')"
+}
+
 $archRoot = $null
 $ompDll = $null
 $crtDll = $null
 
-foreach ($version in $versions) {
-    $candidateRoot = Join-Path $version.FullName $arch
-    if (-not (Test-Path $candidateRoot)) { continue }
+foreach ($root in $redistRoots) {
+    $versions = Get-ChildItem -LiteralPath $root.FullName -Directory |
+        Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
+        Sort-Object { [version]$_.Name } -Descending
 
-    $candidateOmp = Get-ChildItem -LiteralPath $candidateRoot `
-        -Recurse -File -Filter 'vcomp140.dll' |
-        Select-Object -First 1
-    $candidateCrt = Get-ChildItem -LiteralPath $candidateRoot `
-        -Recurse -File -Filter 'vcruntime140.dll' |
-        Where-Object { $_.Directory.Name -match '^Microsoft\.VC\d+\.CRT$' } |
-        Select-Object -First 1
+    foreach ($version in $versions) {
+        $candidateRoot = Join-Path $version.FullName $arch
+        if (-not (Test-Path $candidateRoot)) { continue }
 
-    if ($candidateOmp -and $candidateCrt) {
-        $archRoot = $candidateRoot
-        $ompDll = $candidateOmp
-        $crtDll = $candidateCrt
-        break
+        $candidateOmp = Get-ChildItem -LiteralPath $candidateRoot `
+            -Recurse -File -Filter 'vcomp140.dll' |
+            Select-Object -First 1
+
+        $candidateCrt = Get-ChildItem -LiteralPath $candidateRoot `
+            -Recurse -File -Filter 'vcruntime140.dll' |
+            Where-Object { $_.Directory.Name -match '^Microsoft\.VC\d+\.CRT$' } |
+            Select-Object -First 1
+
+        if ($candidateOmp -and $candidateCrt) {
+            $archRoot = $candidateRoot
+            $ompDll = $candidateOmp
+            $crtDll = $candidateCrt
+            break
+        }
     }
+
+    if ($ompDll -and $crtDll) { break }
 }
 
 if (-not $ompDll -or -not $crtDll) {
-    throw "Could not locate matching $TargetArch MSVC CRT and OpenMP redistributable DLLs."
+    throw "Could not locate matching $TargetArch vcruntime140.dll and vcomp140.dll in the discovered redistributable folders."
 }
 
 New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
 
-foreach ($dllDir in @($crtDll.Directory, $ompDll.Directory)) {
-    Get-ChildItem -LiteralPath $dllDir.FullName -File -Filter '*.dll' |
+$runtimeDirs = @(
+    $crtDll.Directory.FullName
+    $ompDll.Directory.FullName
+) | Select-Object -Unique
+
+foreach ($runtimeDir in $runtimeDirs) {
+    Get-ChildItem -LiteralPath $runtimeDir -File -Filter '*.dll' |
         ForEach-Object {
-            Copy-Item -LiteralPath $_.FullName `
-                -Destination $DestinationDir -Force
+            Copy-Item -LiteralPath $_.FullName -Destination $DestinationDir -Force
         }
 }
 
-if (-not (Test-Path (Join-Path $DestinationDir 'vcomp140.dll'))) {
-    throw 'vcomp140.dll was not staged successfully.'
+foreach ($required in @('vcruntime140.dll', 'vcomp140.dll')) {
+    if (-not (Test-Path (Join-Path $DestinationDir $required))) {
+        throw "Runtime staging failed: $required was not copied."
+    }
 }
 
-Write-Host "Staged MSVC CRT and OpenMP runtime for $TargetArch from $archRoot"
+Write-Host "Staged $TargetArch MSVC CRT and OpenMP runtime."
+Write-Host "Source: $archRoot"

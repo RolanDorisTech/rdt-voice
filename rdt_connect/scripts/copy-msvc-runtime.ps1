@@ -16,14 +16,10 @@ if (-not (Test-Path $vswhere)) {
     throw "Cannot find Visual Studio locator: $vswhere"
 }
 
-$component = if ($TargetArch -eq 'ARM64') {
-    'Microsoft.VisualStudio.Component.VC.Tools.ARM64'
-} else {
-    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
-}
-
+# Do not require a particular component ID: hosted runner images vary.
+# CMake has already selected a compiler capable of building this target.
 $vsInstall = (& $vswhere -latest -products '*' `
-    -requires $component -property installationPath | Select-Object -First 1)
+    -property installationPath | Select-Object -First 1)
 if ($LASTEXITCODE -ne 0 -or -not $vsInstall) {
     throw "Cannot locate the Visual Studio toolchain for $TargetArch."
 }

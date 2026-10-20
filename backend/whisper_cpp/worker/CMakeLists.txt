@@ -24,7 +24,7 @@ if(MSVC AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
 else()
   set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 endif()
-set(WHISPER_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${WHISPER_CPP_SOURCE}" whisper.cpp)
 
 add_executable(rdt_whisper_worker rdt_whisper_worker.cpp)

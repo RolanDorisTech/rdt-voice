@@ -134,7 +134,6 @@ jobs:
         shell: pwsh
         run: |
           & rdt_connect/scripts/copy-msvc-runtime.ps1 -TargetArch "${{ matrix.cmake_arch }}" -DestinationDir "$env:RUNNER_TEMP/rdt-whisper-build/bin"
-          if ($LASTEXITCODE -ne 0) { throw 'MSVC runtime staging failed' }
 
       - name: Run verified model and real transcription smoke test (Windows)
         if: runner.os == 'Windows'

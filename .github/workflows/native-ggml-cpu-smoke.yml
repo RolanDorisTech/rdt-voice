@@ -135,6 +135,45 @@ jobs:
         run: |
           & rdt_connect/scripts/copy-msvc-runtime.ps1 -TargetArch "${{ matrix.cmake_arch }}" -DestinationDir "$env:RUNNER_TEMP/rdt-whisper-build/bin"
 
+      - name: Diagnose Windows worker DLL dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'rdt-whisper-build\bin'
+          Write-Host "===== STAGED WINDOWS FILES ====="
+          Get-ChildItem -LiteralPath $bin -File |
+            Sort-Object Name |
+            Select-Object Name,Length |
+            Format-Table -AutoSize
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsInstall = & $vswhere -latest -products '*' -property installationPath |
+            Select-Object -First 1
+          if (-not $vsInstall) {
+            Write-Host "DUMPBIN_UNAVAILABLE: Visual Studio path not found"
+            exit 0
+          }
+
+          $target = if ("${{ matrix.cmake_arch }}" -eq "ARM64") { "arm64" } else { "x64" }
+          $tools = Join-Path $vsInstall 'VC\Tools\MSVC'
+          $dumpbin = Get-ChildItem -LiteralPath $tools -Filter dumpbin.exe -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\bin\\Host[^\\]+\\$target\\dumpbin\.exe$" } |
+            Select-Object -First 1
+
+          if (-not $dumpbin) {
+            Write-Host "DUMPBIN_UNAVAILABLE: target architecture $target"
+            exit 0
+          }
+
+          $files = Get-ChildItem -LiteralPath $bin -File |
+            Where-Object { $_.Extension -in @('.exe','.dll') }
+
+          foreach ($file in $files) {
+            Write-Host "===== DEPENDENCIES: $($file.Name) ====="
+            & $dumpbin.FullName /DEPENDENTS $file.FullName 2>&1
+          }
+
       - name: Run verified model and real transcription smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

@@ -3,7 +3,7 @@ name: RDT Connect Windows ARM64 Test Installer
 on:
   push:
     branches:
-      - windows-port-0D53-implementation
+      - "windows-port-*"
     paths:
       - ".github/workflows/windows-arm64-installer.yml"
       - "rdt_connect/**"

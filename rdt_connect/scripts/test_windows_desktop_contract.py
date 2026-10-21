@@ -59,6 +59,17 @@ class WindowsTlsContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = MAIN.read_text(encoding="utf-8")
 
+    def test_windows_certificate_key_usage_uses_supported_powershell_parameters(self) -> None:
+        generator = block_between(
+            self.source,
+            "fn windows_generate_tls_files",
+            "fn validate_windows_tls_material",
+        )
+        self.assertIn("-KeyUsage CertSign, CRLSign", generator)
+        self.assertIn("-KeyUsage DigitalSignature, KeyEncipherment", generator)
+        self.assertNotIn("2.5.29.15={critical}{text}keyCertSign,cRLSign", generator)
+        self.assertNotIn("2.5.29.15={critical}{text}digitalSignature,keyEncipherment", generator)
+
     def test_windows_default_is_https_and_has_no_automatic_fallback(self) -> None:
         config = self.source[self.source.index("impl Default for LocalTlsConfig"):self.source.index("fn load_local_tls_config")]
         self.assertIn('"https"', config)
@@ -122,7 +133,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
 class WindowsVersionStampContractTests(unittest.TestCase):
     def test_platform_marker_files_use_reserved_namespaces(self) -> None:
         connect = ROOT / "rdt_connect" / "scripts"
-        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A02")
+        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A03")
         self.assertEqual((connect / "build-id-sequence-linux.txt").read_text(encoding="utf-8").strip(), "4A01")
         self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "0D54")
 

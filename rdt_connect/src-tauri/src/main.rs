@@ -2230,9 +2230,9 @@ function Remove-RdtGeneratedCertificate($item) {
   try { $item.Dispose() } catch { }
 }
 try {
-  $ca = New-SelfSignedCertificate -Type Custom -Subject 'CN=RDT Connect Local HTTPS CA' -CertStoreLocation 'Cert:\CurrentUser\My' -Provider 'Microsoft Software Key Storage Provider' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(5) -TextExtension @('2.5.29.19={critical}{text}ca=TRUE&pathlength=0','2.5.29.15={critical}{text}keyCertSign,cRLSign')
+  $ca = New-SelfSignedCertificate -Type Custom -Subject 'CN=RDT Connect Local HTTPS CA' -CertStoreLocation 'Cert:\CurrentUser\My' -Provider 'Microsoft Software Key Storage Provider' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(5) -KeyUsage CertSign, CRLSign -TextExtension @('2.5.29.19={critical}{text}ca=TRUE&pathlength=0')
   if ($null -eq $ca -or -not $ca.HasPrivateKey) { throw 'root_ca_generation_failed' }
-  $server = New-SelfSignedCertificate -Type Custom -Subject 'CN=127.0.0.1' -Signer $ca -CertStoreLocation 'Cert:\CurrentUser\My' -Provider 'Microsoft Software Key Storage Provider' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -NotAfter (Get-Date).AddDays(365) -TextExtension @('2.5.29.19={critical}{text}ca=FALSE','2.5.29.15={critical}{text}digitalSignature,keyEncipherment','2.5.29.37={text}1.3.6.1.5.5.7.3.1','2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1')
+  $server = New-SelfSignedCertificate -Type Custom -Subject 'CN=127.0.0.1' -Signer $ca -CertStoreLocation 'Cert:\CurrentUser\My' -Provider 'Microsoft Software Key Storage Provider' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -NotAfter (Get-Date).AddDays(365) -KeyUsage DigitalSignature, KeyEncipherment -TextExtension @('2.5.29.19={critical}{text}ca=FALSE','2.5.29.37={text}1.3.6.1.5.5.7.3.1','2.5.29.17={text}DNS=localhost&IPAddress=127.0.0.1')
   if ($null -eq $server -or -not $server.HasPrivateKey) { throw 'server_certificate_generation_failed' }
   $publicRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($server)
   $privateRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($server)

@@ -14,6 +14,12 @@ WORKER = (ROOT / "backend/whisper_cpp/worker/rdt_whisper_worker.cpp").read_text(
 
 
 class WindowsBackendContractTests(unittest.TestCase):
+    def test_arm64_msvc_worker_disables_build_host_optional_features(self):
+        cmake = (ROOT / "backend/whisper_cpp/worker/CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn('set(GGML_NATIVE ON CACHE BOOL "" FORCE)', cmake)
+        self.assertIn("foreach(feature dotprod i8mm sve sme)", cmake)
+        self.assertIn('set("GGML_MACHINE_SUPPORTS_${feature}" OFF CACHE BOOL "" FORCE)', cmake)
+
     def test_browser_api_and_response_fields_are_preserved(self):
         for route in (
             '@app.get("/health")', '@app.get("/v1/models")',

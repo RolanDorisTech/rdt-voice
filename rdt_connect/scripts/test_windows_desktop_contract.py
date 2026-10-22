@@ -133,7 +133,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
 class WindowsVersionStampContractTests(unittest.TestCase):
     def test_platform_marker_files_use_reserved_namespaces(self) -> None:
         connect = ROOT / "rdt_connect" / "scripts"
-        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A03")
+        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A04")
         self.assertEqual((connect / "build-id-sequence-linux.txt").read_text(encoding="utf-8").strip(), "4A01")
         self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "0D54")
 

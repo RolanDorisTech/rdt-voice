@@ -19,8 +19,14 @@ set(GGML_SYCL OFF CACHE BOOL "" FORCE)
 set(GGML_HIP OFF CACHE BOOL "" FORCE)
 set(GGML_METAL OFF CACHE BOOL "" FORCE)
 if(MSVC AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
-  # whisper.cpp requires native optimization for MSVC ARM64.
+  # MSVC ARM requires GGML_NATIVE=ON, but pinned GGML detects optional
+  # features on the build host. Do not bake host-specific optional ARM
+  # instructions into binaries intended for other ARM64 devices and VMs.
+  # Keep mandatory ARMv8-A features; disable optional feature probes.
   set(GGML_NATIVE ON CACHE BOOL "" FORCE)
+  foreach(feature dotprod i8mm sve sme)
+    set("GGML_MACHINE_SUPPORTS_${feature}" OFF CACHE BOOL "" FORCE)
+  endforeach()
 else()
   set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 endif()

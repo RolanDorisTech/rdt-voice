@@ -1,0 +1,54 @@
+{
+  "schema": "rdt-offline-runtime-v1",
+  "transformers": "3.7.1",
+  "onnxruntime_modern": "1.22.0-dev.20250409-89f8206ba4",
+  "onnxruntime_legacy_wasm_only": "1.17.3",
+  "npm_archive_integrity_sha512_base64": {
+    "huggingface-transformers-3.7.1.tgz": "z14yXkm7G/FKGM8Y24NLDbrSP/kbn62byKNYF04pZ6pidTVpucqRSderQgpfQWoMVrhOKmrZs29G3yQ1R28sIA==",
+    "onnxruntime-web-1.22.0-dev.20250409-89f8206ba4.tgz": "0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==",
+    "onnxruntime-web-1.17.3.tgz": "MSDrNUWgc1biP0YzY488OJ9n/jTMS9EXysgm9Aw4CUj2A836ALbO2J1sgzguWJeVUHTlM6p7tRzo8IGAgaXWKw=="
+  },
+  "runtime_files": [
+    {
+      "path": "modern/transformers.min.js",
+      "bytes": 870663,
+      "sha256": "4471bfd47260bea37a61733f6ef385b79087e120e6b61d70ffab6b6bb58de067"
+    },
+    {
+      "path": "modern/ort.bundle.min.mjs",
+      "bytes": 398170,
+      "sha256": "96e80b413dda387fbcefbd2bb0015f6708323767cc0dd5383260106582e77781"
+    },
+    {
+      "path": "modern/ort-wasm-simd-threaded.jsep.mjs",
+      "bytes": 44484,
+      "sha256": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9"
+    },
+    {
+      "path": "modern/ort-wasm-simd-threaded.jsep.wasm",
+      "bytes": 21596019,
+      "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39"
+    },
+    {
+      "path": "modern/ort-wasm-simd-threaded.mjs",
+      "bytes": 20856,
+      "sha256": "43c25054b6b9ac000f786c65545ff83a45f871e0e310e8c2f4d48a363bb66db4"
+    },
+    {
+      "path": "modern/ort-wasm-simd-threaded.wasm",
+      "bytes": 11133407,
+      "sha256": "f061472c6e77d6d50d079aacdc0ff9b63fee287ddd2cbf46cf62438d3891de2b"
+    },
+    {
+      "path": "legacy/ort.wasm.min.js",
+      "bytes": 145004,
+      "sha256": "7164cd2f49f85bb09673f7e4a255f0a71bc2af8f9a88f65bbd096b1ad834d8f8"
+    },
+    {
+      "path": "legacy/ort-wasm.wasm",
+      "bytes": 9726745,
+      "sha256": "969afd00c79afead28a90b6acd01bd64abe4b5ac8bc9650c3dee3aefc6e0cea6"
+    }
+  ],
+  "compatibility_module_sha256": "fa4920ab9a38da96ace2e08d2c0e36d9bf936787c4782308237ff1f6b79f3b3c"
+}

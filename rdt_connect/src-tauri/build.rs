@@ -7,7 +7,7 @@ fn main() {
         Ok(value) if is_valid_build_id(value.trim()) => value.trim().to_string(),
         Ok(value) if !value.trim().is_empty() && value.trim() != "dev-unmarked" => {
             panic!(
-                "Invalid RDT_BUILD_ID '{value}'. Expected a four-character suffix such as 0D14."
+                "Invalid RDT_BUILD_ID '{value}'. Expected four characters: platform digit, uppercase letter, two digits (for example, 1A10)."
             );
         }
         _ => source_build_id(),
@@ -19,7 +19,7 @@ fn main() {
 fn is_valid_build_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 4
-        && bytes[0] == b'0'
+        && matches!(bytes[0], b'0'..=b'5')
         && bytes[1].is_ascii_uppercase()
         && bytes[2].is_ascii_digit()
         && bytes[3].is_ascii_digit()
@@ -44,7 +44,7 @@ fn source_build_id() -> String {
     let marker = stored.trim();
     if !is_valid_build_id(marker) {
         panic!(
-            "Invalid active RDT Connect build marker '{marker}'. Expected a four-character suffix such as 0D14."
+            "Invalid active RDT Connect build marker '{marker}'. Expected four characters: platform digit, uppercase letter, two digits (for example, 1A10)."
         );
     }
     marker.to_string()

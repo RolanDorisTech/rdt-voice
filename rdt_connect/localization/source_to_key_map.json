@@ -3331,7 +3331,7 @@
     "msg.model_weights_and_runtime_dependencies_retai.d56ae58f": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "Model weights and runtime dependencies retain their own licences and notices. RDT Connect's own release licence must be read from the licence file included with that release.",
+      "english": "Models, third-party libraries, and runtime components may have their own license terms and notices. See the relevant license notices for details.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:386",
       "stableKey": true
@@ -4363,7 +4363,7 @@
     "msg.rdt_voice_rdt_connect_third_party_libraries.607f9167": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "RDT Voice, RDT Connect, third-party libraries, and model files may have different terms. The current RDT Voice repository identifies its source license as PolyForm Noncommercial 1.0.0; the historical MIT text does not by itself establish the license for a current release. Always check the exact version and model card you use.",
+      "english": "License terms can differ between RDT Connect, RDT Voice, third-party libraries, and models. RDT Voice's current source code is licensed under PolyForm Noncommercial 1.0.0; older MIT terms apply to earlier releases. Please check the license information for this RDT Connect release and the model you use.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:384",
       "stableKey": true

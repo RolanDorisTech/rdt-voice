@@ -928,6 +928,24 @@ void listen<string>("rdt-tray-open-voice-failed", (event) => {
   setAppView("local");
   showNotice(event.payload, "error");
 });
+void listen("rdt-tray-open-voice-request", async () => {
+  let browserId = preferredBrowserId || "default";
+  try {
+    const options = await invoke<BrowserOption[]>("list_available_browsers");
+    if (!Array.isArray(options) || !options.some((option) => option.id === browserId)) {
+      browserId = "default";
+    }
+  } catch {
+    browserId = "default";
+  }
+  try {
+    await invoke("open_voice_window", { browserId, locale: getActiveLocale() });
+  } catch (error) {
+    try { await invoke("reveal_main_window_after_tray_error"); } catch { /* best effort */ }
+    setAppView("local");
+    showNotice(String(error), "error");
+  }
+}).catch(() => undefined);
 void listen<string>("rdt-tray-model-needs-download", (event) => {
   const requestedModel = event.payload;
   if (Array.from(modelSelect.options).some((option) => option.value === requestedModel)) {
@@ -2851,6 +2869,8 @@ async function installAvailableApplicationUpdate(): Promise<void> {
   setApplicationUpdateAction("installing");
   let downloadedBytes = 0;
   let totalBytes: number | null = null;
+  const progressUiIntervalMs = 500;
+  let lastProgressUiAt = Number.NEGATIVE_INFINITY;
   setApplicationUpdateMessage("updater.downloading");
   try {
     await update.download((event: TauriDownloadEvent) => {
@@ -2860,14 +2880,25 @@ async function installAvailableApplicationUpdate(): Promise<void> {
       } else if (event.event === "Progress") {
         downloadedBytes += event.data.chunkLength;
         if (totalBytes !== null && totalBytes > 0) {
-          setApplicationUpdateMessage("updater.progress", {
-            DOWNLOADED: formatUpdateBytes(downloadedBytes),
-            TOTAL: formatUpdateBytes(totalBytes),
-          });
+          const now = performance.now();
+          if (now - lastProgressUiAt >= progressUiIntervalMs) {
+            setApplicationUpdateMessage("updater.progress", {
+              DOWNLOADED: formatUpdateBytes(downloadedBytes),
+              TOTAL: formatUpdateBytes(totalBytes),
+            });
+            lastProgressUiAt = now;
+          }
         }
       }
     });
-    setApplicationUpdateMessage("updater.downloading");
+    // Flush the actual final byte count before installation; do not reset it
+    // to the generic downloading message while installation is starting.
+    if (totalBytes !== null && totalBytes > 0) {
+      setApplicationUpdateMessage("updater.progress", {
+        DOWNLOADED: formatUpdateBytes(downloadedBytes),
+        TOTAL: formatUpdateBytes(totalBytes),
+      });
+    }
     await update.install({ restartAfterInstall: false });
     pendingTauriUpdate = null;
     updateInstalledAwaitingRelaunch = true;

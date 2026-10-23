@@ -4,12 +4,16 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::blocking::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::TcpListener;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::os::unix::io::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
@@ -19,12 +23,108 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
-    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{IsMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
     webview::WebviewWindowBuilder,
     AppHandle, Emitter, Manager, State, WebviewUrl,
 };
+#[cfg(target_os = "macos")]
+use tauri::menu::{PredefinedMenuItem, Submenu};
 use tauri_plugin_deep_link::DeepLinkExt;
+use sha2::{Digest, Sha256};
+
+// Keep OS-specific file protections behind one helper. Unix uses POSIX modes;
+// Windows secures app-owned data with an explicit current-user ACL via icacls.
+#[cfg(unix)]
+fn set_private_permissions(path: &Path, mode: u32) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+}
+
+#[cfg(windows)]
+fn set_private_permissions(path: &Path, _mode: u32) -> std::io::Result<()> {
+    let username = std::env::var("USERNAME").map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("USERNAME is unavailable: {error}"),
+        )
+    })?;
+    let identity = std::env::var("USERDOMAIN")
+        .map(|domain| format!("{domain}\\{username}"))
+        .unwrap_or(username);
+    let inheritance = if path.is_dir() { "(OI)(CI)F" } else { "F" };
+    let grant = format!("{identity}:{inheritance}");
+    let mut acl_command = Command::new("icacls.exe");
+    acl_command.creation_flags(0x08000000);
+    let output = acl_command
+        .arg(path)
+        .arg("/inheritance:r")
+        .arg("/grant:r")
+        .arg(&grant)
+        .output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "icacls could not secure {}: {}",
+                path.display(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        ))
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn set_private_permissions(_path: &Path, _mode: u32) -> std::io::Result<()> {
+    Ok(())
+}
+
+const SIGNAL_TERM: i32 = 15;
+const SIGNAL_KILL: i32 = 9;
+
+fn application_support_dir(app_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(home_dir()?.join("Library").join("Application Support").join(app_name));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().ok().map(|home| home.join("AppData").join("Local")))
+            .ok_or_else(|| "Could not determine the current user's local application-data folder.".to_string())?;
+        return Ok(base.join(app_name));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().ok().map(|home| home.join(".local").join("share")))
+            .ok_or_else(|| "Could not determine the current user's application-data folder.".to_string())?;
+        return Ok(base.join(app_name));
+    }
+}
+
+fn application_log_dir(app_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(home_dir()?.join("Library").join("Logs").join(app_name));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(application_support_dir(app_name)?.join("Logs"));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let base = std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().ok().map(|home| home.join(".local").join("state")))
+            .ok_or_else(|| "Could not determine the current user's log folder.".to_string())?;
+        return Ok(base.join(app_name));
+    }
+}
 
 fn app_version_label() -> String {
     let version = env!("CARGO_PKG_VERSION");
@@ -58,12 +158,9 @@ fn stop_trace_mutex() -> &'static Mutex<String> {
 }
 
 fn stop_trace_log_path() -> Option<PathBuf> {
-    home_dir().ok().map(|home| {
-        home.join("Library")
-            .join("Logs")
-            .join("RDT Connect")
-            .join("stop-previous-server.log")
-    })
+    application_log_dir("RDT Connect")
+        .ok()
+        .map(|directory| directory.join("stop-previous-server.log"))
 }
 
 fn unix_epoch_millis() -> u128 {
@@ -126,10 +223,11 @@ fn stop_trace_snapshot() -> String {
         })
 }
 
+#[cfg(unix)]
 fn signal_name(signal: i32) -> &'static str {
     match signal {
-        libc::SIGTERM => "SIGTERM",
-        libc::SIGKILL => "SIGKILL",
+        SIGNAL_TERM => "SIGTERM",
+        SIGNAL_KILL => "SIGKILL",
         _ => "UNKNOWN_SIGNAL",
     }
 }
@@ -221,6 +319,45 @@ struct ModelCacheDeleteResult {
     message: String,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PlatformModelOption {
+    id: String,
+    name: String,
+    description: String,
+    size: String,
+    recommended: bool,
+}
+
+fn native_ggml_spec(model: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    // Hashes are candidate pins from the approved immutable HF revision. The downloader
+    // independently requires pinned metadata + complete bytes to match before promotion.
+    const REVISION: &str = "fb5ed9369c26eaf08392504d8446da431e0fffb9";
+    const MODELS: [(&str, &str, &str); 5] = [
+        ("tiny", "ggml-tiny-q8_0.bin", "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"),
+        ("base", "ggml-base-q8_0.bin", "c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9"),
+        ("small", "ggml-small-q8_0.bin", "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f"),
+        ("large-v3-turbo", "ggml-large-v3-turbo-q5_0.bin", "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"),
+        ("large-v3", "ggml-large-v3-q5_0.bin", "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"),
+    ];
+    let _ = REVISION;
+    MODELS.iter().find(|(id, _, _)| *id == model).map(|(_, filename, sha)| (*filename, *sha, REVISION))
+}
+
+fn platform_model_ids() -> Vec<&'static str> {
+    if cfg!(any(target_os = "windows", target_os = "linux")) {
+        vec!["tiny", "base", "small", "large-v3-turbo", "large-v3"]
+    } else {
+        vec![
+            "mlx-community/whisper-large-v3-turbo",
+            "mlx-community/whisper-large-v3-mlx",
+            "mlx-community/whisper-small-mlx",
+            "mlx-community/whisper-base-mlx",
+            "mlx-community/whisper-tiny-mlx",
+        ]
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default, rename_all = "camelCase")]
 struct LocalTlsConfig {
@@ -236,7 +373,7 @@ struct LocalTlsConfig {
 impl Default for LocalTlsConfig {
     fn default() -> Self {
         Self {
-            mode: "https".into(),
+            mode: if cfg!(target_os = "macos") { "https" } else { "http" }.into(),
             certificate_path: None,
             private_key_path: None,
             ca_certificate_path: None,
@@ -297,9 +434,28 @@ struct OrphanScan {
 }
 
 fn home_dir() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        if let Some(home) = std::env::var_os("USERPROFILE") {
+            return Ok(PathBuf::from(home));
+        }
+        if let (Some(drive), Some(path)) = (std::env::var_os("HOMEDRIVE"), std::env::var_os("HOMEPATH")) {
+            let mut combined = PathBuf::from(drive);
+            combined.push(path);
+            return Ok(combined);
+        }
+    }
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| "Could not determine the current user's home folder.".to_string())
+}
+
+fn backend_executable_name() -> &'static str {
+    if cfg!(windows) { "rdt_voice_backend.exe" } else { "rdt_voice_backend" }
+}
+
+fn backend_executable_path(resource_dir: &Path) -> PathBuf {
+    resource_dir.join("rdt_voice_backend").join(backend_executable_name())
 }
 
 fn resolve_resource_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -314,30 +470,25 @@ fn resolve_resource_dir(app: &AppHandle) -> Result<PathBuf, String> {
     if source_resources.exists() {
         return Ok(source_resources);
     }
-    Err("Desktop bundle resources are missing. Run scripts/prepare-macos-bundle.sh before building.".into())
+    Err("Desktop bundle resources are missing. Run the platform-specific desktop resource-preparation script before building.".into())
 }
 
 impl BackendState {
     fn new(resource_dir: PathBuf) -> Result<Self, String> {
-        let home = home_dir()?;
-        let app_support = home
-            .join("Library")
-            .join("Application Support")
-            .join("RDT Voice Server");
+        let app_support = application_support_dir("RDT Voice Server")?;
         fs::create_dir_all(&app_support)
             .map_err(|e| format!("Could not create the desktop application-support folder: {e}"))?;
+        set_private_permissions(&app_support, 0o700)
+            .map_err(|e| format!("Could not secure the desktop application-support folder: {e}"))?;
         let token_path = app_support.join("server-token");
         let lock_path = app_support.join("rdt-connect-backend.lock");
         let menu_bar_pref_path = app_support.join("show-in-menu-bar");
-        let rdt_support = home
-            .join("Library")
-            .join("Application Support")
-            .join("RDT Connect");
+        let rdt_support = application_support_dir("RDT Connect")?;
         let https_dir = rdt_support.join("https");
         fs::create_dir_all(&https_dir)
             .map_err(|e| format!("Could not create the local HTTPS settings folder: {e}"))?;
-        let _ = fs::set_permissions(&rdt_support, fs::Permissions::from_mode(0o700));
-        let _ = fs::set_permissions(&https_dir, fs::Permissions::from_mode(0o700));
+        let _ = set_private_permissions(&rdt_support, 0o700);
+        let _ = set_private_permissions(&https_dir, 0o700);
         let tls_config_path = rdt_support.join("local-https.json");
         let model_storage_config_path = rdt_support.join("model-storage.json");
         let app_language_pref_path = rdt_support.join("app-language");
@@ -347,15 +498,11 @@ impl BackendState {
             .unwrap_or(true);
         // Keep existing application-support/auth/recordings paths for compatibility,
         // while giving the newly branded app its own visible log directory.
-        let log_dir = home.join("Library").join("Logs").join("RDT Connect");
+        let log_dir = application_log_dir("RDT Connect")?;
         fs::create_dir_all(&log_dir)
             .map_err(|e| format!("Could not create the RDT Connect log folder: {e}"))?;
         let log_path = log_dir.join("backend.log");
-        let legacy_log = home
-            .join("Library")
-            .join("Logs")
-            .join("RDT Voice Server")
-            .join("backend.log");
+        let legacy_log = application_log_dir("RDT Voice Server")?.join("backend.log");
         if !log_path.exists() && legacy_log.is_file() {
             let _ = fs::copy(&legacy_log, &log_path);
         }
@@ -441,6 +588,7 @@ impl BackendState {
     }
 
     fn manager_lock_is_held(&self) -> bool {
+        use fs2::FileExt;
         let file = match OpenOptions::new()
             .create(true)
             .read(true)
@@ -450,13 +598,10 @@ impl BackendState {
             Ok(f) => f,
             Err(_) => return true,
         };
-        let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if rc != 0 {
+        if file.try_lock_exclusive().is_err() {
             return true;
         }
-        unsafe {
-            libc::flock(file.as_raw_fd(), libc::LOCK_UN);
-        }
+        let _ = FileExt::unlock(&file);
         false
     }
 
@@ -479,16 +624,14 @@ impl BackendState {
     }
 
     fn acquire_manager_lock(&self) -> Result<File, String> {
+        use fs2::FileExt;
         let file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
             .open(&self.lock_path)
             .map_err(|e| format!("Could not open RDT Connect's backend lock file: {e}"))?;
-        let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if rc != 0 {
-            return Err("Another RDT Connect instance is already managing a backend. No new process was started; use that instance or stop its server cleanly first.".into());
-        }
+        file.try_lock_exclusive().map_err(|_| "Another RDT Connect instance is already managing a backend. No new process was started; use that instance or stop its server cleanly first.".to_string())?;
         Ok(file)
     }
 
@@ -543,6 +686,7 @@ impl BackendState {
     }
 }
 
+#[cfg(unix)]
 fn process_group_alive(group_id: u32) -> bool {
     let rc = unsafe { libc::kill(-(group_id as i32), 0) };
     if rc == 0 {
@@ -553,12 +697,188 @@ fn process_group_alive(group_id: u32) -> bool {
 
 // A zombie no longer owns a listening socket. For orphan cleanup, don't let a
 // zombie awaiting reaping keep Stop stuck forever after the server has exited.
+
+#[cfg(windows)]
+fn process_group_alive(group_id: u32) -> bool {
+    let snapshot = process_snapshot();
+    // An empty snapshot means process enumeration failed, not that the group
+    // was proven absent. Fail closed so Stop cannot report success on uncertainty.
+    if snapshot.is_empty() {
+        return true;
+    }
+    snapshot.iter().any(|item| item.pid == group_id && !item.stat.starts_with('Z'))
+        || snapshot.iter().any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+        || !windows_descendant_pids(group_id, &snapshot).is_empty()
+}
+
+#[cfg(windows)]
+fn windows_descendant_pids(root_pid: u32, snapshot: &[ProcessSnapshot]) -> std::collections::HashSet<u32> {
+    // ParentProcessId remains useful when the root exits first. Keep this as a
+    // liveness signal only: descendants are not terminated unless their identities
+    // can be revalidated, because a PID can eventually be reused by Windows.
+    let mut ancestry = std::collections::HashSet::from([root_pid]);
+    let mut descendants = std::collections::HashSet::new();
+    loop {
+        let mut added = false;
+        for item in snapshot {
+            if item.pid != root_pid && ancestry.contains(&item.ppid) && ancestry.insert(item.pid) {
+                descendants.insert(item.pid);
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    descendants
+}
+
+#[cfg(windows)]
+fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
+    let is_tree = target < 0;
+    let pid = target.unsigned_abs();
+    if pid < 2 {
+        return Err("Safety check refused to signal an invalid Windows process ID.".into());
+    }
+
+    let snapshot = process_snapshot();
+    if snapshot.is_empty() {
+        return Err("Could not inspect the Windows process table; no termination request was sent.".into());
+    }
+    let process_is_present = snapshot
+        .iter()
+        .any(|item| item.pid == pid && !item.stat.starts_with('Z'));
+    let descendants = windows_descendant_pids(pid, &snapshot);
+    let present = if is_tree {
+        process_is_present
+            || snapshot.iter().any(|item| item.pgid == pid && !item.stat.starts_with('Z'))
+            || !descendants.is_empty()
+    } else {
+        process_is_present
+    };
+    if !present {
+        return Ok(());
+    }
+    if is_tree {
+        // taskkill /T is keyed by the root PID. If that process has exited but
+        // descendants remain, using the old PID could target an unrelated process
+        // after PID reuse. Refuse instead of pretending the surviving tree is gone.
+        let Some(root) = snapshot.iter().find(|item| item.pid == pid && !item.stat.starts_with('Z')) else {
+            if !descendants.is_empty() {
+                return Err("The Windows backend leader exited while descendants remain. RDT Connect cannot safely target the old root PID; no termination request was sent.".into());
+            }
+            return Err("The Windows process-tree root could not be verified; no termination request was sent.".into());
+        };
+        if !is_windows_executable(&root.command, "rdt_voice_backend.exe")
+            && !is_windows_executable(&root.command, "rdt_voice_backend")
+        {
+            return Err("Safety check refused to terminate a Windows process tree because the root PID no longer identifies the expected RDT backend.".into());
+        }
+    }
+
+    append_stop_trace(format!(
+        "WINDOWS PROCESS TERMINATION REQUEST: PID={pid}; tree={is_tree}; force={}",
+        signal == SIGNAL_KILL
+    ));
+    let pid_text = pid.to_string();
+    let mut command = Command::new("taskkill.exe");
+    command.arg("/PID").arg(pid_text);
+    if is_tree {
+        command.arg("/T");
+    }
+    if signal == SIGNAL_KILL {
+        command.arg("/F");
+    }
+    let output = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("Could not run Windows taskkill for PID {pid}: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let after = process_snapshot();
+    if after.is_empty() {
+        return Err(format!(
+            "Windows taskkill did not confirm termination of PID {pid}, and RDT Connect could not inspect the process table to verify the result."
+        ));
+    }
+    let still_present = if is_tree {
+        after.iter().any(|item| item.pid == pid && !item.stat.starts_with('Z'))
+            || after.iter().any(|item| item.pgid == pid && !item.stat.starts_with('Z'))
+            || !windows_descendant_pids(pid, &after).is_empty()
+    } else {
+        after.iter().any(|item| item.pid == pid && !item.stat.starts_with('Z'))
+    };
+    if !still_present {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(format!(
+        "Windows taskkill did not confirm termination of PID {pid}: {}",
+        if detail.is_empty() {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        } else {
+            detail
+        }
+    ))
+}
+
+#[cfg(windows)]
+fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool {
+    // taskkill /T requests termination of the captured root and its child tree;
+    // bounded revalidation decides whether force termination is needed.
+    let _ = send_signal_checked(-(group_id as i32), SIGNAL_TERM);
+    let deadline = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < deadline {
+        if let Some(child_ref) = child.as_mut() {
+            let _ = child_ref.try_wait();
+        }
+        if !process_group_alive(group_id) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    if process_group_alive(group_id) {
+        let _ = send_signal_checked(-(group_id as i32), SIGNAL_KILL);
+    }
+    if let Some(child_ref) = child.as_mut() {
+        let wait_deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < wait_deadline {
+            if matches!(child_ref.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline && process_group_alive(group_id) {
+        thread::sleep(Duration::from_millis(100));
+    }
+    !process_group_alive(group_id)
+}
+
+#[cfg(unix)]
 fn process_group_has_live_member(group_id: u32) -> bool {
     process_snapshot()
         .iter()
         .any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
 }
 
+#[cfg(windows)]
+fn process_group_has_live_member(group_id: u32) -> bool {
+    let snapshot = process_snapshot();
+    if snapshot.is_empty() {
+        return true;
+    }
+    snapshot.iter().any(|item| item.pid == group_id && !item.stat.starts_with('Z'))
+        || snapshot.iter().any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+        || !windows_descendant_pids(group_id, &snapshot).is_empty()
+}
+
+#[cfg(unix)]
 fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
     let target_kind = if target < 0 { "process-group" } else { "PID" };
     append_stop_trace(format!(
@@ -594,9 +914,10 @@ fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
 }
 
 /// Terminate the complete MLX/Python process group, not just PyInstaller's parent.
+#[cfg(unix)]
 fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool {
     unsafe {
-        libc::kill(-(group_id as i32), libc::SIGTERM);
+        libc::kill(-(group_id as i32), SIGNAL_TERM);
     }
     let deadline = Instant::now() + Duration::from_secs(4);
     while Instant::now() < deadline {
@@ -610,7 +931,7 @@ fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool
     }
     if process_group_alive(group_id) {
         unsafe {
-            libc::kill(-(group_id as i32), libc::SIGKILL);
+            libc::kill(-(group_id as i32), SIGNAL_KILL);
         }
     }
     if let Some(child_ref) = child.as_mut() {
@@ -623,6 +944,7 @@ fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool
     !process_group_alive(group_id)
 }
 
+#[cfg(unix)]
 fn describe_port_owner(port: u16) -> String {
     let port_arg = format!("-iTCP:{port}");
     let run_lsof = |program: &str| {
@@ -672,6 +994,7 @@ fn describe_port_owner(port: u16) -> String {
     }
 }
 
+#[cfg(unix)]
 fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
     let port_arg = format!("-iTCP:{port}");
     let mut last_error = String::new();
@@ -724,9 +1047,66 @@ fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
     ))
 }
 
+
+#[cfg(windows)]
+fn powershell_json_u32_list(script: &str, description: &str) -> Result<Vec<u32>, String> {
+    let mut command = Command::new("powershell.exe");
+    command.creation_flags(0x08000000);
+    let output = command
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script])
+        .stdin(Stdio::null()).stderr(Stdio::piped()).output()
+        .map_err(|error| format!("Could not inspect {description} with PowerShell: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("Could not inspect {description}: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if raw.is_empty() || raw == "null" { return Ok(Vec::new()); }
+    let value: Value = serde_json::from_str(&raw)
+        .map_err(|error| format!("Could not parse Windows {description} output: {error}"))?;
+    let values: Vec<Value> = match value {
+        Value::Array(items) => items,
+        Value::Null => Vec::new(),
+        single => vec![single],
+    };
+    Ok(values.into_iter().filter_map(|value| value.as_u64().or_else(|| value.as_str().and_then(|s| s.parse().ok())).map(|n| n as u32)).collect())
+}
+
+#[cfg(windows)]
+fn listening_pids_on_port(port: u16) -> Result<Vec<u32>, String> {
+    let script = format!("$ErrorActionPreference='Stop'; $values=@(Get-NetTCPConnection -State Listen -LocalPort {port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique); ConvertTo-Json -InputObject $values -Compress");
+    let mut values = powershell_json_u32_list(&script, &format!("TCP listener ownership for port {port}"))?;
+    values.sort_unstable(); values.dedup(); Ok(values)
+}
+
+#[cfg(windows)]
+fn listening_ports_for_pid(pid: u32) -> Result<Vec<u16>, String> {
+    let script = format!("$ErrorActionPreference='Stop'; $values=@(Get-NetTCPConnection -State Listen -OwningProcess {pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort -Unique); ConvertTo-Json -InputObject $values -Compress");
+    let values = powershell_json_u32_list(&script, &format!("listening TCP ports for PID {pid}"))?;
+    let mut ports: Vec<u16> = values.into_iter().filter_map(|value| u16::try_from(value).ok()).filter(|port| *port > 0).collect();
+    ports.sort_unstable(); ports.dedup(); Ok(ports)
+}
+
+#[cfg(windows)]
+fn describe_port_owner(port: u16) -> String {
+    match listening_pids_on_port(port) {
+        Ok(pids) if pids.is_empty() => "No listener details were returned by the Windows TCP table.".into(),
+        Ok(pids) => {
+            let processes = process_snapshot();
+            let names = pids.iter().take(4).map(|pid| {
+                processes.iter().find(|item| item.pid == *pid)
+                    .map(|item| format!("PID {pid}: {}", item.command.split_whitespace().take(4).collect::<Vec<_>>().join(" ")))
+                    .unwrap_or_else(|| format!("PID {pid}: process details unavailable"))
+            }).collect::<Vec<_>>();
+            format!("Listener found: {}.", names.join(", "))
+        }
+        Err(error) => format!("The owning process could not be identified automatically: {error}"),
+    }
+}
+
 /// Read the actual listening TCP ports owned by a specific PID. This is a
 /// read-only fallback for packaged helper processes (for example a Python
 /// resource_tracker) that inherit a listener but do not have `--port` in argv.
+#[cfg(unix)]
 fn listening_ports_for_pid(pid: u32) -> Result<Vec<u16>, String> {
     let pid_arg = pid.to_string();
     let mut last_error = String::new();
@@ -878,6 +1258,7 @@ fn verify_port_released(port: u16, stopped_pid: u32) -> Result<(), String> {
     }
 }
 
+#[cfg(unix)]
 fn find_existing_backend_pids() -> Vec<String> {
     let output = match Command::new("/usr/bin/pgrep")
         .args(["-fl", "rdt_voice_backend"])
@@ -907,6 +1288,17 @@ fn find_existing_backend_pids() -> Vec<String> {
         .collect()
 }
 
+#[cfg(windows)]
+fn find_existing_backend_pids() -> Vec<String> {
+    process_snapshot()
+        .into_iter()
+        .filter(|item| item.command.to_ascii_lowercase().contains("rdt_voice_backend"))
+        .map(|item| item.pid.to_string())
+        .take(8)
+        .collect()
+}
+
+#[cfg(unix)]
 fn process_command_and_group(pid: u32) -> Option<(String, u32)> {
     let command = Command::new("/bin/ps")
         .args(["-ww", "-p", &pid.to_string(), "-o", "command="])
@@ -938,6 +1330,7 @@ struct ProcessSnapshot {
     command: String,
 }
 
+#[cfg(unix)]
 fn process_snapshot() -> Vec<ProcessSnapshot> {
     let output = match Command::new("/bin/ps")
         // lstart lets us distinguish the captured process from a later process
@@ -972,6 +1365,102 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
         .collect()
 }
 
+
+#[cfg(windows)]
+fn process_command_and_group(pid: u32) -> Option<(String, u32)> {
+    process_snapshot()
+        .into_iter()
+        .find(|item| item.pid == pid)
+        .map(|item| (item.command, item.pgid))
+}
+
+#[cfg(windows)]
+fn windows_executable_path_from_command(command: &str) -> &str {
+    if let Some(rest) = command.strip_prefix('"') {
+        rest.split_once('"').map(|(path, _)| path).unwrap_or(rest)
+    } else {
+        command.split_whitespace().next().unwrap_or(command)
+    }
+}
+
+#[cfg(windows)]
+fn is_windows_executable(command: &str, expected_name: &str) -> bool {
+    let path = windows_executable_path_from_command(command);
+    let name = path.rsplit(|character| character == '\\' || character == '/')
+        .next().unwrap_or(path);
+    name.eq_ignore_ascii_case(expected_name)
+}
+
+#[cfg(windows)]
+fn is_rdt_manager_command(command: &str) -> bool {
+    is_windows_executable(command, "rdt-connect-desktop.exe")
+        || is_windows_executable(command, "rdt-connect-desktop")
+}
+
+#[cfg(unix)]
+fn is_rdt_manager_command(command: &str) -> bool {
+    command.split_whitespace().any(|part| {
+        Path::new(part).file_name().and_then(|name| name.to_str()) == Some("rdt-connect-desktop")
+    })
+}
+
+#[cfg(windows)]
+fn process_snapshot() -> Vec<ProcessSnapshot> {
+    // Win32_Process supplies stable process start times and parent IDs. The
+    // synthetic pgid is the outermost RDT backend ancestor PID; this makes the
+    // existing ownership/descendant checks meaningful on Windows without
+    // treating all processes with the same image name as one group.
+    const SCRIPT: &str = "$ErrorActionPreference='Stop'; Get-CimInstance -ClassName Win32_Process | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | ConvertTo-Json -Compress";
+    let mut command = Command::new("powershell.exe");
+    command.creation_flags(0x08000000);
+    let output = match command
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return Vec::new(),
+    };
+    let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) else {
+        return Vec::new();
+    };
+    let rows: Vec<&Value> = match &value {
+        Value::Array(rows) => rows.iter().collect(),
+        Value::Object(_) => vec![&value],
+        _ => return Vec::new(),
+    };
+    let mut snapshot: Vec<ProcessSnapshot> = rows.into_iter().filter_map(|row| {
+        let pid = row.get("ProcessId").and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))? as u32;
+        let ppid = row.get("ParentProcessId").and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok())).unwrap_or(0) as u32;
+        let started = row.get("CreationDate").and_then(Value::as_str)?.to_string();
+        let exe = row.get("ExecutablePath").and_then(Value::as_str).unwrap_or_default();
+        let args = row.get("CommandLine").and_then(Value::as_str).unwrap_or_default();
+        let command = if exe.is_empty() { args.to_string() } else if args.is_empty() { format!("\"{exe}\"") } else { format!("\"{exe}\" {args}") };
+        if command.is_empty() { return None; }
+        Some(ProcessSnapshot { pid, ppid, pgid: pid, stat: "R".into(), started, command })
+    }).collect();
+
+    let parent_map: std::collections::HashMap<u32, (u32, bool)> = snapshot.iter()
+        .map(|item| (item.pid, (item.ppid, is_windows_executable(&item.command, "rdt_voice_backend.exe")
+            || is_windows_executable(&item.command, "rdt_voice_backend"))))
+        .collect();
+    for item in &mut snapshot {
+        let mut cursor = item.pid;
+        let mut group_root = item.pid;
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..128 {
+            if !seen.insert(cursor) { break; }
+            let Some((parent, is_backend)) = parent_map.get(&cursor) else { break; };
+            if *is_backend { group_root = cursor; }
+            if *parent == 0 || *parent == cursor { break; }
+            cursor = *parent;
+        }
+        item.pgid = group_root;
+    }
+    snapshot
+}
+
 fn process_tree_snapshot(root_pid: u32) -> Vec<ProcessSnapshot> {
     let all = process_snapshot();
     let Some(root) = all.iter().find(|item| item.pid == root_pid).cloned() else {
@@ -995,10 +1484,24 @@ fn process_tree_snapshot(root_pid: u32) -> Vec<ProcessSnapshot> {
     tree
 }
 
+#[cfg(unix)]
 fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnapshot]) -> bool {
     current.iter().any(|item| {
         item.pid == snapshot.pid
             && item.pgid == snapshot.pgid
+            && item.started == snapshot.started
+            && item.command == snapshot.command
+            && !item.stat.starts_with('Z')
+    })
+}
+
+#[cfg(windows)]
+fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnapshot]) -> bool {
+    // Windows pgid is synthesized from the current parent tree; it can change
+    // when the root exits. PID + creation time + command identifies the captured
+    // process without falsely treating a still-running child as gone.
+    current.iter().any(|item| {
+        item.pid == snapshot.pid
             && item.started == snapshot.started
             && item.command == snapshot.command
             && !item.stat.starts_with('Z')
@@ -1055,14 +1558,14 @@ fn terminate_verified_backend_tree(
     // Still signal each captured member individually as a fallback if the group
     // signal is denied or the process was launched by an older manager build.
     if owns_group {
-        if let Err(error) = send_signal_checked(-(group_id as i32), libc::SIGTERM) {
+        if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_TERM) {
             signal_errors.push(format!("process group {group_id}: {error}"));
         }
     }
     for item in initial.iter().skip(1).rev() {
         let current = process_snapshot();
         if snapshot_process_is_alive(item, &current) {
-            if let Err(error) = send_signal_checked(item.pid as i32, libc::SIGTERM) {
+            if let Err(error) = send_signal_checked(item.pid as i32, SIGNAL_TERM) {
                 signal_errors.push(format!("PID {}: {error}", item.pid));
             }
         }
@@ -1073,7 +1576,7 @@ fn terminate_verified_backend_tree(
             // Also target the exact verified root PID. This is a fallback if the
             // group signal was denied, and harmless if the group signal already
             // began shutting the root down.
-            if let Err(error) = send_signal_checked(pid as i32, libc::SIGTERM) {
+            if let Err(error) = send_signal_checked(pid as i32, SIGNAL_TERM) {
                 signal_errors.push(format!("PID {pid}: {error}"));
             }
         } else {
@@ -1112,14 +1615,14 @@ fn terminate_verified_backend_tree(
         .collect::<Vec<_>>();
     append_stop_trace(format!("TERM TIMEOUT after 4s: remaining captured members=[{}]; live isolated group={}. Escalating verified identities to SIGKILL.", term_remaining.join(", "), if owns_group { process_group_has_live_member(group_id).to_string() } else { "not group-owned".into() }));
     if owns_group {
-        if let Err(error) = send_signal_checked(-(group_id as i32), libc::SIGKILL) {
+        if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_KILL) {
             signal_errors.push(format!("process group {group_id}: {error}"));
         }
     }
     for item in initial.iter().skip(1).rev() {
         let current = process_snapshot();
         if snapshot_process_is_alive(item, &current) {
-            if let Err(error) = send_signal_checked(item.pid as i32, libc::SIGKILL) {
+            if let Err(error) = send_signal_checked(item.pid as i32, SIGNAL_KILL) {
                 signal_errors.push(format!("PID {}: {error}", item.pid));
             }
         }
@@ -1127,7 +1630,7 @@ fn terminate_verified_backend_tree(
     let root_now = process_command_and_group(pid);
     if let Some((command, current_group)) = root_now {
         if current_group == group_id && command_is_expected_backend(&command, expected_exe) {
-            if let Err(error) = send_signal_checked(pid as i32, libc::SIGKILL) {
+            if let Err(error) = send_signal_checked(pid as i32, SIGNAL_KILL) {
                 signal_errors.push(format!("PID {pid}: {error}"));
             }
         }
@@ -1176,6 +1679,7 @@ fn parsed_port_from_command(command: &str) -> Option<u16> {
     })
 }
 
+#[cfg(unix)]
 fn other_manager_instance_exists() -> bool {
     let output = match Command::new("/usr/bin/pgrep")
         .args(["-fl", "rdt-connect-desktop"])
@@ -1203,34 +1707,46 @@ fn other_manager_instance_exists() -> bool {
     })
 }
 
+#[cfg(windows)]
+fn other_manager_instance_exists() -> bool {
+    let snapshot = process_snapshot();
+    // If enumeration fails, conservatively avoid treating the system as clear.
+    snapshot.is_empty() || snapshot.iter().any(|item| {
+        item.pid != std::process::id() && is_rdt_manager_command(&item.command)
+    })
+}
+
 fn command_is_expected_backend(command: &str, expected_exe: &Path) -> bool {
     // Match only this project's packaged executable across Tauri dev/resource-dir layouts.
     // This must never turn into a broad Python/Whisper process matcher.
     let mut candidates = vec![expected_exe.to_path_buf()];
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
-            candidates.push(parent.join("rdt_voice_backend").join("rdt_voice_backend"));
+            candidates.push(backend_executable_path(parent));
         }
     }
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    candidates.push(
-        manifest
-            .join("target")
-            .join("debug")
-            .join("rdt_voice_backend")
-            .join("rdt_voice_backend"),
-    );
-    candidates.push(
-        manifest
-            .join("resources")
-            .join("rdt_voice_backend")
-            .join("rdt_voice_backend"),
-    );
-    command.contains("rdt_voice_backend")
+    candidates.push(backend_executable_path(&manifest.join("target").join("debug")));
+    candidates.push(backend_executable_path(&manifest.join("resources")));
+    let command_cmp = if cfg!(windows) {
+        command.replace('/', "\\").to_ascii_lowercase()
+    } else {
+        command.to_string()
+    };
+    command_cmp.contains("rdt_voice_backend")
         && candidates.iter().any(|candidate| {
             let canonical = fs::canonicalize(candidate).unwrap_or_else(|_| candidate.clone());
-            command.contains(&canonical.display().to_string())
-                || command.contains(&candidate.display().to_string())
+            let candidate_text = if cfg!(windows) {
+                candidate.to_string_lossy().replace('/', "\\").to_ascii_lowercase()
+            } else {
+                candidate.display().to_string()
+            };
+            let canonical_text = if cfg!(windows) {
+                canonical.to_string_lossy().replace('/', "\\").to_ascii_lowercase()
+            } else {
+                canonical.display().to_string()
+            };
+            command_cmp.contains(&canonical_text) || command_cmp.contains(&candidate_text)
         })
 }
 
@@ -1248,10 +1764,7 @@ fn scan_orphaned_backends(state: &BackendState) -> OrphanScan {
     // The live manager process, not the lock bit alone, determines whether another
     // instance currently owns the server. Exact executable verification still guards Stop.
     let manager_locked_elsewhere = other_manager_instance_exists();
-    let expected_exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let expected_exe = backend_executable_path(&state.resource_dir);
     let mut instances = Vec::new();
     for value in find_existing_backend_pids() {
         let Ok(pid) = value.parse::<u32>() else {
@@ -1304,10 +1817,7 @@ fn stop_orphaned_backend_safely(state: &BackendState, pid: u32) -> Result<(), St
     // reason the in-app button could fail while its own menu-bar Stop worked.
     // The process executable, PID identity, process group and descendants are still
     // revalidated below before any signal is sent.
-    let expected_exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let expected_exe = backend_executable_path(&state.resource_dir);
     let Some((command, group_id)) = process_command_and_group(pid) else {
         return Err("That process has already exited. Refresh the server status.".into());
     };
@@ -1453,11 +1963,14 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
         let _ = fs::remove_file(&temporary);
         format!("Could not save HTTPS settings: {e}")
     })?;
-    let _ = fs::set_permissions(&state.tls_config_path, fs::Permissions::from_mode(0o600));
+    let _ = set_private_permissions(&state.tls_config_path, 0o600);
     Ok(())
 }
 
 fn openssl_output(args: &[&str], what: &str) -> Result<std::process::Output, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Local HTTPS certificate setup is not qualified on this platform yet. Windows/Linux development builds use HTTP on loopback only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    }
     let output = Command::new("/usr/bin/openssl")
         .args(args)
         .output()
@@ -1476,6 +1989,7 @@ fn openssl_output(args: &[&str], what: &str) -> Result<std::process::Output, Str
     Ok(output)
 }
 
+#[cfg(target_os = "macos")]
 fn run_security(args: &[&str], what: &str) -> Result<(), String> {
     let output = Command::new("/usr/bin/security")
         .args(args)
@@ -1495,11 +2009,22 @@ fn run_security(args: &[&str], what: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "macos"))]
+fn run_security(_args: &[&str], _what: &str) -> Result<(), String> {
+    Err("macOS Keychain trust operations are not available on this platform.".into())
+}
+
+#[cfg(target_os = "macos")]
 fn login_keychain() -> Result<PathBuf, String> {
     Ok(home_dir()?
         .join("Library")
         .join("Keychains")
         .join("login.keychain-db"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn login_keychain() -> Result<PathBuf, String> {
+    Err("macOS login Keychain trust operations are not available on this platform.".into())
 }
 
 fn canonical_file(raw: &str, label: &str) -> Result<PathBuf, String> {
@@ -1513,6 +2038,9 @@ fn canonical_file(raw: &str, label: &str) -> Result<PathBuf, String> {
 }
 
 fn sha1_fingerprint(cert: &Path) -> Result<String, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Local certificate trust management is only implemented for macOS in Build 0D54. No macOS command was run.".into());
+    }
     let output = Command::new("/usr/bin/openssl")
         .args(["x509", "-in"])
         .arg(cert)
@@ -1537,6 +2065,9 @@ fn sha1_fingerprint(cert: &Path) -> Result<String, String> {
 }
 
 fn validate_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Local HTTPS trust setup is not implemented for this platform in Build 0D54. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    }
     let cert_raw = config.certificate_path.as_deref().ok_or_else(|| "HTTPS is the default, but no server certificate is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.".to_string())?;
     let key_raw = config.private_key_path.as_deref().ok_or_else(|| "HTTPS is the default, but no private key is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.".to_string())?;
     let cert = canonical_file(cert_raw, "server certificate")?;
@@ -1626,6 +2157,7 @@ fn validate_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn certificate_trusted(cert: &Path) -> bool {
     let path = match cert.to_str() {
         Some(v) => v,
@@ -1638,6 +2170,12 @@ fn certificate_trusted(cert: &Path) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(target_os = "macos"))]
+fn certificate_trusted(_cert: &Path) -> bool {
+    false
+}
+
+#[cfg(target_os = "macos")]
 fn trust_ca_file(
     state: &BackendState,
     config: &mut LocalTlsConfig,
@@ -1717,6 +2255,15 @@ fn trust_ca_file(
     }
     save_local_tls_config(state, config)?;
     Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn trust_ca_file(
+    _state: &BackendState,
+    _config: &mut LocalTlsConfig,
+    _ca: &Path,
+) -> Result<(), String> {
+    Err("Native local certificate trust is not implemented on this platform in Build 0D54.".into())
 }
 
 fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
@@ -1872,6 +2419,9 @@ async fn pick_tls_file(
 fn setup_local_https_certificate(
     state: State<'_, BackendState>,
 ) -> Result<LocalHttpsStatus, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D54. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
     }
@@ -1925,7 +2475,7 @@ fn setup_local_https_certificate(
         .join(format!("generated-{seconds}-{}", std::process::id()));
     fs::create_dir_all(&dir)
         .map_err(|e| format!("Could not create the certificate folder: {e}"))?;
-    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+    set_private_permissions(&dir, 0o700)
         .map_err(|e| format!("Could not secure the certificate folder: {e}"))?;
     let ca_key = dir.join("rdt-local-ca-key.pem");
     let ca = dir.join("rdt-local-ca.pem");
@@ -1940,7 +2490,7 @@ fn setup_local_https_certificate(
     fs::write(&server_ext, server_extensions)
         .map_err(|e| format!("Could not write server certificate extensions: {e}"))?;
     for file in [&ca_cfg, &server_ext] {
-        let _ = fs::set_permissions(file, fs::Permissions::from_mode(0o600));
+        let _ = set_private_permissions(file, 0o600);
     }
     let run = |args: Vec<String>, what: &str| -> Result<(), String> {
         let output = Command::new("/usr/bin/openssl")
@@ -2016,7 +2566,7 @@ fn setup_local_https_certificate(
         "sign the local HTTPS server certificate",
     )?;
     for file in [&ca_key, &server_key] {
-        fs::set_permissions(file, fs::Permissions::from_mode(0o600))
+        set_private_permissions(file, 0o600)
             .map_err(|e| format!("Could not secure a generated private key: {e}"))?;
     }
     let mut config = load_local_tls_config(&state)?;
@@ -2046,6 +2596,9 @@ fn link_local_https_certificate(
     private_key_path: String,
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Local HTTPS certificate/trust setup is not implemented for Windows/Linux Build 0D54. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
     }
@@ -2074,6 +2627,9 @@ fn trust_local_https_ca(
     state: State<'_, BackendState>,
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Local CA trust management is not implemented for Windows/Linux Build 0D54. No system trust store was modified.".into());
+    }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
     }
@@ -2106,6 +2662,9 @@ fn trust_local_https_ca(
 
 #[tauri::command]
 fn remove_rdt_https_trust(state: State<'_, BackendState>) -> Result<LocalHttpsStatus, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Removing RDT-managed CA trust is not implemented for Windows/Linux Build 0D54. No system trust store was modified.".into());
+    }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
     }
@@ -2151,6 +2710,9 @@ fn set_local_transport(
         return Err("Stop the local server before changing its transport.".into());
     }
     let normalized = mode.trim().to_ascii_lowercase();
+    if normalized == "https" && !cfg!(target_os = "macos") {
+        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D54. Use HTTP only on 127.0.0.1 for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    }
     if normalized != "https" && normalized != "http" {
         return Err("Choose HTTPS or HTTP development mode.".into());
     }
@@ -2217,6 +2779,12 @@ fn model_lock_revision(model: &str) -> Option<String> {
 }
 
 fn validate_model(model: &str) -> Result<(), String> {
+    if cfg!(any(target_os = "windows", target_os = "linux")) {
+        if native_ggml_spec(model).is_some() {
+            return Ok(());
+        }
+        return Err("Choose one of the approved GGML Whisper models from the list.".into());
+    }
     if model_lock_entry(model).is_some()
         && model_lock_revision(model).is_some()
         && model_lock_sha256(model).is_some()
@@ -2225,6 +2793,26 @@ fn validate_model(model: &str) -> Result<(), String> {
     } else {
         Err("Choose one of the pinned MLX Whisper models from the list.".into())
     }
+}
+
+#[tauri::command]
+fn get_platform_model_catalog() -> Vec<PlatformModelOption> {
+    if cfg!(any(target_os = "windows", target_os = "linux")) {
+        return vec![
+            PlatformModelOption { id: "tiny".into(), name: "Tiny".into(), description: "Fastest, smallest GGML model".into(), size: "~43.5 MB".into(), recommended: false },
+            PlatformModelOption { id: "base".into(), name: "Base".into(), description: "Lightweight GGML choice".into(), size: "~81.8 MB".into(), recommended: false },
+            PlatformModelOption { id: "small".into(), name: "Small".into(), description: "Balanced GGML model".into(), size: "~264 MB".into(), recommended: false },
+            PlatformModelOption { id: "large-v3-turbo".into(), name: "Large v3 Turbo".into(), description: "Strong balance of speed and quality".into(), size: "~574 MB".into(), recommended: true },
+            PlatformModelOption { id: "large-v3".into(), name: "Large v3".into(), description: "Largest GGML model in this list".into(), size: "~1.08 GB".into(), recommended: false },
+        ];
+    }
+    vec![
+        PlatformModelOption { id: "mlx-community/whisper-tiny-mlx".into(), name: "Tiny".into(), description: "Fastest · smallest download".into(), size: "~74 MB".into(), recommended: false },
+        PlatformModelOption { id: "mlx-community/whisper-base-mlx".into(), name: "Base".into(), description: "Lightweight choice".into(), size: "~144 MB".into(), recommended: false },
+        PlatformModelOption { id: "mlx-community/whisper-small-mlx".into(), name: "Small".into(), description: "Middle-size model".into(), size: "~481 MB".into(), recommended: false },
+        PlatformModelOption { id: "mlx-community/whisper-large-v3-turbo".into(), name: "Large v3 Turbo".into(), description: "Strong balance of speed and quality".into(), size: "~1.61 GB".into(), recommended: true },
+        PlatformModelOption { id: "mlx-community/whisper-large-v3-mlx".into(), name: "Large v3".into(), description: "Largest download in this list".into(), size: "~3.08 GB".into(), recommended: false },
+    ]
 }
 
 const MODEL_STORAGE_MAX_LOCATIONS: usize = 20;
@@ -2346,16 +2934,47 @@ fn apply_model_download_output_line(
     }
 
     if let Some(error_kind) = trimmed.strip_prefix("RDT_MODEL_DOWNLOAD_ERROR:") {
-        publish_model_download_status(
-            app,
-            store,
-            "failed",
-            &format!(
-                "Download failed ({}) — check the connection and retry.",
-                error_kind.chars().take(48).collect::<String>()
-            ),
-            true,
+        let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+            "GGML Whisper"
+        } else {
+            "MLX Whisper"
+        };
+        let code = error_kind.chars().take(48).collect::<String>();
+        let explanation = match code.as_str() {
+            "http_401" | "http_403" =>
+                "Hugging Face denied access to the model metadata or file",
+            "http_404" | "pinned_model_artifact_missing" =>
+                "the pinned model artifact was not found at the expected revision",
+            "http_429" =>
+                "Hugging Face rate-limited the request; wait briefly and retry",
+            "tls_certificate_verification_failed" =>
+                "Windows could not verify the HTTPS certificate; check system date, time and trust settings",
+            "tls_connection_failed" =>
+                "the HTTPS connection could not be established",
+            "dns_resolution_failed" =>
+                "the model host could not be resolved; check internet connectivity and DNS",
+            "network_timeout" =>
+                "the network request timed out; check connectivity and retry",
+            "network_connection_failed" =>
+                "the connection to the model host failed; check connectivity and any firewall or proxy",
+            "pinned_metadata_sha256_does_not_match_approved_candidate"
+            | "model_sha256_mismatch"
+            | "model_size_mismatch"
+            | "model_content_length_mismatch" =>
+                "model integrity verification failed; the file was not accepted",
+            "model_metadata_missing_size_or_sha256"
+            | "invalid_model_metadata"
+            | "model_metadata_too_large" =>
+                "the model host returned unusable metadata; no model was accepted",
+            "model_in_use" =>
+                "the selected model is in use by a server or another operation",
+            _ =>
+                "the downloader reported an error; use the displayed code to diagnose it",
+        };
+        let message = format!(
+            "{family} model download failed: {explanation} (code: {code}).              The model is not marked Downloaded; correct the issue and retry."
         );
+        publish_model_download_status(app, store, "failed", &message, true);
         return;
     }
 
@@ -2561,8 +3180,11 @@ fn start_model_download(
             model: Some(model),
             destination_root: Some(cache_status.active_root),
             phase: "complete".into(),
-            message: "A verified local MLX model copy is already available; no download is needed."
-                .into(),
+            message: if cfg!(any(target_os = "windows", target_os = "linux")) {
+                "A verified local GGML Whisper model is already available; no download is needed.".to_string()
+            } else {
+                "A verified local MLX model copy is already available; no download is needed.".to_string()
+            },
             progress_percent: 100,
             downloaded_bytes: 0,
             total_bytes: Some(0),
@@ -2579,12 +3201,9 @@ fn start_model_download(
     let (root, _) = resolve_model_storage_root(&state, &model)?;
     let hub_cache = root.join("hub");
     let xet_cache = root.join("xet");
-    let exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let exe = backend_executable_path(&state.resource_dir);
     if !exe.is_file() {
-        return Err(format!("Bundled model downloader was not found at {}. Run scripts/prepare-macos-bundle.sh first.", exe.display()));
+        return Err(format!("Bundled model downloader was not found at {}. Run the platform-specific resource preparation script first.", exe.display()));
     }
     let (log_path, log_writer) = create_model_download_log()?;
     state
@@ -2609,6 +3228,8 @@ fn start_model_download(
     let _ = app.emit("rdt-model-download-status", initial.clone());
 
     let mut command = Command::new(&exe);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
     command
         .arg("--download-model")
         .arg(&model)
@@ -2638,6 +3259,9 @@ fn start_model_download(
         // The supervisor tails it non-blockingly and owns all child cleanup.
         .stdout(Stdio::from(log_writer))
         .stderr(Stdio::null());
+    #[cfg(any(windows, target_os = "linux"))]
+    command.env("RDT_GGML_MODEL_DIR", root.join("ggml"));
+    #[cfg(unix)]
     command.process_group(0);
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -2758,18 +3382,17 @@ fn start_model_download(
             match child.try_wait() {
                 Ok(Some(status)) => {
                     exit_status = Some(status);
-                    if let Ok(saw_complete) = consume_model_download_log(
+                    // Drain the final log data so the completion status is applied.
+                    // The child has already exited, so the grace-period timestamp is
+                    // not consulted again on this loop path.
+                    let _ = consume_model_download_log(
                         &mut log_reader,
                         &mut pending_line,
                         &app_thread,
                         &status_store,
                         &cancel_requested,
                         true,
-                    ) {
-                        if saw_complete && complete_seen_at.is_none() {
-                            complete_seen_at = Some(Instant::now());
-                        }
-                    }
+                    );
                     break;
                 }
                 Ok(None) => {}
@@ -2788,6 +3411,7 @@ fn start_model_download(
                 && complete_seen_at.is_some_and(|at| at.elapsed() >= Duration::from_millis(1500))
             {
                 let cache_valid = model_cache_has_weights(&root_for_worker, &model_for_worker);
+                let cache_valid = cache_valid && model_cache_fully_verified(&root_for_worker, &model_for_worker);
                 match finish_stopping_model_download_group(&identity, &expected_exe) {
                     Ok(()) => {
                         let exit_deadline = Instant::now() + Duration::from_secs(2);
@@ -2849,6 +3473,7 @@ fn start_model_download(
 
         let canceled = cancel_requested.swap(false, Ordering::SeqCst);
         let cache_valid = model_cache_has_weights(&root_for_worker, &model_for_worker);
+                let cache_valid = cache_valid && model_cache_fully_verified(&root_for_worker, &model_for_worker);
         if let Ok(mut current) = pid_store.lock() {
             if current.as_ref().is_some_and(|recorded| {
                 recorded.pid == identity.pid
@@ -2861,16 +3486,17 @@ fn start_model_download(
         }
 
         if cache_valid {
+            let family = if cfg!(any(target_os = "windows", target_os = "linux")) { "GGML Whisper" } else { "MLX Whisper" };
             let message = if recovered_after_complete {
-                "The model files were fully downloaded and verified. RDT Connect recovered the downloader's stalled final shutdown. The model is ready to use."
+                format!("The {family} model files were fully downloaded and verified. RDT Connect recovered the downloader's stalled final shutdown. The model is ready to use.")
             } else if canceled {
-                "The model files finished downloading and passed verification before cancellation completed. The model is ready to use."
+                format!("The {family} model files finished downloading and passed verification before cancellation completed. The model is ready to use.")
             } else if exit_status.is_some_and(|status| status.success()) {
-                "Download complete. The verified MLX model is ready to use."
+                format!("Download complete. The verified {family} model is ready to use.")
             } else {
-                "The downloader ended unexpectedly, but the MLX model files are complete and passed verification. The model is ready to use."
+                format!("The downloader ended unexpectedly, but the {family} model files are complete and passed verification. The model is ready to use.")
             };
-            publish_model_download_status(&app_thread, &status_store, "complete", message, false);
+            publish_model_download_status(&app_thread, &status_store, "complete", &message, false);
         } else if canceled {
             publish_model_download_status(
                 &app_thread,
@@ -2880,14 +3506,41 @@ fn start_model_download(
                 false,
             );
         } else {
-            let message = if recovered_after_complete {
-                "The downloader stalled after announcing completion, but independent pinned MLX cache verification failed. The model is not marked Downloaded; retry the download."
-            } else if exit_status.is_some_and(|status| status.success()) {
-                "The downloader exited successfully, but the MLX cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
+            let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+                "GGML Whisper"
             } else {
-                "Model download did not finish with a complete, verified MLX cache. The model is not marked Downloaded; check the connection and retry."
+                "MLX Whisper"
             };
-            publish_model_download_status(&app_thread, &status_store, "failed", message, false);
+            let previous_message = status_store
+                .lock()
+                .map(|status| status.message.clone())
+                .unwrap_or_default();
+
+            // The line parser records a safe, actionable downloader error.
+            // Do not hide that error when the child process exits.
+            let message = if previous_message.contains(" model download failed:") {
+                previous_message
+            } else if recovered_after_complete {
+                format!(
+                    "The downloader stalled after announcing completion, but independent pinned {family} cache verification failed. The model is not marked Downloaded; retry the download."
+                )
+            } else if exit_status.as_ref().is_some_and(|status| status.success()) {
+                format!(
+                    "The downloader exited successfully, but the {family} cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
+                )
+            } else {
+                let exit_code = exit_status
+                    .as_ref()
+                    .and_then(|status| status.code())
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "unknown".into());
+                format!(
+                    "Model download did not finish with a complete, verified {family} cache (downloader exit code: {exit_code}). The model is not marked Downloaded; check connectivity and retry."
+                )
+            };
+            publish_model_download_status(
+                &app_thread, &status_store, "failed", &message, false
+            );
         }
         clear_model_download_log_path(&log_path_store, &log_path);
     });
@@ -2915,8 +3568,11 @@ fn model_download_group_members_are_owned(
         .filter(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'))
         .collect();
     if members.is_empty() {
-        // The captured group is gone. A different process may now reuse the leader
-        // PID in another group; that is not grounds to signal anything.
+        #[cfg(windows)]
+        if !windows_descendant_pids(identity.pid, &snapshot).is_empty() {
+            return Err("The Windows downloader leader exited while descendant processes remain. RDT Connect cannot safely identify or terminate those helpers yet; no cancellation success was reported.".into());
+        }
+        // No captured group or descendant is visible. Do not target a reused PID.
         return Ok(false);
     }
     if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
@@ -2950,15 +3606,9 @@ fn finish_stopping_model_download_group(
         return Ok(());
     }
     let group_id = identity.pgid;
-    let rc = unsafe { libc::kill(-(group_id as i32), libc::SIGTERM) };
-    if rc != 0 {
-        let error = std::io::Error::last_os_error();
-        if error.raw_os_error() != Some(libc::ESRCH) {
-            return Err(format!(
-                "Could not request graceful cleanup of the verified downloader group: {error}"
-            ));
-        }
-        return Ok(());
+    if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_TERM) {
+        if !process_group_alive(group_id) { return Ok(()); }
+        return Err(format!("Could not request graceful cleanup of the verified downloader group: {error}"));
     }
 
     let term_deadline = Instant::now() + Duration::from_millis(700);
@@ -2976,15 +3626,9 @@ fn finish_stopping_model_download_group(
     if !model_download_group_members_are_owned(identity, expected_exe)? {
         return Ok(());
     }
-    let rc = unsafe { libc::kill(-(group_id as i32), libc::SIGKILL) };
-    if rc != 0 {
-        let error = std::io::Error::last_os_error();
-        if error.raw_os_error() != Some(libc::ESRCH) {
-            return Err(format!(
-                "Could not force-stop the verified downloader group: {error}"
-            ));
-        }
-        return Ok(());
+    if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_KILL) {
+        if !process_group_alive(group_id) { return Ok(()); }
+        return Err(format!("Could not force-stop the verified downloader group: {error}"));
     }
 
     let final_deadline = Instant::now() + Duration::from_secs(2);
@@ -3028,23 +3672,16 @@ fn cancel_model_download(
         .map_err(|_| "Model-download process state is unavailable.".to_string())?
         .clone();
     if let Some(identity) = identity {
-        let expected_exe = state
-            .resource_dir
-            .join("rdt_voice_backend")
-            .join("rdt_voice_backend");
+        let expected_exe = backend_executable_path(&state.resource_dir);
         match model_download_group_members_are_owned(&identity, &expected_exe) {
             Ok(true) => {
                 // The group was created specifically for this download. Its live
                 // members must all match our bundled executable before signaling.
-                let result = unsafe { libc::kill(-(identity.pgid as i32), libc::SIGTERM) };
-                if result != 0 {
-                    let error = std::io::Error::last_os_error();
-                    if error.raw_os_error() != Some(libc::ESRCH) {
+                if let Err(error) = send_signal_checked(-(identity.pgid as i32), SIGNAL_TERM) {
+                    if process_group_alive(identity.pgid) {
                         snapshot.phase = "failed".into();
                         snapshot.message = format!("Could not request cancellation: {error}. Select Try cancel again to retry.");
-                        if let Ok(mut status) = state.model_download_status.lock() {
-                            *status = snapshot.clone();
-                        }
+                        if let Ok(mut status) = state.model_download_status.lock() { *status = snapshot.clone(); }
                         let _ = app.emit("rdt-model-download-status", snapshot.clone());
                         return Ok(snapshot);
                     }
@@ -3146,7 +3783,7 @@ fn cancel_model_download(
             let cache_valid = model
                 .as_deref()
                 .zip(destination_root.as_deref())
-                .is_some_and(|(model, root)| model_cache_has_weights(Path::new(root), model));
+                .is_some_and(|(model, root)| model_cache_fully_verified(Path::new(root), model));
             cancel_requested.store(false, Ordering::SeqCst);
             if let Ok(mut current) = pid_store.lock() {
                 if current.as_ref().is_some_and(|captured| {
@@ -3239,14 +3876,42 @@ fn delete_rdt_model_caches(
     if models.is_empty() {
         return Err("Select at least one downloaded RDT Connect model to delete.".into());
     }
-    if models
-        .iter()
-        .any(|model| !MODEL_IDS.contains(&model.as_str()))
-    {
+    let model_ids = platform_model_ids();
+    if models.iter().any(|model| !model_ids.contains(&model.as_str())) {
         return Err("The deletion request included an unsupported model ID.".into());
     }
     let selected_models: Vec<&str> = models.iter().map(String::as_str).collect();
     let roots = load_model_storage_locations(&state)?;
+    if cfg!(any(target_os = "windows", target_os = "linux")) {
+        let mut deleted = 0usize;
+        let mut bytes = 0u64;
+        let mut checked = 0usize;
+        let mut failures = Vec::new();
+        for root_text in &roots {
+            let root = Path::new(root_text);
+            if !root.is_dir() { continue; }
+            checked += 1;
+            let ggml = root.join("ggml");
+            let canonical_root = match fs::canonicalize(&ggml) { Ok(p) => p, Err(_) => continue };
+            for model in selected_models.iter().copied().filter(|id| native_ggml_spec(id).is_some()) {
+                let (filename, _, _) = native_ggml_spec(model).expect("filtered spec");
+                let artifact = ggml.join(filename);
+                let sidecar = artifact.with_file_name(format!("{filename}.rdt-verified.json"));
+                let meta = match fs::symlink_metadata(&artifact) { Ok(m) => m, Err(_) => continue };
+                if meta.file_type().is_symlink() || !meta.is_file() { failures.push(format!("Skipped unsafe GGML entry under {}", root.display())); continue; }
+                let canonical = match fs::canonicalize(&artifact) { Ok(p) => p, Err(_) => continue };
+                if canonical.parent() != Some(canonical_root.as_path()) { failures.push(format!("Skipped out-of-root GGML entry under {}", root.display())); continue; }
+                match fs::remove_file(&artifact) {
+                    Ok(()) => { let _ = fs::remove_file(&sidecar); deleted += 1; bytes = bytes.saturating_add(meta.len()); }
+                    Err(e) => failures.push(format!("Could not remove cached GGML model under {}: {e}", root.display())),
+                }
+                let _ = fs::remove_file(artifact.with_file_name(format!("{filename}.part")));
+            }
+        }
+        let freed = if bytes >= 1_000_000_000 { format!("about {:.2} GB", bytes as f64 / 1_000_000_000.0) } else if bytes >= 1_000_000 { format!("about {:.0} MB", bytes as f64 / 1_000_000.0) } else { format!("about {} KB", bytes / 1_000) };
+        let message = if deleted == 0 && failures.is_empty() { "No verified RDT Connect GGML model files were found in configured storage roots.".into() } else if failures.is_empty() { format!("Removed {deleted} RDT Connect GGML model file(s) ({freed}); unrelated files were left unchanged.") } else { format!("Removed {deleted} GGML model file(s) ({freed}) with {} safety/removal warning(s).", failures.len()) };
+        return Ok(ModelCacheDeleteResult { deleted_repositories: deleted, locations_checked: checked, approximate_bytes_freed: bytes, message });
+    }
     const MODEL_IDS: [&str; 5] = [
         "mlx-community/whisper-large-v3-turbo",
         "mlx-community/whisper-large-v3-mlx",
@@ -3337,28 +4002,32 @@ fn delete_rdt_model_caches(
 #[tauri::command]
 fn open_easywhisper_model_manager(browser_id: Option<String>) -> Result<(), String> {
     let url = "https://rolandoristech.github.io/rdt-voice/?rdt_manage_easywhisper_models=1";
-    let selected_browser = browser_id.as_deref().unwrap_or("default");
-    let mut command = Command::new("/usr/bin/open");
-    if selected_browser != "default" {
-        let bundle_id = browser_bundle_id(selected_browser).ok_or_else(|| {
-            "Choose a supported browser from the Local Server browser list.".to_string()
-        })?;
-        if !browser_app_is_installed(selected_browser) {
-            return Err(
-                "The selected browser is no longer installed. Choose another browser and retry."
-                    .into(),
-            );
+    #[cfg(target_os = "macos")]
+    {
+        let selected_browser = browser_id.as_deref().unwrap_or("default");
+        let mut command = Command::new("/usr/bin/open");
+        if selected_browser != "default" {
+            let bundle_id = browser_bundle_id(selected_browser).ok_or_else(|| "Choose a supported browser from the Local Server browser list.".to_string())?;
+            if !browser_app_is_installed(selected_browser) {
+                return Err("The selected browser is no longer installed. Choose another browser and retry.".into());
+            }
+            command.arg("-b").arg(bundle_id);
         }
-        command.arg("-b").arg(bundle_id);
+        command.arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            .map(|_| ()).map_err(|e| format!("Could not open the model manager: {e}"))
     }
-    command
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| format!("Could not open the RDT Voice EasyWhisper model manager: {e}"))?;
-    Ok(())
+    #[cfg(target_os = "windows")]
+    {
+        let _ = browser_id; // Windows uses the registered default HTTP(S) handler.
+        Command::new("explorer.exe").arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            .map(|_| ()).map_err(|e| format!("Could not open the model manager in the default browser: {e}"))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = browser_id; // Linux uses the desktop's registered default HTTP(S) handler.
+        Command::new("xdg-open").arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            .map(|_| ()).map_err(|e| format!("Could not open the model manager in the default browser: {e}"))
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -3379,13 +4048,14 @@ struct ModelStorageStatus {
 }
 
 fn default_model_storage_locations() -> Result<Vec<String>, String> {
-    Ok(vec![home_dir()?
-        .join("models")
-        .join("huggingface")
-        .display()
-        .to_string()])
+    #[cfg(target_os = "macos")]
+    let root = home_dir()?.join("models").join("huggingface");
+    #[cfg(target_os = "windows")]
+    let root = application_support_dir("RDT Connect")?.join("Models");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let root = application_support_dir("RDT Connect")?.join("Models");
+    Ok(vec![root.display().to_string()])
 }
-
 fn load_model_storage_locations(state: &BackendState) -> Result<Vec<String>, String> {
     if !state.model_storage_config_path.is_file() {
         return default_model_storage_locations();
@@ -3525,12 +4195,46 @@ fn model_snapshot_is_complete(root: &Path, model: &str, snapshot_path: &Path) ->
         && marker.get("weight_file").and_then(Value::as_str) == Some(weight_name.as_str())
         && marker.get("sha256").and_then(Value::as_str) == Some(expected_sha.as_str())
         && marker.get("size_bytes").and_then(Value::as_u64) == Some(meta.len())
-        && marker.get("mtime_ns").and_then(Value::as_i64)
-            == Some(meta.mtime() * 1_000_000_000 + meta.mtime_nsec())
+        && model_cache_metadata_matches(&meta, &marker)
+}
+
+#[cfg(unix)]
+fn model_cache_metadata_matches(meta: &fs::Metadata, marker: &Value) -> bool {
+    marker.get("mtime_ns").and_then(Value::as_i64)
+        == Some(meta.mtime() * 1_000_000_000 + meta.mtime_nsec())
         && marker.get("inode").and_then(Value::as_u64) == Some(meta.ino())
 }
 
+#[cfg(windows)]
+fn model_cache_metadata_matches(meta: &fs::Metadata, marker: &Value) -> bool {
+    let modified_ns = meta.modified().ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_nanos()).ok());
+    modified_ns.is_some() && marker.get("mtime_ns").and_then(Value::as_i64) == modified_ns
+}
+
 fn model_cache_has_weights(root: &Path, model: &str) -> bool {
+    if cfg!(any(target_os = "windows", target_os = "linux")) {
+        let Some((filename, expected_sha, revision)) = native_ggml_spec(model) else { return false; };
+        let ggml = root.join("ggml");
+        let artifact = ggml.join(filename);
+        let sidecar = artifact.with_file_name(format!("{filename}.rdt-verified.json"));
+        let Ok(canonical_root) = fs::canonicalize(&ggml) else { return false; };
+        let Ok(meta) = fs::symlink_metadata(&artifact) else { return false; };
+        if meta.file_type().is_symlink() || !meta.is_file() || meta.len() == 0 { return false; }
+        let Ok(canonical) = fs::canonicalize(&artifact) else { return false; };
+        if canonical.parent() != Some(canonical_root.as_path()) { return false; }
+        let Ok(side_meta) = fs::symlink_metadata(&sidecar) else { return false; };
+        if side_meta.file_type().is_symlink() || !side_meta.is_file() { return false; }
+        let Ok(bytes) = fs::read(&sidecar) else { return false; };
+        let Ok(json) = serde_json::from_slice::<Value>(&bytes) else { return false; };
+        return json.get("model_id").and_then(Value::as_str) == Some(model)
+            && json.get("filename").and_then(Value::as_str) == Some(filename)
+            && json.get("repo").and_then(Value::as_str) == Some("ggerganov/whisper.cpp")
+            && json.get("revision").and_then(Value::as_str) == Some(revision)
+            && json.get("sha256").and_then(Value::as_str) == Some(expected_sha)
+            && json.get("size_bytes").and_then(Value::as_u64) == Some(meta.len());
+    }
     let repo_key = format!("models--{}", model.replace('/', "--"));
     let snapshots = root.join("hub").join(repo_key).join("snapshots");
     let entries = match fs::read_dir(snapshots) {
@@ -3540,6 +4244,25 @@ fn model_cache_has_weights(root: &Path, model: &str) -> bool {
     entries
         .filter_map(Result::ok)
         .any(|entry| model_snapshot_is_complete(root, model, &entry.path()))
+}
+
+fn model_cache_fully_verified(root: &Path, model: &str) -> bool {
+    if !model_cache_has_weights(root, model) { return false; }
+    if !cfg!(any(target_os = "windows", target_os = "linux")) { return true; }
+    let Some((filename, expected_sha, _revision)) = native_ggml_spec(model) else { return false; };
+    let artifact = root.join("ggml").join(filename);
+    let Ok(mut file) = File::open(&artifact) else { return false; };
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 1024 * 1024];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => hasher.update(&buffer[..count]),
+            Err(_) => return false,
+        }
+    }
+    let digest = format!("{:x}", hasher.finalize());
+    digest == expected_sha
 }
 
 fn make_model_storage_status(
@@ -3658,11 +4381,12 @@ fn normalize_model_storage_locations(locations: Vec<String>) -> Result<Vec<Strin
             // while that volume is disconnected. The app can show it as unavailable,
             // fall back to another mounted root, and resume using it when reconnected.
             // This branch never creates a missing volume or any directory beneath it.
+            #[cfg(target_os = "macos")]
             let is_unmounted_volume = raw.starts_with("/Volumes/")
-                && path
-                    .components()
-                    .all(|component| !matches!(component, std::path::Component::ParentDir))
+                && path.components().all(|component| !matches!(component, std::path::Component::ParentDir))
                 && path != Path::new("/Volumes");
+            #[cfg(not(target_os = "macos"))]
+            let is_unmounted_volume = false;
             if is_unmounted_volume {
                 let value = path.to_string_lossy().into_owned();
                 if !normalized.contains(&value) {
@@ -3731,17 +4455,15 @@ fn save_model_storage_locations(
         .with_extension(format!("json.tmp-{}", std::process::id()));
     fs::write(&temporary, payload)
         .map_err(|e| format!("Could not write model-storage settings: {e}"))?;
-    let _ = fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600));
+    let _ = set_private_permissions(&temporary, 0o600);
     if let Err(e) = fs::rename(&temporary, &state.model_storage_config_path) {
         let _ = fs::remove_file(&temporary);
         return Err(format!("Could not save model-storage settings: {e}"));
     }
-    let _ = fs::set_permissions(
-        &state.model_storage_config_path,
-        fs::Permissions::from_mode(0o600),
-    );
+    let _ = set_private_permissions(&state.model_storage_config_path, 0o600);
     Ok(locations)
 }
+
 
 #[tauri::command]
 async fn get_model_storage_status(
@@ -3807,17 +4529,16 @@ fn get_backend_status(state: State<'_, BackendState>) -> BackendStatus {
 
 #[tauri::command]
 fn open_backend_log(state: State<'_, BackendState>) -> Result<(), String> {
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&state.log_path)
+    OpenOptions::new().create(true).append(true).open(&state.log_path)
         .map_err(|e| format!("Could not create or open the backend log: {e}"))?;
-    Command::new("/usr/bin/open")
-        .args(["-a", "TextEdit"])
-        .arg(&state.log_path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Could not open the backend log in TextEdit: {e}"))
+    #[cfg(target_os = "macos")]
+    let mut command = { let mut c = Command::new("/usr/bin/open"); c.args(["-a", "TextEdit"]); c };
+    #[cfg(target_os = "windows")]
+    let mut command = Command::new("notepad.exe");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = Command::new("xdg-open");
+    command.arg(&state.log_path).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+        .map(|_| ()).map_err(|e| format!("Could not open the backend log: {e}"))
 }
 
 fn redact_log_value_after(line: &str, marker: &str) -> String {
@@ -3955,10 +4676,7 @@ fn diagnostic_html_build_marker(path: &Path) -> String {
 #[tauri::command]
 fn get_app_diagnostics(state: State<'_, BackendState>, preferred_port: u16) -> String {
     let status = state.status();
-    let executable = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let executable = backend_executable_path(&state.resource_dir);
     let html = state.resource_dir.join("rdt_voice_web").join("index.html");
     let token_ready = fs::read_to_string(&state.token_path)
         .map(|value| value.trim().len() >= 32)
@@ -4255,10 +4973,7 @@ fn get_orphaned_backends(state: State<'_, BackendState>) -> OrphanScan {
 }
 
 fn manager_parent_for_backend(state: &BackendState, pid: u32) -> Option<(u32, String)> {
-    let expected_exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let expected_exe = backend_executable_path(&state.resource_dir);
     let snapshot = process_snapshot();
     let backend = snapshot.iter().find(|item| item.pid == pid)?;
     if !command_is_expected_backend(&backend.command, &expected_exe)
@@ -4268,9 +4983,7 @@ fn manager_parent_for_backend(state: &BackendState, pid: u32) -> Option<(u32, St
         return None;
     }
     let manager = snapshot.iter().find(|item| item.pid == backend.ppid)?;
-    let is_rdt_manager = manager.command.split_whitespace().any(|part| {
-        Path::new(part).file_name().and_then(|name| name.to_str()) == Some("rdt-connect-desktop")
-    });
+    let is_rdt_manager = is_rdt_manager_command(&manager.command);
     if is_rdt_manager {
         Some((manager.pid, manager.command.clone()))
     } else {
@@ -4280,6 +4993,7 @@ fn manager_parent_for_backend(state: &BackendState, pid: u32) -> Option<(u32, St
 
 /// Return a PID's live process state without treating a zombie awaiting reaping as alive.
 /// `None` is a confirmed absence; failures to inspect the process table are errors.
+#[cfg(unix)]
 fn inspect_manager_pid(pid: u32) -> Result<Option<(String, String)>, String> {
     let output = Command::new("/bin/ps")
         .args(["-ww", "-axo", "pid=,stat=,command="])
@@ -4310,6 +5024,18 @@ fn inspect_manager_pid(pid: u32) -> Result<Option<(String, String)>, String> {
     Ok(None)
 }
 
+#[cfg(windows)]
+fn inspect_manager_pid(pid: u32) -> Result<Option<(String, String)>, String> {
+    let snapshot = process_snapshot();
+    if snapshot.is_empty() {
+        return Err("Could not verify the Windows process table; no manager process was signaled.".into());
+    }
+    Ok(snapshot
+        .into_iter()
+        .find(|item| item.pid == pid && !item.stat.starts_with('Z'))
+        .map(|item| (item.stat, item.command)))
+}
+
 /// A legacy manager cannot receive the stop request from a newer app. After the
 /// exact backend it directly owns is stopped, close only that verified manager
 /// so its stale flock is released and the replacement app can start cleanly.
@@ -4320,9 +5046,7 @@ fn close_legacy_manager_after_stop(pid: u32, expected_command: &str) -> Result<(
     let Some((_, current)) = inspect_manager_pid(pid)? else {
         return Ok(());
     };
-    let is_rdt_manager = current.split_whitespace().any(|part| {
-        Path::new(part).file_name().and_then(|name| name.to_str()) == Some("rdt-connect-desktop")
-    });
+    let is_rdt_manager = is_rdt_manager_command(&current);
     if current != expected_command || !is_rdt_manager {
         return Err("The old manager changed during cleanup, so RDT Connect left it untouched. Refresh diagnostics before retrying.".into());
     }
@@ -4335,7 +5059,7 @@ fn close_legacy_manager_after_stop(pid: u32, expected_command: &str) -> Result<(
                 .unwrap_or_default()
         )
     ));
-    if let Err(error) = send_signal_checked(pid as i32, libc::SIGTERM) {
+    if let Err(error) = send_signal_checked(pid as i32, SIGNAL_TERM) {
         append_stop_trace(format!(
             "LEGACY MANAGER SIGTERM ERROR (continuing existing bounded wait): {error}"
         ));
@@ -4357,7 +5081,7 @@ fn close_legacy_manager_after_stop(pid: u32, expected_command: &str) -> Result<(
     match inspect_manager_pid(pid)? {
         None => return Ok(()),
         Some((_, command)) if command == expected_command => {
-            if let Err(error) = send_signal_checked(pid as i32, libc::SIGKILL) {
+            if let Err(error) = send_signal_checked(pid as i32, SIGNAL_KILL) {
                 append_stop_trace(format!(
                     "LEGACY MANAGER SIGKILL ERROR (continuing existing bounded wait): {error}"
                 ));
@@ -4404,10 +5128,7 @@ fn stop_orphaned_backend(
         )
     ));
     let command_and_group = process_command_and_group(pid);
-    let expected_exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let expected_exe = backend_executable_path(&state.resource_dir);
     // Inspect a PID's listening sockets only after its command matches this project's
     // packaged backend. The socket query is read-only; any later signal still requires
     // a fresh executable, PID and process-group identity check.
@@ -4503,10 +5224,7 @@ fn stop_diagnostic_snapshot(
             manager_pid = std::process::id()
         ));
     }
-    let expected_exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let expected_exe = backend_executable_path(&state.resource_dir);
     let candidates: Vec<_> = all
         .iter()
         .filter(|item| item.command.contains("rdt_voice_backend"))
@@ -4636,6 +5354,9 @@ fn start_backend_blocking(
     }
     let tls_config = load_local_tls_config(&state)?;
     let use_https = !tls_config.mode.eq_ignore_ascii_case("http");
+    if use_https && !cfg!(target_os = "macos") {
+        return Err("Local HTTPS trust is not implemented for Windows/Linux Build 0D54. Change Local transport to HTTP for loopback-only development. Remote access must remain behind verified Tailscale HTTPS/pairing.".into());
+    }
     if use_https {
         validate_tls_material(&tls_config)?;
         let cert = Path::new(tls_config.certificate_path.as_deref().unwrap_or(""));
@@ -4665,17 +5386,14 @@ fn start_backend_blocking(
         } else { error }
     })?;
 
-    let exe = state
-        .resource_dir
-        .join("rdt_voice_backend")
-        .join("rdt_voice_backend");
+    let exe = backend_executable_path(&state.resource_dir);
     if !exe.is_file() {
-        return Err(format!("Bundled backend executable not found at {}. Run scripts/prepare-macos-bundle.sh first.", exe.display()));
+        return Err(format!("Bundled backend executable not found at {}. Run the platform-specific resource preparation script first.", exe.display()));
     }
     let html = state.resource_dir.join("rdt_voice_web").join("index.html");
     if !html.is_file() {
         return Err(format!(
-            "Bundled RDT Voice HTML not found at {}. Run scripts/prepare-macos-bundle.sh first.",
+            "Bundled RDT Voice HTML not found at {}. Run the platform-specific resource preparation script first.",
             html.display()
         ));
     }
@@ -4684,14 +5402,11 @@ fn start_backend_blocking(
     let bundle_dir = exe
         .parent()
         .ok_or_else(|| "Could not resolve the backend bundle folder.".to_string())?;
-    let mut path = format!(
-        "{}:{}",
-        bundle_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
-    if path.ends_with(':') {
-        path.pop();
-    }
+    let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+    let path = std::env::join_paths(
+        std::iter::once(bundle_dir.to_path_buf()).chain(std::env::split_paths(&inherited_path)),
+    )
+    .map_err(|error| format!("Could not assemble the backend runtime PATH safely: {error}"))?;
     let (model_storage_root, model_was_cached) = resolve_model_storage_root(&state, &model)?;
     let hub_cache = model_storage_root.join("hub");
     let xet_cache = model_storage_root.join("xet");
@@ -4713,15 +5428,16 @@ fn start_backend_blocking(
         .map_err(|e| format!("Could not clone backend log handle: {e}"))?;
 
     let port_text = port.to_string();
-    let data_dir = home_dir()?
-        .join("Library")
-        .join("Application Support")
-        .join("RDT Voice Server");
+    let data_dir = application_support_dir("RDT Voice Server")?;
     fs::create_dir_all(&data_dir)
         .map_err(|e| format!("Could not create the RDT Voice Desktop data folder: {e}"))?;
+    set_private_permissions(&data_dir, 0o700)
+        .map_err(|e| format!("Could not secure the RDT Voice Desktop data folder: {e}"))?;
     let auth_db = data_dir.join("auth.sqlite3");
 
     let mut command = Command::new(&exe);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
     command.args(["--host", "127.0.0.1", "--port", port_text.as_str()]);
     if use_https {
         command
@@ -4757,20 +5473,6 @@ fn start_backend_blocking(
         .env("RDT_AUTH", "on")
         .env("RDT_VOICE_HTML", &html)
         .env("RDT_TOKEN_FILE", &state.token_path)
-        // The backend monitors this exact app PID/executable so a macOS Force Quit
-        // cannot leave inference running headless after normal exit hooks are skipped.
-        .env("RDT_CONNECT_PARENT_PID", std::process::id().to_string())
-        .env(
-            "RDT_CONNECT_PARENT_EXE",
-            std::env::current_exe()
-                .map_err(|e| {
-                    format!(
-                        "Could not determine RDT Connect executable for backend supervision: {e}"
-                    )
-                })?
-                .display()
-                .to_string(),
-        )
         .env("RDT_AUTH_DB", &auth_db)
         .env("RDT_DATA_ROOT", data_dir.join("recordings"))
         .env(
@@ -4783,9 +5485,20 @@ fn start_backend_blocking(
             format!("127.0.0.1:{port},localhost:{port}"),
         )
         .env("PATH", path)
-        .env("PYTHONUNBUFFERED", "1")
-        .stdout(Stdio::from(log))
+        .env("PYTHONUNBUFFERED", "1");
+    #[cfg(not(windows))]
+    {
+        let parent_exe = std::env::current_exe()
+            .map_err(|e| format!("Could not determine RDT Connect executable for backend supervision: {e}"))?;
+        command
+            .env("RDT_CONNECT_PARENT_PID", std::process::id().to_string())
+            .env("RDT_CONNECT_PARENT_EXE", parent_exe);
+    }
+    #[cfg(any(windows, target_os = "linux"))]
+    command.env("RDT_GGML_MODEL_DIR", model_storage_root.join("ggml"));
+    command.stdout(Stdio::from(log))
         .stderr(Stdio::from(stderr_log));
+    #[cfg(unix)]
     command.process_group(0);
 
     let mut child = command
@@ -5041,25 +5754,32 @@ fn open_voice_window(
     if let Some(existing) = app.get_webview_window("voice") {
         let _ = existing.close();
     }
-    let selected_browser = browser_id.as_deref().unwrap_or("default");
-    let mut command = Command::new("/usr/bin/open");
-    if selected_browser != "default" {
-        let bundle_id = browser_bundle_id(selected_browser).ok_or_else(|| {
-            "The selected browser is not supported. Choose a browser from the available list."
-                .to_string()
-        })?;
-        if !browser_app_is_installed(selected_browser) {
-            return Err("The selected browser is no longer installed in Applications. Choose another browser and retry.".to_string());
+    #[cfg(target_os = "macos")]
+    {
+        let selected_browser = browser_id.as_deref().unwrap_or("default");
+        let mut command = Command::new("/usr/bin/open");
+        if selected_browser != "default" {
+            let bundle_id = browser_bundle_id(selected_browser).ok_or_else(|| "The selected browser is not supported. Choose a browser from the available list.".to_string())?;
+            if !browser_app_is_installed(selected_browser) {
+                return Err("The selected browser is no longer installed in Applications. Choose another browser and retry.".to_string());
+            }
+            command.arg("-b").arg(bundle_id);
         }
-        command.arg("-b").arg(bundle_id);
+        command.arg(launch_url.as_str()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            .map_err(|e| format!("Could not open RDT Voice in the selected browser: {e}"))?;
     }
-    command
-        .arg(launch_url.as_str())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| format!("Could not open RDT Voice in the selected browser: {e}"))?;
+    #[cfg(target_os = "windows")]
+    {
+        let _ = browser_id; // A stored macOS browser choice must not be passed to Windows shell commands.
+        Command::new("explorer.exe").arg(launch_url.as_str()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            .map_err(|e| format!("Could not open RDT Voice in the default browser: {e}"))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = browser_id;
+        Command::new("xdg-open").arg(launch_url.as_str()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            .map_err(|e| format!("Could not open RDT Voice in the default browser: {e}"))?;
+    }
     Ok(())
 }
 
@@ -5266,8 +5986,8 @@ fn tailscale_cli() -> Option<PathBuf> {
         }
     }
     if let Ok(path) = std::env::var("PATH") {
-        for dir in path.split(':') {
-            let p = PathBuf::from(dir).join("tailscale");
+        for dir in std::env::split_paths(&std::ffi::OsString::from(path)) {
+            let p = dir.join("tailscale");
             if p.is_file() {
                 return Some(p);
             }
@@ -5400,11 +6120,11 @@ fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
             .map_err(|error| format!("Could not write preference file: {error}"))?;
         file.sync_all()
             .map_err(|error| format!("Could not flush preference file: {error}"))?;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
+        set_private_permissions(&tmp, 0o600)
             .map_err(|error| format!("Could not protect preference file: {error}"))?;
         fs::rename(&tmp, path)
             .map_err(|error| format!("Could not save preference file: {error}"))?;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        set_private_permissions(path, 0o600)
             .map_err(|error| format!("Could not protect saved preference: {error}"))?;
         Ok(())
     })();
@@ -5435,7 +6155,11 @@ fn read_last_server_choice(state: &BackendState) -> LastServerChoice {
         }
     }
     LastServerChoice {
-        model: "mlx-community/whisper-tiny-mlx".into(),
+        model: if cfg!(any(target_os = "windows", target_os = "linux")) {
+            "large-v3-turbo".into()
+        } else {
+            "mlx-community/whisper-tiny-mlx".into()
+        },
         preferred_port: 8888,
     }
 }
@@ -5917,8 +6641,7 @@ fn open_about_link(kind: String, locale: Option<String>) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", ""])
+        Command::new("explorer.exe")
             .arg(&target)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -5958,8 +6681,8 @@ fn open_youtube_channel() -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", URL])
+        Command::new("explorer.exe")
+            .arg(URL)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -6223,7 +6946,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_app_build_info, get_backend_status, get_backend_connection_status, open_backend_log, get_recent_backend_log, get_app_diagnostics, get_orphaned_backends, stop_orphaned_backend,
+            get_app_build_info, get_backend_status, get_platform_model_catalog, get_backend_connection_status, open_backend_log, get_recent_backend_log, get_app_diagnostics, get_orphaned_backends, stop_orphaned_backend,
             get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, open_voice_window,
             get_model_storage_status, set_model_storage_locations, pick_model_storage_directory,
             get_model_download_status, start_model_download, cancel_model_download, delete_rdt_model_caches, open_easywhisper_model_manager,

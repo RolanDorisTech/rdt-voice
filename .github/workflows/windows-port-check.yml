@@ -1,0 +1,79 @@
+name: RDT Connect Windows Port Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "windows-port-*"
+    paths:
+      - "rdt_connect/**"
+      - "backend/**"
+      - ".github/workflows/windows-port-check.yml"
+  pull_request:
+    paths:
+      - "rdt_connect/**"
+      - "backend/**"
+      - ".github/workflows/windows-port-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-architecture-check:
+    name: Windows ${{ matrix.arch }} compile check
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            rust-target: aarch64-pc-windows-msvc
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: rdt_connect/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Windows Rust target
+        run: rustup target add ${{ matrix.rust-target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rdt_connect/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: rdt_connect
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: rdt_connect
+        run: npm run build
+
+      - name: Test build versioning
+        working-directory: rdt_connect
+        run: npm run test:versioning
+
+      - name: Compile native Windows app (no installer yet)
+        working-directory: rdt_connect
+        run: npx tauri build --target ${{ matrix.rust-target }} --config src-tauri/tauri.windows.check.conf.json --no-bundle
+
+      - name: Upload compile-check executable (not a release build)
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rdt-connect-windows-${{ matrix.arch }}-compile-check
+          path: rdt_connect/src-tauri/target/${{ matrix.rust-target }}/release/rdt-connect-desktop.exe
+          if-no-files-found: error
+          retention-days: 7

@@ -8,3 +8,6 @@
 
 # Dated backup snapshots
 *.backup-*
+
+__pycache__/
+*.py[cod]

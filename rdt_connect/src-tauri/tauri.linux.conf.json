@@ -1,0 +1,23 @@
+{
+  "bundle": {
+    "targets": [
+      "deb",
+      "appimage"
+    ],
+    "icon": [
+      "icons/128x128.png",
+      "icons/icon.png"
+    ],
+    "resources": {
+      "resources/rdt_voice_backend": "rdt_voice_backend",
+      "resources/rdt_voice_web": "rdt_voice_web",
+      "resources/third_party_notices": "third_party_notices",
+      "resources/Credits.html": "Credits.html"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

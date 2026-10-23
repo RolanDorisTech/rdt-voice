@@ -257,11 +257,45 @@ function modelMenuInfo(option: HTMLOptionElement) {
   return modelMenuDetails[option.value] || { name: option.textContent || option.value, description: "Whisper model", size: "Size varies" };
 }
 function modelToneFor(model: string): "tiny" | "base" | "small" | "turbo" | "large" {
-  if (model.endsWith("whisper-tiny-mlx")) return "tiny";
-  if (model.endsWith("whisper-base-mlx")) return "base";
-  if (model.endsWith("whisper-small-mlx")) return "small";
-  if (model.endsWith("whisper-large-v3-turbo")) return "turbo";
+  if (model === "tiny" || model.endsWith("whisper-tiny-mlx")) return "tiny";
+  if (model === "base" || model.endsWith("whisper-base-mlx")) return "base";
+  if (model === "small" || model.endsWith("whisper-small-mlx")) return "small";
+  if (model === "large-v3-turbo" || model.endsWith("whisper-large-v3-turbo")) return "turbo";
   return "large";
+}
+function isNativeGgmlCatalog(): boolean {
+  return modelSelect.options.length > 0 && modelSelect.options[0].value === "tiny";
+}
+type PlatformModelOption = { id: string; name: string; description: string; size: string; recommended: boolean };
+async function initializePlatformModelCatalog() {
+  try {
+    const catalog = await invoke<PlatformModelOption[]>("get_platform_model_catalog");
+    if (!Array.isArray(catalog) || catalog.length !== 5 || catalog.some((item) => !item || typeof item.id !== "string" || typeof item.name !== "string")) return;
+    const previousValue = modelSelect.value;
+    for (const key of Object.keys(modelMenuDetails)) delete modelMenuDetails[key];
+    modelOptionBaseLabels.clear();
+    modelSelect.replaceChildren();
+    for (const item of catalog) {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.name;
+      modelSelect.appendChild(option);
+      modelOptionBaseLabels.set(item.id, item.name);
+      modelMenuDetails[item.id] = { name: item.name, description: item.description, size: item.size, recommended: item.recommended };
+    }
+    let savedValue: string | null = null;
+    try { savedValue = localStorage.getItem("rdt_voice_desktop_model"); } catch { /* optional preference */ }
+    modelSelect.value = catalog.some((item) => item.id === savedValue) ? savedValue! : (catalog.some((item) => item.id === previousValue) ? previousValue : catalog[0].id);
+    const label = modelSelect.closest(".local-model-label")?.querySelector("label");
+    if (label) label.textContent = isNativeGgmlCatalog() ? "Choose a model — GGML (CPU baseline):" : "Choose a model — Apple MLX:";
+    modelIdDetail.textContent = modelSelect.value;
+    modelSelectCurrentDetail.textContent = `${modelMenuInfo(modelSelect.options[modelSelect.selectedIndex]).size}${modelMenuInfo(modelSelect.options[modelSelect.selectedIndex]).recommended ? " · Recommended" : ""}`;
+    renderModelSelectMenu();
+    syncModelSelectPresentation();
+    void refreshModelCacheBadges();
+  } catch {
+    // Keep the bundled macOS-first catalog if running with an older native binary.
+  }
 }
 function syncModelSelectPresentation() {
   const selected = modelSelect.options[modelSelect.selectedIndex];
@@ -527,6 +561,7 @@ try {
   }
 } catch { /* Private browsing/storage policies should not block startup. */ }
 renderModelSelectMenu();
+void initializePlatformModelCatalog();
 let preferredBrowserId = "default";
 try { preferredBrowserId = localStorage.getItem("rdt_connect_preferred_browser") || "default"; } catch { /* optional preference */ }
 modelSelect.addEventListener("change", () => {
@@ -1080,11 +1115,13 @@ function setBusy(value: boolean) {
   modelSelect.disabled = value || modelDownloadStatus.active;
   modelSelect.title = backend.running
     ? "Browse models while running; select another model and choose Switch Model to restart safely."
-    : "All choices use Apple MLX acceleration on Apple Silicon.";
+    : (isNativeGgmlCatalog() ? "GGML models use the bundled whisper.cpp CPU worker. GPU use is not implied." : "All choices use Apple MLX acceleration on Apple Silicon.");
   modelSelectTooltip.setAttribute("title", modelSelect.title);
   modelSelectTooltip.setAttribute("data-tooltip", modelSelect.title);
   syncModelSelectPresentation();
-  modelHelp.textContent = "All available models use Apple MLX acceleration on Apple Silicon.";
+  modelHelp.textContent = isNativeGgmlCatalog()
+    ? "GGML model files are shared across compatible Windows/Linux CPU architectures. GPU acceleration is not implied; the qualified baseline is CPU inference."
+    : "All available models use Apple MLX acceleration on Apple Silicon.";
   renderBrowserChoiceRow();
   renderModelDownloadUI();
   preferredPortTooltip.setAttribute("data-tooltip", backend.running
@@ -1625,18 +1662,30 @@ function friendlyModelName(model: string): string {
     "mlx-community/whisper-small-mlx": "Whisper Small",
     "mlx-community/whisper-base-mlx": "Whisper Base",
     "mlx-community/whisper-tiny-mlx": "Whisper Tiny",
+    "tiny": "Whisper Tiny",
+    "base": "Whisper Base",
+    "small": "Whisper Small",
+    "large-v3-turbo": "Whisper Large v3 Turbo",
+    "large-v3": "Whisper Large v3",
   };
   return names[model] || model.split("/").pop() || "Whisper model";
 }
 function approximateModelSizeLabel(model: string): string {
+  const catalogSize = modelMenuDetails[model]?.size;
+  if (catalogSize) return catalogSize;
   const sizes: Record<string, string> = {
     "mlx-community/whisper-large-v3-turbo": "~1.61 GB",
     "mlx-community/whisper-large-v3-mlx": "~3.08 GB",
     "mlx-community/whisper-small-mlx": "~481 MB",
     "mlx-community/whisper-base-mlx": "~144 MB",
     "mlx-community/whisper-tiny-mlx": "~74 MB",
+    "tiny": "~43.5 MB",
+    "base": "~81.8 MB",
+    "small": "~264 MB",
+    "large-v3-turbo": "~574 MB",
+    "large-v3": "~1.08 GB",
   };
-  return sizes[model] || "an approximate size";
+  return sizes[model] || "Size unavailable";
 }
 function formatModelBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
@@ -2140,6 +2189,19 @@ function showHttpsSetupSuccess() {
 }
 async function performLocalHttpsSetup(triggerButton: HTMLButtonElement) {
   if (localHttpsSetupInProgress) return;
+
+  if (isNativeGgmlCatalog()) {
+    const message =
+      "Trusted local HTTPS certificate setup is not implemented in this Windows/Linux test build. For a local transcription test, explicitly choose HTTP under Settings → Local transport. HTTP is restricted to 127.0.0.1; do not use it for LAN or remote access.";
+    localHttpsQuickPrompt.classList.remove("hidden");
+    localHttpsQuickStatus.textContent = message;
+    localHttpsQuickStatus.dataset.userFeedback = "unsupported";
+    localHttpsQuickStatus.className = "local-https-quick-status tls-error";
+    localHttpsStatusEl.textContent = message;
+    localHttpsStatusEl.className = "tls-status tls-error";
+    showNotice(message, "warning");
+    return;
+  }
 
   localHttpsSetupInProgress = true;
   // Invalidate any status lookup already in flight before setup starts.

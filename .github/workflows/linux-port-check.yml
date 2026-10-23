@@ -1,0 +1,97 @@
+name: RDT Connect Linux native build check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["windows-port-*", "main"]
+    paths:
+      - "rdt_connect/**"
+      - "backend/whisper_cpp/**"
+      - "backend/windows/**"
+      - ".github/workflows/linux-port-check.yml"
+      - ".github/workflows/native-ggml-cpu-smoke.yml"
+  pull_request:
+    paths:
+      - "rdt_connect/**"
+      - "backend/whisper_cpp/**"
+      - "backend/windows/**"
+      - ".github/workflows/linux-port-check.yml"
+      - ".github/workflows/native-ggml-cpu-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  linux-app-build:
+    name: Ubuntu 24.04 ${{ matrix.arch }} native app build (no bundle)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: ARM64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Linux desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf libwebkit2gtk-4.1-dev libayatana-appindicator3-dev cmake ninja-build
+
+      - name: Test shared GGML and backend contracts
+        run: |
+          python3 -m unittest discover -s backend/whisper_cpp/tests -v
+          python3 -m unittest discover -s backend/windows/tests -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: rdt_connect/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rdt_connect/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: rdt_connect
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: rdt_connect
+        run: npm run build
+
+      - name: Test build versioning
+        working-directory: rdt_connect
+        run: npm run test:versioning
+
+      - name: Stage placeholders for compile-only resources
+        run: |
+          set -euo pipefail
+          for resource in rdt_voice_backend rdt_voice_web third_party_notices; do
+            mkdir -p "rdt_connect/src-tauri/resources/$resource"
+            printf 'CI-only placeholder; not a runtime bundle.\n' > "rdt_connect/src-tauri/resources/$resource/.ci-placeholder"
+          done
+
+      - name: Compile Linux desktop application (not a runtime test)
+        working-directory: rdt_connect
+        run: cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+
+      - name: Upload native Linux build evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rdt-connect-linux-${{ matrix.arch }}-compile-check
+          path: rdt_connect/src-tauri/target/release/rdt-connect-desktop
+          if-no-files-found: ignore
+          retention-days: 7

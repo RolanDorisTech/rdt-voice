@@ -76,7 +76,17 @@ jobs:
           if (-not (Test-Path -LiteralPath $direct -PathType Leaf)) {
             throw "Direct dependency input missing: $direct"
           }
-          $directHash = (Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant()
+          $directBytes = [System.IO.File]::ReadAllBytes($direct)
+          $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+          $directText = $strictUtf8.GetString($directBytes)
+          $canonicalText = $directText.Replace("`r`n", "`n").Replace("`r", "`n")
+          $canonicalBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $directHash = [Convert]::ToHexString($sha256.ComputeHash($canonicalBytes)).ToLowerInvariant()
+          } finally {
+            $sha256.Dispose()
+          }
           $expectedRequirementsHash = $env:EXPECTED_REQUIREMENTS_SHA256.ToLowerInvariant()
           if ($directHash -ne $expectedRequirementsHash) {
             throw "Direct-requirements SHA-256 mismatch: expected $($env:EXPECTED_REQUIREMENTS_SHA256), actual $directHash."

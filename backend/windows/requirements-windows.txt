@@ -1,6 +1,6 @@
-# Pins are a reproducible dependency baseline, but native wheel hashes still require
-# x64 and ARM64 import/build qualification. Do not package until the workflow emits
-# a reviewed hash-locked requirements file for both architectures.
+# Human-reviewed direct dependency pins used only as inputs to architecture-specific lock generation.
+# NEVER install this file in release packaging. Generate and native-qualify separate
+# requirements-windows-x64.txt and requirements-windows-arm64.txt hash locks first.
 fastapi==0.115.14
 numpy==2.3.5
 Pillow==11.3.0

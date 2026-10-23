@@ -44,31 +44,96 @@ env.useBrowserCache = true;
 
 env.useWasmCache = true;
 
-try { env.backends.onnx.logLevel = "error"; env.backends.onnx.logSeverityLevel = 3; } catch {}
+try { env.backends.onnx.logLevel = "verbose"; env.backends.onnx.debug = true; env.backends.onnx.logSeverityLevel = 0; } catch {}
 
 // Debug logging is off unless the page sets self.RDT_DEBUG (kept out of the public console).
 const RDT_DEBUG = !!self.RDT_DEBUG;
 
 
-// Cache wrapper: Cache Storage entries saved from a streamed relay response carry no
-// Content-Length, which makes Transformers.js warn on every load. Re-attach the size
-// (taken from the stored blob, no copy into JS memory) so progress and loads are exact.
+// Browser Cache Storage coordination. Multiple tabs can share this origin's
+// transformers-cache. Serialize reads/writes for the same exact model URL using
+// Web Locks when available, preventing one tab from observing an entry while
+// another tab is replacing it. Older browsers fall back to a worker-local queue.
+const rdtCacheLocalQueues = new Map();
+const rdtCacheCoordinationInfo = {
+  strategy: "same-key-web-locks-with-local-queue-fallback",
+  webLocksAvailable: !!(typeof navigator !== "undefined" && navigator.locks && typeof navigator.locks.request === "function"),
+  actionCount: 0,
+  lastAction: null
+};
+let rdtLastOnnxArtifactCacheCheck = null;
+let rdtDeepHashLargeOnNextLegacyRetry = false;
+// Keep the current load request's manifest file metadata available to all pipeline rebuilds.
+// Worker jobs are serialized; this lets a WASM fallback/retry reuse the exact pinned file list.
+let rdtActiveExpectedModelFiles = [];
+
+function rdtCacheKeyUrl(key) {
+  try { if (key && typeof key.url === "string") return key.url; } catch {}
+  try { return new URL(String(key), self.location && self.location.href || "https://rdt.invalid/").href; }
+  catch { return String(key).slice(0, 512); }
+}
+function rdtCacheKeyLabel(key) {
+  try {
+    const u = new URL(rdtCacheKeyUrl(key));
+    const parts = u.pathname.split("/").filter(Boolean);
+    return String(parts[parts.length - 1] || "cache-entry").slice(0, 120);
+  } catch { return "cache-entry"; }
+}
+async function rdtWithCacheEntryLock(key, action, callback) {
+  const url = rdtCacheKeyUrl(key);
+  const label = rdtCacheKeyLabel(key);
+  const lockName = "rdt-voice-easywhisper-cache:" + url;
+  const started = Date.now();
+  const run = async (mode) => {
+    const waitMs = Math.max(0, Date.now() - started);
+    try { return await callback(); }
+    finally {
+      rdtCacheCoordinationInfo.actionCount += 1;
+      rdtCacheCoordinationInfo.lastAction = { action, mode, file: label, waitMs };
+    }
+  };
+  let locks = null;
+  try { locks = typeof navigator !== "undefined" ? navigator.locks : null; } catch {}
+  if (locks && typeof locks.request === "function") {
+    rdtCacheCoordinationInfo.webLocksAvailable = true;
+    return locks.request(lockName, { mode: "exclusive" }, () => run("web-locks"));
+  }
+  rdtCacheCoordinationInfo.webLocksAvailable = false;
+  const previous = rdtCacheLocalQueues.get(url) || Promise.resolve();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const tail = previous.catch(() => {}).then(() => gate);
+  rdtCacheLocalQueues.set(url, tail);
+  await previous.catch(() => {});
+  try { return await run("local-worker-queue"); }
+  finally {
+    release();
+    if (rdtCacheLocalQueues.get(url) === tail) rdtCacheLocalQueues.delete(url);
+  }
+}
+
+// Cache Storage entries saved from streamed relay responses may not retain a
+// Content-Length header. Re-attach the stored Blob's size for Transformers.js.
 try {
   const RDT_CACHE_NAME = "transformers-cache";
   env.useCustomCache = true;
   env.customCache = {
     async match(key) {
-      const cache = await caches.open(RDT_CACHE_NAME);
-      const r = await cache.match(key);
-      if (!r || r.headers.get("content-length") || !r.ok) return r;
-      const blob = await r.blob();
-      const headers = new Headers(r.headers);
-      headers.set("content-length", String(blob.size));
-      return new Response(blob, { status: r.status, statusText: r.statusText, headers });
+      return rdtWithCacheEntryLock(key, "match", async () => {
+        const cache = await caches.open(RDT_CACHE_NAME);
+        const r = await cache.match(key);
+        if (!r || r.headers.get("content-length") || !r.ok) return r;
+        const blob = await r.blob();
+        const headers = new Headers(r.headers);
+        headers.set("content-length", String(blob.size));
+        return new Response(blob, { status: r.status, statusText: r.statusText, headers });
+      });
     },
     async put(key, response) {
-      const cache = await caches.open(RDT_CACHE_NAME);
-      await cache.put(key, response);
+      return rdtWithCacheEntryLock(key, "put", async () => {
+        const cache = await caches.open(RDT_CACHE_NAME);
+        await cache.put(key, response);
+      });
     }
   };
 } catch { env.useCustomCache = false; }
@@ -91,6 +156,22 @@ function rdtHfProxyUrl(requestUrl) {
   return RDT_HF_PROXY_ORIGIN + "/hf" + u.pathname + u.search;
 }
 
+
+async function rdtResponseLooksLikeHtml(response) {
+  if (!response) return false;
+  const contentType = String(
+    response.headers && response.headers.get("content-type") || ""
+  );
+  if (/text\/html|application\/xhtml\+xml/i.test(contentType)) return true;
+  try {
+    const sample = (await response.clone().text()).slice(0, 512)
+      .replace(/^\uFEFF/, "").trimStart();
+    return /^<(?:!doctype\s+html\b|html\b|head\b|body\b)/i.test(sample);
+  } catch {
+    return false;
+  }
+}
+
 async function rdtHfAwareFetch(input, init) {
   let req;
   try {
@@ -106,6 +187,30 @@ async function rdtHfAwareFetch(input, init) {
   // The Transformers.js cache still uses the original Hugging Face URL outside fetch.
   const proxiedRequest = new Request(proxyUrl, req);
   const __resp = await RDT_NATIVE_FETCH(proxiedRequest);
+  const __rdtMetadataPath = new URL(req.url).pathname;
+  if (__resp && __resp.ok && /\.json$/i.test(__rdtMetadataPath) &&
+      await rdtResponseLooksLikeHtml(__resp)) {
+    let __rdtDirectReason = "no usable response";
+    try {
+      const __rdtDirect = await RDT_NATIVE_FETCH(req.clone());
+      if (__rdtDirect && __rdtDirect.ok &&
+          !(await rdtResponseLooksLikeHtml(__rdtDirect))) return __rdtDirect;
+      __rdtDirectReason = __rdtDirect
+        ? (__rdtDirect.ok
+          ? "direct URL also returned HTML"
+          : "direct URL returned HTTP " + __rdtDirect.status)
+        : "direct URL returned no response";
+    } catch (__rdtDirectError) {
+      __rdtDirectReason = String(
+        __rdtDirectError && __rdtDirectError.message || __rdtDirectError
+      ).slice(0, 180);
+    }
+    throw new Error("Model relay returned HTML instead of JSON for " +
+      __rdtMetadataPath + " (HTTP " + __resp.status +
+      "). Direct Hugging Face metadata retry failed: " + __rdtDirectReason +
+      ". Check the relay's /hf passthrough for this pinned model metadata file.");
+  }
+
   if (__resp.status === 403) {
     let detail = "";
     try { detail = (await __resp.clone().text()).slice(0, 180).trim(); } catch {}
@@ -128,7 +233,168 @@ async function rdtHfAwareFetch(input, init) {
 self.fetch = rdtHfAwareFetch;
 env.fetch = rdtHfAwareFetch;
 
-const WORKER_VERSION = "2026-10-13-v14-webgpu-adapter-probe-fallback";
+// ARM32 compatibility: this browser-worker code cannot read Android's native ABI directly.
+// Use the actual WebAssembly SIMD feature test, not a guessed bitness, to select the runtime.
+// Preserve Transformers.js 3.7.1 model and Whisper support on both runtime paths.
+// For browsers without WebAssembly SIMD, inject the separate ORT Web 1.17.3 WASM-only ESM namespace before
+// loading an isolated v3.7.1 module copy. This avoids pairing scalar WASM with SIMD/JSEP JavaScript glue.
+// The selected model ID and revision stay pinned. Affected Android Tiny/WASM profiles use the pinned INT8 pair; other dtype choices remain unchanged.
+const RDT_COMPAT_TRANSFORMERS_URL = new URL("./rdt-easywhisper-compat-sequential-r71.min.js", import.meta.url).href;
+const RDT_COMPAT_ORT_WASM_MODULE_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/esm/ort.wasm.min.js";
+const RDT_COMPAT_ORT_WASM_BINARY = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort-wasm.wasm";
+const RDT_ORT_GLOBAL_SYMBOL = Symbol.for("onnxruntime");
+let rdtActivePipelineFactory = pipeline;
+let rdtActiveRuntimeEnv = env;
+let rdtActiveRuntimeKind = "runtime-not-selected-yet";
+let rdtActiveRuntimeSelectionReason = "awaiting-device-and-feature-selection";
+let rdtCompatOrtRuntimeModule = null;
+let rdtCompatOrtRuntimeModulePromise = null;
+let rdtCompatTransformersModulePromise = null;
+let rdtCompatOrtRuntimeImporter = () => import(RDT_COMPAT_ORT_WASM_MODULE_URL);
+let rdtCompatTransformersImporter = () => import(RDT_COMPAT_TRANSFORMERS_URL);
+
+async function rdtImportWasmOnlyCompatTransformers() {
+  if (!rdtCompatOrtRuntimeModulePromise) {
+    rdtCompatOrtRuntimeModulePromise = Promise.resolve().then(() => rdtCompatOrtRuntimeImporter()).catch((err) => {
+      rdtCompatOrtRuntimeModulePromise = null;
+      throw err;
+    });
+  }
+  const ortWasmOnly = await rdtCompatOrtRuntimeModulePromise;
+  if (!ortWasmOnly || !ortWasmOnly.InferenceSession || typeof ortWasmOnly.InferenceSession.create !== "function" || !ortWasmOnly.Tensor || !ortWasmOnly.env || !ortWasmOnly.env.wasm) {
+    throw new Error("version-matched-ort-wasm-only-module-shape-invalid");
+  }
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, RDT_ORT_GLOBAL_SYMBOL);
+  try {
+    Object.defineProperty(globalThis, RDT_ORT_GLOBAL_SYMBOL, {value: ortWasmOnly, writable: true, configurable: true, enumerable: false});
+    const transformers = await rdtCompatTransformersImporter();
+    if (!transformers || typeof transformers.pipeline !== "function" || !transformers.env || transformers.env.backends?.onnx !== ortWasmOnly.env) {
+      throw new Error("transformers-v3-did-not-adopt-the-wasm-only-onnx-runtime");
+    }
+    rdtCompatOrtRuntimeModule = ortWasmOnly;
+    return transformers;
+  } finally {
+    if (previousDescriptor) Object.defineProperty(globalThis, RDT_ORT_GLOBAL_SYMBOL, previousDescriptor);
+    else delete globalThis[RDT_ORT_GLOBAL_SYMBOL];
+  }
+}
+const rdtSharedTransformersCache = env.customCache || null;
+const rdtLegacyCompatibilityAttemptedModels = new Set();
+
+function rdtRuntimePlanForDevice(device, simdSupported, forceLegacyNoSimd = false) {
+  if (forceLegacyNoSimd) return "legacy-non-simd";
+  if (device === "wasm" && simdSupported !== true) return "legacy-non-simd";
+  return "modern";
+}
+
+function rdtIsLegacyNonSimdRuntime() {
+  return rdtActiveRuntimeKind === "huggingface-transformers-3.7.1-ort-web-1.17.3-wasm-only-non-simd";
+}
+
+function rdtBrowserArchitectureHint() {
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  if (!nav) return "unknown";
+  const ua = String(nav.userAgent || "");
+  const platform = String(nav.platform || "");
+  const reported = platform + " " + ua;
+  if (/Android/i.test(ua) && /(?:armv7l|armv7|armeabi-v7a)/i.test(reported) && !/(?:arm64|aarch64)/i.test(reported)) return "android-arm32-likely";
+  if (/Android/i.test(ua) && /(?:arm64|aarch64)/i.test(reported)) return "android-arm64-likely";
+  if (/Android/i.test(ua) && rdtWasmSimdSupported() === false) return "android-legacy-wasm-architecture-unknown";
+  return "unknown-or-not-exposed";
+}
+
+function rdtRuntimeDiagnosticInfo() {
+  const legacy = rdtIsLegacyNonSimdRuntime();
+  const selected = rdtActiveRuntimeKind !== "runtime-not-selected-yet";
+  return {
+    runtimeKind: rdtActiveRuntimeKind,
+    transformersPackage: legacy ? "@huggingface/transformers@3.7.1+rdt-r60-device-registry-patch" : selected ? "@huggingface/transformers@3.7.1" : null,
+    transformersRuntimePatch: legacy ? "injected-official-onnxruntime-web-wasm-device-registry-r60-plus-r71-sequential-tiny-low-memory" : null,
+    onnxRuntimePackage: legacy ? "onnxruntime-web@1.17.3/wasm-only" : selected ? "onnxruntime-web@1.22.0-dev.20250409-89f8206ba4" : null,
+    wasmSIMDSupported: rdtWasmSimdSupported(),
+    architectureHint: rdtBrowserArchitectureHint(),
+    nativeAndroidABIAvailableToBrowser: false,
+    selectionReason: rdtActiveRuntimeSelectionReason,
+    nonSimdWasmExpected: legacy ? true : selected ? false : null,
+    nonSimdWasmPathStrategy: legacy ? "onnxruntime-web-1.17.3-wasm-only-esm-loader-plus-ort-wasm.wasm" : null,
+    wasmOnlyOnnxRuntimeInjected: legacy ? !!(rdtCompatOrtRuntimeModule && rdtActiveRuntimeEnv && rdtActiveRuntimeEnv.backends && rdtActiveRuntimeEnv.backends.onnx === rdtCompatOrtRuntimeModule.env) : null
+  };
+}
+
+async function rdtPrepareRuntimeForDevice(device, forceLegacyNoSimd = false, reasonOverride = null, modelId = null) {
+  const simdSupported = rdtWasmSimdSupported();
+  // Device memory selects the Tiny weight files, not the runtime implementation.
+  // Other SIMD-capable browsers get the modern runtime first; only an actual failure
+  // may trigger the existing bounded compatibility retry.
+  const arm32TinyPrimaryCompatibility = device === "wasm" &&
+    simdSupported === true &&
+    String(modelId || "").toLowerCase() === "onnx-community/whisper-tiny" &&
+    rdtBrowserArchitectureHint() === "android-arm32-likely" &&
+    rdtIsLegacyArmAndroidTinyWasmDevice(modelId);
+  const useLegacy = arm32TinyPrimaryCompatibility || rdtRuntimePlanForDevice(device, simdSupported, forceLegacyNoSimd) === "legacy-non-simd";
+  if (!useLegacy) {
+    rdtActivePipelineFactory = pipeline;
+    rdtActiveRuntimeEnv = env;
+    rdtActiveRuntimeKind = "huggingface-transformers-3.7.1-ort-web-1.22.0-dev-simd";
+    rdtActiveRuntimeSelectionReason = device === "webgpu" ? "webgpu-primary-runtime" : "wasm-simd-feature-available";
+    return rdtActiveRuntimeEnv;
+  }
+
+  try {
+    if (!rdtCompatTransformersModulePromise) {
+      rdtCompatTransformersModulePromise = rdtImportWasmOnlyCompatTransformers().catch((err) => {
+        rdtCompatTransformersModulePromise = null;
+        throw err;
+      });
+    }
+    const legacy = await rdtCompatTransformersModulePromise;
+    if (!legacy || typeof legacy.pipeline !== "function" || !legacy.env) throw new Error("legacy-transformers-module-shape-invalid");
+    const legacyOnnx = legacy.env.backends && legacy.env.backends.onnx;
+    try { if (legacyOnnx) { legacyOnnx.logLevel = "verbose"; legacyOnnx.debug = true; legacyOnnx.logSeverityLevel = 0; } } catch {}
+    const legacyWasm = legacyOnnx && legacyOnnx.wasm;
+    if (!legacyWasm || typeof legacyWasm !== "object") throw new Error("legacy-onnx-wasm-config-unavailable");
+
+    // The ORT WASM-only ESM bundle is injected before an isolated Transformers.js 3.7.1 module copy is evaluated.
+    // Unlike the normal WebGPU/JSEP-enabled bundle, its factory is built for plain WASM and pairs with
+    // the scalar ort-wasm.wasm artifact. Mapping a SIMD/JSEP bundle's filename to this scalar binary
+    // is not sufficient and caused Firefox ARM32's earlier "WebAssembly SIMD is not supported" error.
+    if (!rdtCompatOrtRuntimeModule || legacyOnnx !== rdtCompatOrtRuntimeModule.env) {
+      throw new Error("wasm-only-ort-runtime-not-adopted-by-transformers-v3");
+    }
+    legacyWasm.wasmPaths = { "ort-wasm.wasm": RDT_COMPAT_ORT_WASM_BINARY };
+    legacyWasm.simd = false;
+    legacyWasm.numThreads = 1;
+    if (legacyWasm.simd !== false || legacyWasm.numThreads !== 1 || !legacyWasm.wasmPaths || legacyWasm.wasmPaths["ort-wasm.wasm"] !== RDT_COMPAT_ORT_WASM_BINARY) {
+      throw new Error("non-simd-wasm-only-runtime-config-not-applied");
+    }
+    legacy.env.allowRemoteModels = true;
+    legacy.env.allowLocalModels = true;
+    legacy.env.useBrowserCache = true;
+    legacy.env.useWasmCache = true;
+    legacy.env.fetch = rdtHfAwareFetch;
+    if (rdtSharedTransformersCache) {
+      legacy.env.useCustomCache = true;
+      legacy.env.customCache = rdtSharedTransformersCache;
+    }
+
+    rdtActivePipelineFactory = legacy.pipeline;
+    rdtActiveRuntimeEnv = legacy.env;
+    rdtActiveRuntimeKind = "huggingface-transformers-3.7.1-ort-web-1.17.3-wasm-only-non-simd";
+    rdtActiveRuntimeSelectionReason = reasonOverride || (arm32TinyPrimaryCompatibility
+      ? "legacy-arm32-tiny-primary-runtime"
+      : forceLegacyNoSimd
+      ? "legacy-arm32-inference-compatibility-retry"
+      : simdSupported !== true
+        ? (simdSupported === false ? "wasm-simd-feature-unavailable" : "wasm-simd-feature-test-unavailable")
+        : "legacy-runtime-forced");
+    return rdtActiveRuntimeEnv;
+  } catch (err) {
+    const detail = String(err && err.message !== undefined ? err.message : err).slice(0, 220);
+    throw new Error("The version-matched WASM-only ONNX Runtime Web 1.17.3 loader or isolated Transformers.js 3.7.1 compatibility runtime could not initialize. No incompatible SIMD binary was forced. Try RDT Connect Local Server if the browser cannot run this model. Technical detail: " + detail);
+  }
+}
+
+const WORKER_VERSION = "2026-10-22-v38-tiny-sequential-compat";
 
 console.info("[RDT worker] version", WORKER_VERSION);
 
@@ -139,27 +405,392 @@ let currentModelId = null;
 let currentDevice  = null;
 
 let lastLoad       = null;
+
+// Structured, privacy-conscious diagnostic state. Never retain audio samples,
+// decoded audio buffers, transcript text, authentication values, or complete URLs.
+let rdtActiveOperation = null;
+let rdtLastOperation = null;
+let rdtLastFailure = null;
+let rdtLastProgress = null;
+let rdtModelCacheSummary = null;
+let rdtObservedRuntimeError = null;
+let rdtObservedModelInputs = null;
+
+// Transformers.js already writes useful ONNX errors and tensor summaries to the
+// worker console. Capture a metadata-only mirror so the developer report can join
+// that evidence to the worker stage without retaining tensor data or transcript text.
+function rdtSummarizeModelInputs(inputs) {
+  try {
+    if (!inputs || typeof inputs !== "object") return null;
+    return Object.entries(inputs).slice(0, 80).map(([name, value]) => {
+      if (!value || typeof value !== "object") return { name: String(name).slice(0, 120), valueType: typeof value };
+      let dims = null;
+      try { if (Array.isArray(value.dims)) dims = value.dims.slice(0, 8).map(n => Number(n)); } catch {}
+      let dataType = null;
+      let dataLength = null;
+      try {
+        const data = value.data;
+        if (data && data.constructor && typeof data.length === "number") {
+          dataType = String(data.constructor.name).slice(0, 80);
+          dataLength = Number.isFinite(Number(data.length)) ? Number(data.length) : null;
+        }
+      } catch {}
+      return {
+        name: String(name).slice(0, 120),
+        containerType: value.constructor && value.constructor.name ? String(value.constructor.name).slice(0, 80) : "object",
+        tensorType: typeof value.type === "string" ? value.type : null,
+        dims,
+        size: Number.isFinite(Number(value.size)) ? Number(value.size) : null,
+        location: typeof value.location === "string" ? value.location : null,
+        dataType,
+        dataLength
+      };
+    });
+  } catch { return null; }
+}
+
+const rdtOriginalConsoleError = typeof console !== "undefined" && typeof console.error === "function" ? console.error.bind(console) : null;
+try {
+  if (rdtOriginalConsoleError) console.error = (...args) => {
+    try {
+      const headline = args.length && (typeof args[0] === "string" ? args[0] : String(args[0]));
+      if (/An error occurred during model execution/i.test(headline || "")) {
+        rdtObservedRuntimeError = { at: new Date().toISOString(), message: String(headline).slice(0, 2400) };
+      }
+      if (/Inputs given to model/i.test(headline || "")) {
+        rdtObservedModelInputs = { at: new Date().toISOString(), inputs: rdtSummarizeModelInputs(args[1]) };
+      }
+    } catch {}
+    return rdtOriginalConsoleError(...args);
+  };
+} catch {}
+
+function rdtSetOperationStage(stage, details) {
+  if (!rdtActiveOperation) return;
+  rdtActiveOperation.stage = String(stage || "unknown");
+  rdtActiveOperation.stageAt = new Date().toISOString();
+  if (details && typeof details === "object") {
+    // Only allow explicitly supplied scalar operational metadata.
+    for (const [key, value] of Object.entries(details)) {
+      if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+        rdtActiveOperation.details[key] = value;
+      }
+    }
+  }
+}
+
+function rdtBeginOperation(id, type, payload) {
+  if (type === "diagnostics") return;
+  const now = Date.now();
+  const safePayload = payload && typeof payload === "object" ? payload : {};
+  rdtActiveOperation = {
+    id: String(id || ""),
+    type: String(type || "unknown"),
+    status: "running",
+    stage: type === "load" ? "load-request-received" : type === "run" ? "run-request-received" : "request-received",
+    startedAt: new Date(now).toISOString(),
+    startedAtMs: now,
+    stageAt: new Date(now).toISOString(),
+    details: {}
+  };
+  if (type === "load") {
+    rdtSetOperationStage("load-request-received", {
+      modelId: safePayload.modelId || null,
+      requestedDevice: safePayload.device || "webgpu",
+      variant: safePayload.variant || null,
+      revision: safePayload.revision || null,
+      expectedFileCount: Array.isArray(safePayload.expected) ? safePayload.expected.length : null
+    });
+  } else if (type === "run") {
+    const audio = safePayload.audio;
+    rdtSetOperationStage("run-request-received", {
+      selectedLanguage: typeof safePayload.language === "string" ? safePayload.language : "auto",
+      audioInputType: audio && audio.constructor ? audio.constructor.name : typeof audio,
+      audioSampleCount: audio && Number.isFinite(audio.length) ? Number(audio.length) : null
+    });
+  }
+  rdtLastProgress = null;
+}
+
+function rdtCompleteOperation(id, status) {
+  if (!rdtActiveOperation || rdtActiveOperation.id !== String(id || "")) return;
+  const now = Date.now();
+  rdtActiveOperation.status = String(status || "complete");
+  rdtActiveOperation.completedAt = new Date(now).toISOString();
+  rdtActiveOperation.elapsedMs = Math.max(0, now - Number(rdtActiveOperation.startedAtMs || now));
+  delete rdtActiveOperation.startedAtMs;
+  rdtLastOperation = { ...rdtActiveOperation, details: { ...(rdtActiveOperation.details || {}) } };
+  rdtActiveOperation = null;
+}
+
+function rdtWasmSimdSupported() {
+  try {
+    if (typeof WebAssembly === "undefined" || typeof WebAssembly.validate !== "function") return null;
+    // Valid minimal SIMD module (v128.const / drop).
+    return WebAssembly.validate(new Uint8Array([
+      0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,
+      0x01,0x04,0x01,0x60,0x00,0x00,
+      0x03,0x02,0x01,0x00,
+      0x0a,0x09,0x01,0x07,0x00,0x41,0x00,0xfd,0x0f,0x1a,0x0b
+    ]));
+  } catch { return null; }
+}
+
+function rdtSafeErrorDetails(err, depth = 0) {
+  const type = err === null ? "null" : typeof err;
+  const out = { type, message: String(err && err.message !== undefined ? err.message : err).slice(0, 2400) };
+  if (err && typeof err === "object") {
+    if (err.name != null) out.name = String(err.name).slice(0, 160);
+    if (err.stack != null) out.stack = String(err.stack).slice(0, 7000);
+    if (/^\d+$/.test(out.message)) {
+      const n = Number(out.message);
+      out.numericValue = Number.isSafeInteger(n) ? n : null;
+      out.numericHex = Number.isSafeInteger(n) && n <= 0xffffffff ? "0x" + (n >>> 0).toString(16) : null;
+    }
+    for (const key of ["code", "errno", "status", "statusCode", "causeCode"]) {
+      try { if (err[key] !== undefined && ["string", "number", "boolean"].includes(typeof err[key])) out[key] = err[key]; } catch {}
+    }
+    if (depth < 2 && err.cause !== undefined && err.cause !== err) out.cause = rdtSafeErrorDetails(err.cause, depth + 1);
+  } else if (type === "number") {
+    out.numericValue = err;
+    out.numericHex = Number.isFinite(err) && Number.isInteger(err) ? "0x" + (err >>> 0).toString(16) : null;
+  } else if (type === "string" && /^\d+$/.test(err)) {
+    const n = Number(err);
+    out.numericValue = Number.isSafeInteger(n) ? n : null;
+    out.numericHex = Number.isSafeInteger(n) && n <= 0xffffffff ? "0x" + (n >>> 0).toString(16) : null;
+  }
+  return out;
+}
+
+function rdtDiagnosticSnapshot(includeFailure = true) {
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  const active = rdtActiveOperation ? { ...rdtActiveOperation, details: { ...(rdtActiveOperation.details || {}) } } : null;
+  const last = rdtLastOperation ? { ...rdtLastOperation, details: { ...(rdtLastOperation.details || {}) } } : null;
+  return {
+    schema: "rdt-easywhisper-worker-diagnostic-v1",
+    capturedAt: new Date().toISOString(),
+    workerVersion: WORKER_VERSION,
+    runtime: rdtRuntimeDiagnosticInfo(),
+    environment: {
+      userAgent: nav && nav.userAgent ? String(nav.userAgent).slice(0, 500) : null,
+      platform: nav && nav.platform ? String(nav.platform).slice(0, 120) : null,
+      language: nav && nav.language ? String(nav.language).slice(0, 40) : null,
+      deviceMemoryGiB: nav && Number.isFinite(Number(nav.deviceMemory)) ? Number(nav.deviceMemory) : null,
+      hardwareConcurrency: nav && Number.isFinite(Number(nav.hardwareConcurrency)) ? Number(nav.hardwareConcurrency) : null,
+      isSecureContext: typeof self.isSecureContext === "boolean" ? self.isSecureContext : null,
+      crossOriginIsolated: typeof self.crossOriginIsolated === "boolean" ? self.crossOriginIsolated : null,
+      sharedArrayBufferAvailable: typeof SharedArrayBuffer !== "undefined",
+      wasmSIMD: rdtWasmSimdSupported(),
+      architectureHint: rdtBrowserArchitectureHint(),
+      nativeAndroidABIAvailableToBrowser: false,
+      runtimeKind: rdtActiveRuntimeKind,
+      webgpuApiAvailable: !!(nav && nav.gpu),
+      webgpuAdapterProbe: webGPUAdapterAvailability === null ? "not-tested" : (webGPUAdapterAvailability ? "available" : "no-usable-adapter"),
+      webgpuAdapterProbeReason: webGPUAdapterProbeReason,
+      cacheStorageAvailable: typeof caches !== "undefined"
+    },
+    model: {
+      loadedModelId: currentModelId,
+      effectiveDevice: currentDevice,
+      lastLoad: lastLoad ? {
+        modelId: lastLoad.modelId || null,
+        revision: lastLoad.revision || null,
+        requestedDevice: lastLoad.requestedDevice || lastLoad.device || null,
+        effectiveDevice: lastLoad.effectiveDevice || lastLoad.device || null,
+        variant: lastLoad.variant || null,
+        dtype: lastLoad.dtype || null,
+        wasmExecutionProfile: lastLoad.wasmExecutionProfile || rdtCurrentWasmExecutionProfile,
+        webgpuPowerPreference: lastLoad.webgpuPowerPreference || null,
+        gpuSelectionStrategy: lastLoad.gpuSelectionStrategy || "high-performance-then-low-power-then-wasm",
+        runtimeKind: lastLoad.runtimeKind || null,
+        transformersPackage: lastLoad.transformersPackage || null,
+        onnxRuntimePackage: lastLoad.onnxRuntimePackage || null,
+        runtimeSelectionReason: lastLoad.runtimeSelectionReason || null,
+        wasmSIMDSupported: typeof lastLoad.wasmSIMDSupported === "boolean" ? lastLoad.wasmSIMDSupported : null
+      } : null,
+      cache: rdtModelCacheSummary ? { ...rdtModelCacheSummary } : null,
+      wasmPreferredRevisionCount: wasmPreferredModels.size,
+      wasmExecutionProfile: rdtCurrentWasmExecutionProfile,
+      webgpuSelectionStrategy: "high-performance-then-low-power-then-wasm",
+      runtimeKind: rdtActiveRuntimeKind,
+      transformersPackage: rdtRuntimeDiagnosticInfo().transformersPackage,
+      onnxRuntimePackage: rdtRuntimeDiagnosticInfo().onnxRuntimePackage,
+      runtimeSelectionReason: rdtActiveRuntimeSelectionReason,
+      architectureHint: rdtBrowserArchitectureHint(),
+      nativeAndroidABIAvailableToBrowser: false,
+      webgpuPowerPreference: rdtWebGPUSelectedPowerPreference,
+      webgpuAdapterInfo: rdtWebGPUAdapterInfo ? { ...rdtWebGPUAdapterInfo } : null,
+      webgpuAdapterAttempts: rdtWebGPUAdapterAttempts.map(a => ({ ...a })),
+      webgpuFailedPreferences: Array.from(rdtWebGPUFailedPreferences)
+    },
+    runtimeCapture: {
+      lastObservedExecutionError: rdtObservedRuntimeError,
+      lastObservedModelInputSignatures: rdtObservedModelInputs,
+      browserCacheCoordination: { ...rdtCacheCoordinationInfo, lastAction: rdtCacheCoordinationInfo.lastAction ? { ...rdtCacheCoordinationInfo.lastAction } : null },
+      onnxArtifactCacheCheck: rdtLastOnnxArtifactCacheCheck ? JSON.parse(JSON.stringify(rdtLastOnnxArtifactCacheCheck)) : null
+    },
+    operation: active || last,
+    activeOperation: active,
+    lastOperation: last,
+    lastProgress: rdtLastProgress ? { ...rdtLastProgress } : null,
+    lastFailure: includeFailure && rdtLastFailure ? rdtLastFailure : null
+  };
+}
+
+function rdtRecordFailure(err, id, type) {
+  const diagnosticId = "EW-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 7).toUpperCase();
+  const diag = {
+    diagnosticId,
+    operationId: String(id || ""),
+    failedRequestType: String(type || "unknown"),
+    ...rdtDiagnosticSnapshot(false),
+    error: rdtSafeErrorDetails(err)
+  };
+  rdtLastFailure = diag;
+  console.error("[RDT worker] structured diagnostic", diag);
+  return diag;
+}
+
 // A real WebGPU exception switches this model revision to WASM for this worker
 // session. The next page/worker session can retry WebGPU; warnings alone never
 // change this set because ONNX Runtime may legitimately place some ops on CPU.
 const wasmPreferredModels = new Set();
-// Probe the browser's actual WebGPU adapter, not just the presence of navigator.gpu.
-// A null adapter is common in virtualized/unsupported graphics environments; remember
-// the result for this worker session so each model does not repeat a doomed GPU attempt.
+// Tiny revisions on affected legacy Android devices are assigned the conservative profile
+// before the first pipeline is built. Runtime-discovered faults are remembered as well, so
+// the worker never repeatedly builds a second heavy pipeline after a failed run.
+const rdtWasmCompatibilityPreferredModels = new Set();
+let rdtCurrentWasmExecutionProfile = "not-wasm";
+// WebGPU preference order: high-performance first (normally the browser's discrete/high-throughput choice),
+// then low-power (often an integrated GPU), and only then WASM/CPU. WebGPU does not expose a standard API to
+// enumerate every physical adapter, so these are browser selection profiles, not a list of every discrete GPU.
 let webGPUAdapterAvailability = null;
-async function rdtHasUsableWebGPUAdapter() {
-  if (webGPUAdapterAvailability !== null) return webGPUAdapterAvailability;
-  try {
-    if (typeof navigator === "undefined" || !navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
-      webGPUAdapterAvailability = false;
-    } else {
-      const adapter = await navigator.gpu.requestAdapter();
-      webGPUAdapterAvailability = !!adapter;
+let webGPUAdapterProbeReason = "not-tested";
+let rdtWebGPUSelectedPowerPreference = null;
+let rdtWebGPUAdapterInfo = null;
+const rdtWebGPUAdapterAttempts = [];
+const rdtWebGPUAttemptedPreferences = new Set();
+const rdtWebGPUFailedPreferences = new Set();
+let rdtLastWebGPUFallbackError = null;
+const RDT_WEBGPU_PROBE_TIMEOUT_MS = 4500;
+async function rdtAwaitGPUResult(promise, label, destroyLateValue=false) {
+  let timer = null;
+  let timedOut = false;
+  const work = Promise.resolve(promise).then(value => {
+    if (timedOut && destroyLateValue && value && typeof value.destroy === "function") {
+      try { value.destroy(); } catch {}
     }
-  } catch (_err) {
-    webGPUAdapterAvailability = false;
+    return value;
+  });
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      reject(new Error(label + " timed out"));
+    }, RDT_WEBGPU_PROBE_TIMEOUT_MS);
+  });
+  try { return await Promise.race([work, timeout]); }
+  finally { if (timer !== null) clearTimeout(timer); }
+}
+function rdtSafeGPUAdapterInfo(adapter) {
+  let info = null;
+  try { info = adapter && adapter.info ? adapter.info : null; } catch {}
+  const safeText = value => typeof value === "string" && value.trim() ? value.trim().slice(0, 100) : null;
+  let fallback = null;
+  try { if (typeof adapter.isFallbackAdapter === "boolean") fallback = adapter.isFallbackAdapter; } catch {}
+  if (fallback === null) { try { if (info && typeof info.isFallbackAdapter === "boolean") fallback = info.isFallbackAdapter; } catch {} }
+  return {
+    vendor: safeText(info && info.vendor),
+    architecture: safeText(info && info.architecture),
+    device: safeText(info && info.device),
+    description: safeText(info && info.description),
+    isFallbackAdapter: fallback
+  };
+}
+function rdtGpuAttemptSummary(preference, outcome, details = {}) {
+  const summary = { at: new Date().toISOString(), powerPreference: preference, outcome: String(outcome).slice(0, 80) };
+  if (details && details.reason) summary.reason = String(details.reason).slice(0, 140);
+  if (details && details.adapterInfo) summary.adapterInfo = { ...details.adapterInfo };
+  return summary;
+}
+async function rdtSelectWebGPUAdapter(powerPreference) {
+  const preference = powerPreference === "low-power" ? "low-power" : "high-performance";
+  const onnxEnv = env && env.backends && env.backends.onnx;
+  const onnxWebGPU = onnxEnv && onnxEnv.webgpu;
+  if (rdtWebGPUSelectedPowerPreference === preference && !rdtWebGPUFailedPreferences.has(preference) && onnxWebGPU && onnxWebGPU.adapter) {
+    return true;
   }
-  return webGPUAdapterAvailability;
+  if (rdtWebGPUAttemptedPreferences.has(preference)) return false;
+  rdtWebGPUAttemptedPreferences.add(preference);
+  if (typeof navigator === "undefined" || !navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason: "webgpu-api-unavailable" }));
+    webGPUAdapterProbeReason = "webgpu-api-unavailable";
+    return false;
+  }
+  let adapter = null;
+  try {
+    adapter = await rdtAwaitGPUResult(navigator.gpu.requestAdapter({ powerPreference: preference }), "WebGPU " + preference + " adapter request");
+  } catch (err) {
+    const reason = /timed out/i.test(String(err && err.message || err)) ? "adapter-request-timeout" : "adapter-request-error";
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason }));
+    webGPUAdapterProbeReason = reason;
+    return false;
+  }
+  if (!adapter) {
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason: "adapter-not-available" }));
+    webGPUAdapterProbeReason = "adapter-not-available";
+    return false;
+  }
+  const adapterInfo = rdtSafeGPUAdapterInfo(adapter);
+  if (adapterInfo.isFallbackAdapter === true) {
+    // Do not select a known software/fallback adapter ahead of the other hardware preference.
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "software-fallback-skipped", { reason: "known-fallback-adapter", adapterInfo }));
+    webGPUAdapterProbeReason = "known-fallback-adapter";
+    return false;
+  }
+  if (typeof adapter.requestDevice !== "function") {
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason: "adapter-cannot-request-device", adapterInfo }));
+    webGPUAdapterProbeReason = "adapter-cannot-request-device";
+    return false;
+  }
+  let device = null;
+  try {
+    device = await rdtAwaitGPUResult(adapter.requestDevice(), "WebGPU " + preference + " device request", true);
+    if (!device) throw new Error("device-request-returned-empty");
+  } catch (err) {
+    const reason = /timed out/i.test(String(err && err.message || err)) ? "device-request-timeout" : "device-request-error";
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason, adapterInfo }));
+    webGPUAdapterProbeReason = reason;
+    return false;
+  } finally {
+    try { if (device && typeof device.destroy === "function") device.destroy(); } catch {}
+  }
+  try {
+    if (!onnxEnv || typeof onnxEnv !== "object") throw new Error("onnx-webgpu-config-unavailable");
+    // ONNX Runtime Web 1.22 supports binding the exact adapter before the first WebGPU session.
+    // This avoids probing one adapter and then letting the runtime silently choose another.
+    if (!onnxEnv.webgpu || typeof onnxEnv.webgpu !== "object") onnxEnv.webgpu = {};
+    onnxEnv.webgpu.powerPreference = preference;
+    onnxEnv.webgpu.adapter = adapter;
+    if (onnxEnv.webgpu.adapter !== adapter) throw new Error("adapter-binding-failed");
+  } catch (err) {
+    const reason = String(err && err.message || err || "onnx-webgpu-config-unavailable").slice(0, 140);
+    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "binding-failed", { reason, adapterInfo }));
+    webGPUAdapterProbeReason = "onnx-webgpu-adapter-binding-failed";
+    return false;
+  }
+  rdtWebGPUSelectedPowerPreference = preference;
+  rdtWebGPUAdapterInfo = adapterInfo;
+  webGPUAdapterAvailability = true;
+  webGPUAdapterProbeReason = preference === "high-performance" ? "selected-high-performance-adapter" : "selected-low-power-adapter";
+  rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "selected", { adapterInfo }));
+  return true;
+}
+async function rdtHasUsableWebGPUAdapter() {
+  if (rdtWebGPUSelectedPowerPreference && !rdtWebGPUFailedPreferences.has(rdtWebGPUSelectedPowerPreference)) return true;
+  if (await rdtSelectWebGPUAdapter("high-performance")) return true;
+  if (await rdtSelectWebGPUAdapter("low-power")) return true;
+  webGPUAdapterAvailability = false;
+  webGPUAdapterProbeReason = "no-usable-adapter-after-high-performance-and-low-power";
+  return false;
 }
 function modelRevisionKey(modelId, revision) { return String(modelId || "") + "@" + String(revision || ""); }
 
@@ -173,9 +804,56 @@ function rdtIsMemoryPressureFailure(err) {
 }
 
 
+function rdtIsArm32AndroidTinyWasmDevice(modelId) {
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  if (!nav) return false;
+  const ua = String(nav.userAgent || "");
+  const platform = String(nav.platform || "");
+  const arch = platform + " " + ua;
+  const android = /Android\s+(?:[0-9]|1[0-2])(?:[.;\s)]|$)/i.test(ua);
+  const armv7 = /armv7l|armeabi-v7a/i.test(arch) && !/arm64|aarch64/i.test(arch);
+  const tiny = /(?:^|\/)whisper-tiny(?:$|-)/i.test(String(modelId || ""));
+  return !!(tiny && android && armv7);
+}
+
+function rdtIsLegacyArmAndroidTinyWasmDevice(modelId) {
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  if (!nav || !rdtIsArm32AndroidTinyWasmDevice(modelId)) return false;
+  const memoryGiB = Number(nav.deviceMemory);
+  const noSharedMemory = typeof SharedArrayBuffer === "undefined" || !(typeof self !== "undefined" && self.crossOriginIsolated === true);
+  return !!(memoryGiB > 0 && memoryGiB <= 2 && noSharedMemory);
+}
+
+function rdtIsLegacyArmAndroidTinyWasmFault(modelId, err) {
+  if (!rdtIsArm32AndroidTinyWasmDevice(modelId)) return false;
+  const errorText = String(err && err.message !== undefined ? err.message : err);
+  const rawWasmFault = (typeof err === "number" && Number.isFinite(err)) ||
+    (typeof WebAssembly !== "undefined" && typeof WebAssembly.RuntimeError === "function" && err instanceof WebAssembly.RuntimeError) ||
+    /memory access out of bounds|wasm.*(?:trap|abort|unreachable)/i.test(errorText) ||
+    /an error occurred during model execution:\s*[\"']?\d+[\"']?/i.test(errorText);
+  return !!rawWasmFault;
+}
+function rdtShouldUseAndroidTinyUint8(modelId) {
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  if (!nav || !/Android/i.test(String(nav.userAgent || ""))) return false;
+  if (!/^onnx-community\/whisper-tiny$/i.test(String(modelId || ""))) return false;
+  // The reported Firefox profile cannot create a Q8 session without SIMD.
+  // The LG ARM32/2-GiB profile has SIMD but fails during Q8 inference; use the
+  // pinned INT8 pair only for that specific low-memory Android architecture.
+  return rdtWasmSimdSupported() !== true || rdtIsLegacyArmAndroidTinyWasmDevice(modelId);
+}
+
 function pickDtype(device, modelId, variant) {
 
-  if (device !== "webgpu") return "q8";
+  // INT8 is scoped to affected Android Tiny/WASM profiles. Modern Android Tiny
+  // and other WASM models retain Q8; non-Android Tiny keeps its existing FP32
+  // selection so this targeted fix does not change Apple/Windows behavior.
+  // WebGPU precision choices below are intentionally unchanged.
+  if (device !== "webgpu") {
+    if (device === "wasm" && rdtShouldUseAndroidTinyUint8(modelId)) return "uint8";
+    if (device === "wasm" && /^onnx-community\/whisper-tiny$/i.test(String(modelId || "")) && !(typeof navigator !== "undefined" && /Android/i.test(String(navigator.userAgent || "")))) return "fp32";
+    return "q8";
+  }
 
   // Use the q4 Tiny files present in the pinned manifest. q4f16 is not published
   // at this revision; requesting those paths caused a model-relay HTTP 404.
@@ -202,12 +880,12 @@ function pickDtype(device, modelId, variant) {
 
 }
 
-function sessionOptionsForDevice(device) {
+function sessionOptionsForDevice(device, wasmExecutionProfile = "standard") {
   // Only surface ONNX Runtime errors (placement notices are expected and harmless).
-  const base = sessionOptionsForDeviceInner(device);
+  const base = sessionOptionsForDeviceInner(device, wasmExecutionProfile);
   return { ...base, logSeverityLevel: 3 };
 }
-function sessionOptionsForDeviceInner(device) {
+function sessionOptionsForDeviceInner(device, wasmExecutionProfile = "standard") {
 
   if (device === "wasm") {
 
@@ -219,7 +897,9 @@ function sessionOptionsForDeviceInner(device) {
 
       executionMode: "sequential",
 
-      graphOptimizationLevel: "all"
+      // Older 32-bit Android WASM runtimes get one retry at BASIC optimization
+      // if the normal profile throws a raw WASM numeric/runtime failure.
+      graphOptimizationLevel: wasmExecutionProfile === "legacy-android-basic" ? "basic" : "all"
 
     };
 
@@ -229,15 +909,39 @@ function sessionOptionsForDeviceInner(device) {
 
 }
 
-async function buildPipeline(id, modelId, revision, device, variant) {
+async function rdtDisposeActivePipelineForRetry() {
+  const activePipeline = transcriber;
+  // Detach first so no later request can reuse a failed session. If disposal is
+  // unsupported or fails, the caller must not allocate a second session.
+  transcriber = null;
+  currentModelId = null;
+  currentDevice = null;
+  rdtCurrentWasmExecutionProfile = "not-wasm";
+  if (!activePipeline) return;
+  const disposer = typeof activePipeline.dispose === "function"
+    ? () => activePipeline.dispose()
+    : activePipeline.model && typeof activePipeline.model.dispose === "function"
+      ? () => activePipeline.model.dispose()
+      : null;
+  if (!disposer) throw new Error("active-onnx-pipeline-dispose-unavailable; refusing a second compatibility session");
+  let timer;
+  try {
+    await Promise.race([
+      Promise.resolve().then(disposer),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("active-onnx-pipeline-dispose-timeout; refusing a second compatibility session")), 5000); })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
+async function buildPipeline(id, modelId, revision, device, variant, wasmExecutionProfile = "standard", runtimeOverride = null) {
+
+  await rdtPrepareRuntimeForDevice(device, runtimeOverride === "legacy-non-simd", runtimeOverride === "legacy-non-simd" ? "legacy-arm32-inference-compatibility-retry" : null, modelId);
+  const legacyRuntime = rdtIsLegacyNonSimdRuntime();
   const opts = {
 
-    dtype: pickDtype(device, modelId, variant),
-
-    device,
-
-    session_options: sessionOptionsForDevice(device),
+    session_options: sessionOptionsForDevice(device, wasmExecutionProfile),
 
     progress_callback: (p) => reply({
 
@@ -259,15 +963,87 @@ async function buildPipeline(id, modelId, revision, device, variant) {
 
   };
 
-  opts.revision = revision;
-  transcriber = await pipeline("automatic-speech-recognition", modelId, opts);
-  currentDevice = device;
+  if (legacyRuntime) {
+    // Keep Whisper support from Transformers.js v3. dtypeSuffix and pickDtype select
+    // the pinned INT8 pair only for affected Android Tiny/WASM profiles.
+    // The older v2 fallback failed on this model with "Unsupported model type: whisper".
+    opts.dtype = pickDtype("wasm", modelId, variant);
+    opts.device = "wasm";
+  } else {
+    opts.dtype = pickDtype(device, modelId, variant);
+    opts.device = device;
+  }
 
+  opts.revision = revision;
+  if (lastLoad) {
+    const runtimeInfo = rdtRuntimeDiagnosticInfo();
+    lastLoad.runtimeKind = runtimeInfo.runtimeKind;
+    lastLoad.transformersPackage = runtimeInfo.transformersPackage;
+    lastLoad.onnxRuntimePackage = runtimeInfo.onnxRuntimePackage;
+    lastLoad.runtimeSelectionReason = runtimeInfo.selectionReason;
+    lastLoad.wasmSIMDSupported = runtimeInfo.wasmSIMDSupported;
+    lastLoad.architectureHint = runtimeInfo.architectureHint;
+    lastLoad.nativeAndroidABIAvailableToBrowser = false;
+  }
+  // On legacy WASM only, make sure each selected ONNX artifact that is absent
+  // from Cache Storage is fully downloaded, size-checked, and committed under
+  // its original Hugging Face cache key before ONNX Runtime opens a session.
+  // This closes the missing-file/concurrent-download gap without re-reading or
+  // re-downloading already-present files on every load. Modern GPU paths bypass it.
+  if (legacyRuntime && device === "wasm") {
+    await rdtEnsureLegacyWasmArtifactsCached(id, modelId, revision, variant, rdtActiveExpectedModelFiles);
+    reply({ id, type: "progress", phase: "model-file-prefetch-complete", progress: 100,
+      note: "Selected ONNX files were checked. Initializing the inference session; the model is not ready until this step succeeds." });
+  }
+  transcriber = await rdtActivePipelineFactory("automatic-speech-recognition", modelId, opts);
+  currentDevice = device;
+  rdtCurrentWasmExecutionProfile = device === "wasm" ? (legacyRuntime ? "legacy-non-simd" : (wasmExecutionProfile === "legacy-android-basic" ? "legacy-android-basic" : "standard")) : "not-wasm";
   currentModelId = modelId;
 
 }
 
-function reply(msg) { self.postMessage(msg); }
+async function rdtTryLowerPowerGpuPipeline(id, modelId, revision, variant) {
+  if (rdtWebGPUSelectedPowerPreference !== "high-performance") return { attempted: false, ok: false, reason: "high-performance-profile-not-active" };
+  rdtWebGPUFailedPreferences.add("high-performance");
+  if (!await rdtSelectWebGPUAdapter("low-power")) {
+    return { attempted: true, ok: false, reason: "low-power-adapter-unavailable" };
+  }
+  reply({ id, type: "progress", phase: "fallback", fallbackReason: "webgpu-low-power-retry", note: "The high-performance GPU path failed. Trying the browser's lower-power WebGPU adapter before CPU/WASM." });
+  transcriber = null; currentModelId = null; currentDevice = null;
+  try {
+    await buildPipeline(id, modelId, revision, "webgpu", variant);
+    if (lastLoad) {
+      lastLoad.variant = variant;
+      lastLoad.dtype = pickDtype("webgpu", modelId, variant);
+      lastLoad.effectiveDevice = "webgpu";
+      lastLoad.webgpuPowerPreference = "low-power";
+      lastLoad.gpuSelectionStrategy = "high-performance-then-low-power-then-wasm";
+    }
+    rdtSetOperationStage("gpu-fallback-session-ready", { effectiveDevice: "webgpu", webgpuPowerPreference: "low-power" });
+    return { attempted: true, ok: true };
+  } catch (error) {
+    rdtWebGPUFailedPreferences.add("low-power");
+    rdtLastWebGPUFallbackError = String(error && error.message !== undefined ? error.message : error).slice(0, 220);
+    rdtSetOperationStage("gpu-fallback-session-failed", { effectiveDevice: "webgpu", webgpuPowerPreference: "low-power", fallbackError: rdtLastWebGPUFallbackError });
+    transcriber = null; currentModelId = null; currentDevice = null;
+    return { attempted: true, ok: false, error, reason: "low-power-session-failed" };
+  }
+}
+
+function reply(msg) {
+  if (msg && msg.type === "progress") {
+    const safe = { at: new Date().toISOString(), phase: String(msg.phase || "progress") };
+    if (Number.isFinite(Number(msg.progress))) safe.progressPercent = Math.max(0, Math.min(100, Number(msg.progress)));
+    if (Number.isFinite(Number(msg.batchIndex))) safe.batchIndex = Number(msg.batchIndex);
+    if (Number.isFinite(Number(msg.batchTotal))) safe.batchTotal = Number(msg.batchTotal);
+    rdtLastProgress = safe;
+    if (rdtActiveOperation && rdtActiveOperation.id === String(msg.id || "")) {
+      rdtActiveOperation.stage = safe.phase;
+      rdtActiveOperation.stageAt = safe.at;
+    }
+  }
+  self.postMessage(msg);
+}
 
 let __opQueue = Promise.resolve();
 
@@ -284,13 +1060,54 @@ function enqueue(fn){
 self.onmessage = (ev) => {
 
   const { id, type, payload } = ev.data || {};
+  // Diagnostic snapshots bypass the inference queue and contain metadata only.
+  // They can respond between worker event-loop tasks; they cannot interrupt synchronous WASM computation.
+  if (type === "diagnostics") {
+    reply({ id, type: "diagnostics", diagnostic: rdtDiagnosticSnapshot() });
+    return;
+  }
   const run = async () => {
 
+    if (type === "load" || type === "run") rdtBeginOperation(id, type, payload || {});
     try {
 
       if (type === "load")         await handleLoad(id, payload || {});
 
       else if (type === "run")     await handleRun(id, payload || {});
+
+      else if (type === "cache-status") {
+        const p = payload || {};
+        try {
+          const modelId = String(p.modelId || "");
+          const revision = String(p.revision || "");
+          if (!modelId || !/^[0-9a-f]{40}$/i.test(revision)) throw new Error("pinned-model-revision-required");
+          const device = p.device || "wasm";
+          const variant = p.variant || null;
+          const files = expectedFilesForVariant(modelId, device, variant, p.expected);
+          const inspection = await inspectModelCache(modelId, revision, files);
+          const manifestFiles = Array.isArray(files) ? files.filter(f => f && f.path) : [];
+          const metadataListed = manifestFiles.some(f => !String(f.path).startsWith("onnx/"));
+          const expectedFileCount = manifestFiles.length + (metadataListed ? 0 : REQUIRED_META.length);
+          const missing = Array.isArray(inspection.missing) ? inspection.missing : [];
+          reply({ id, type: "cache-status", cacheStatus: {
+            modelId, revision, device, variant,
+            state: String(inspection.state || "unknown"),
+            expectedFileCount,
+            presentFileCount: Math.max(0, expectedFileCount - missing.length),
+            missingFileCount: missing.length,
+            fullyCached: inspection.state === "full",
+            missing: missing.slice(0, 12),
+            checkedAt: new Date().toISOString(),
+            readOnly: true
+          }});
+        } catch (error) {
+          reply({ id, type: "cache-status", cacheStatus: {
+            modelId: String(p.modelId || "").slice(0, 120), state: "unknown", fullyCached: false,
+            checkedAt: new Date().toISOString(), readOnly: true,
+            error: String(error && error.message || error).slice(0, 180)
+          }});
+        }
+      }
 
       else if (type === "dispose") {
 
@@ -309,10 +1126,19 @@ self.onmessage = (ev) => {
 
     } catch (err) {
 
-      reply({ id, type: "error", error: (err && err.message) ? err.message : String(err) });
+      if (type === "load" || type === "run") { rdtSetOperationStage("operation-failed"); if (rdtActiveOperation) rdtActiveOperation.status = "failed"; }
+      const diagnostic = rdtRecordFailure(err, id, type);
+      if (type === "load" || type === "run") rdtCompleteOperation(id, "failed");
+      const rawMessage = (err && err.message !== undefined) ? String(err.message) : String(err);
+      const errorMessage = /^\d+$/.test(rawMessage.trim())
+        ? "The inference runtime returned an opaque numeric error (" + rawMessage + "). Open Developer Options → EasyWhisper Diagnostics and copy report " + diagnostic.diagnosticId + "."
+        : rawMessage;
+      reply({ id, type: "error", error: errorMessage, diagnostic });
+      return;
 
     }
 
+    if (type === "load" || type === "run") rdtCompleteOperation(id, "succeeded");
   };
 
   enqueue(run);
@@ -445,6 +1271,10 @@ function dtypeSuffix(name) {
 
   if (name === "fp32") return ".onnx";
 
+  if (name === "uint8") return "_uint8.onnx";
+
+  if (name === "int8") return "_int8.onnx";
+
   if (name === "q4") return "_q4.onnx";
 
   return "_quantized.onnx";
@@ -496,11 +1326,19 @@ async function handleLoad(id, payload) {
   const variant = payload.variant || null;
 
   const expected = payload.expected;
+  rdtActiveExpectedModelFiles = Array.isArray(expected) ? expected : [];
+  rdtLastOnnxArtifactCacheCheck = null;
+  rdtCacheCoordinationInfo.actionCount = 0;
+  rdtCacheCoordinationInfo.lastAction = null;
   const modelKey = modelRevisionKey(modelId, revision);
+  rdtSetOperationStage("validate-model-request", { modelId: modelId || null, requestedDevice, variant: variant || null, revision: revision || null });
   const rememberedWasm = requestedDevice === "webgpu" && wasmPreferredModels.has(modelKey);
   let effectiveDevice = rememberedWasm ? "wasm" : requestedDevice;
 
   if (!modelId) throw new Error("load: missing modelId");
+  if (rememberedWasm) {
+    reply({ id, type: "progress", phase: "fallback", fallbackReason: "previous-webgpu-model-failure", note: "WebGPU previously failed for this model in this worker session. Using CPU/WASM for this attempt; large models may be substantially slower." });
+  }
 
   if (!/^[0-9a-f]{40}$/i.test(String(revision || ""))) {
 
@@ -516,16 +1354,26 @@ async function handleLoad(id, payload) {
     if (!adapterAvailable) {
       wasmPreferredModels.add(modelKey);
       effectiveDevice = "wasm";
-      reply({ id, type: "progress", phase: "fallback", note: "No usable GPU adapter is available in this browser environment. Using CPU (WASM) instead; transcription may be slower." });
+      reply({ id, type: "progress", phase: "fallback", fallbackReason: webGPUAdapterProbeReason, note: "WebGPU is unavailable (" + webGPUAdapterProbeReason + "). Using CPU/WASM instead; large models may be substantially slower in this browser or virtual machine." });
     }
   }
 
   const cacheExpected = expectedFilesForVariant(modelId, effectiveDevice, variant, expected);
 
+  rdtSetOperationStage("inspect-model-cache", { effectiveDevice, expectedFileCount: Array.isArray(cacheExpected) ? cacheExpected.length : null });
   const cache = await inspectModelCache(modelId, revision, cacheExpected);
   const cached = cache.state === "full";
 
   const online = typeof navigator === "undefined" ? true : navigator.onLine !== false;
+  rdtModelCacheSummary = {
+    state: String(cache.state || "unknown"),
+    expectedFileCount: Array.isArray(cacheExpected) ? cacheExpected.length : null,
+    presentFileCount: Number.isFinite(Number(cache.checked)) ? Number(cache.checked) : null,
+    missingFileCount: Array.isArray(cache.missing) ? cache.missing.length : null,
+    fullyCached: cached,
+    online
+  };
+  rdtSetOperationStage("model-cache-inspected", { cacheState: rdtModelCacheSummary.state, fullyCached: cached, missingFileCount: rdtModelCacheSummary.missingFileCount, online });
 
   if (cache.state === "full") {
 
@@ -581,48 +1429,64 @@ async function handleLoad(id, payload) {
 
   currentDevice = null;
 
-  lastLoad = { modelId, revision, variant, device: requestedDevice };
-
-  // Cache-first: if fully cached, forbid remote fetch during pipeline construction
-
-  // to avoid unnecessary HEAD/GET to huggingface.co. Restore after.
-
-  // Must keep allowLocalModels true, otherwise "both local and remote disabled" error.
-
-  const prevAllowRemote = env.allowRemoteModels;
-
-  const prevAllowLocal = env.allowLocalModels;
-
-  let restoreRemoteAfter = false;
-
-  if (cached) {
-
-    env.allowRemoteModels = false;
-
-    env.allowLocalModels = true;
-
-    restoreRemoteAfter = true;
-
-  }
+  lastLoad = {
+    modelId, revision, variant,
+    device: requestedDevice,
+    requestedDevice,
+    effectiveDevice,
+    dtype: pickDtype(effectiveDevice, modelId, variant),
+    webgpuPowerPreference: effectiveDevice === "webgpu" ? rdtWebGPUSelectedPowerPreference : null,
+    gpuSelectionStrategy: "high-performance-then-low-power-then-wasm",
+    startedAt: new Date().toISOString()
+  };
+  rdtSetOperationStage("initialize-inference-pipeline", { requestedDevice, effectiveDevice, variant: variant || null, webgpuPowerPreference: lastLoad.webgpuPowerPreference, dtype: typeof lastLoad.dtype === "string" ? lastLoad.dtype : JSON.stringify(lastLoad.dtype) });
 
   const hasGpu = effectiveDevice === "webgpu" && typeof navigator !== "undefined" && !!navigator.gpu;
   // No WebGPU API is a capability result, not a failure: remember WASM for the
   // current model revision instead of repeatedly taking the same ineffective path.
   if (requestedDevice === "webgpu" && !hasGpu) wasmPreferredModels.add(modelKey);
 
+  const initialDevice = hasGpu ? "webgpu" : "wasm";
+  const runtimeEnv = await rdtPrepareRuntimeForDevice(initialDevice, false, null, modelId);
+  if (initialDevice === "wasm" && rdtIsLegacyNonSimdRuntime()) {
+    reply({ id, type: "progress", phase: "runtime-compatibility", fallbackReason: "wasm-simd-unavailable", note: "This browser does not support WebAssembly SIMD. Using the version-matched non-SIMD compatibility runtime for the pinned Whisper model." });
+  }
+
+  // Cache-first: if fully cached, forbid remote fetch during pipeline construction
+  // to avoid unnecessary HEAD/GET to huggingface.co. Restore after.
+  // Must keep allowLocalModels true, otherwise "both local and remote disabled" error.
+  const prevAllowRemote = runtimeEnv.allowRemoteModels;
+  const prevAllowLocal = runtimeEnv.allowLocalModels;
+  let restoreRemoteAfter = false;
+  if (cached) {
+    runtimeEnv.allowRemoteModels = false;
+    runtimeEnv.allowLocalModels = true;
+    restoreRemoteAfter = true;
+  }
+
+  // Start with the normal profile on SIMD-capable Android, including the low-memory
+  // ARM32 phone. Runtime fallback is evidence-driven and remains limited to one retry.
+  // Browsers without SIMD already selected the scalar compatibility runtime above.
+  const initialWasmProfile = initialDevice === "wasm" && rdtIsLegacyNonSimdRuntime()
+    ? "legacy-android-basic" : "standard";
+  if (lastLoad) lastLoad.webgpuPowerPreference = initialDevice === "webgpu" ? rdtWebGPUSelectedPowerPreference : null;
+  // Record the attempted profile before pipeline construction so failed loads still identify it.
+  lastLoad.wasmExecutionProfile = rdtIsLegacyNonSimdRuntime() ? "legacy-non-simd" : initialWasmProfile;
+
   try {
 
     try {
 
-      await buildPipeline(id, modelId, revision, hasGpu ? "webgpu" : "wasm", variant);
+      await buildPipeline(id, modelId, revision, initialDevice, variant, initialWasmProfile);
+      lastLoad.wasmExecutionProfile = rdtIsLegacyNonSimdRuntime() ? "legacy-non-simd" : initialWasmProfile;
 
     } finally {
 
       if (restoreRemoteAfter) {
 
-        env.allowRemoteModels = prevAllowRemote;
+        runtimeEnv.allowRemoteModels = prevAllowRemote;
 
-        env.allowLocalModels = prevAllowLocal;
+        runtimeEnv.allowLocalModels = prevAllowLocal;
 
         restoreRemoteAfter = false;
 
@@ -634,13 +1498,14 @@ async function handleLoad(id, payload) {
 
     if (restoreRemoteAfter) {
 
-      env.allowRemoteModels = prevAllowRemote;
+      runtimeEnv.allowRemoteModels = prevAllowRemote;
 
-      env.allowLocalModels = prevAllowLocal;
+      runtimeEnv.allowLocalModels = prevAllowLocal;
 
     }
 
     const loadErrorMessage = String(err && err.message || err || "");
+    let cacheIntegrityRecovered = false;
     // If a mobile Tiny variant is missing on the relay, try the published standard
     // Tiny WebGPU pair before declaring a download failure. Other 403/404/network
     // errors still fail promptly with their diagnostic details.
@@ -648,10 +1513,66 @@ async function handleLoad(id, payload) {
     if (rdtIsRemoteFetchFailure(err) && !mobileVariant404) {
       throw new Error("EasyWhisper could not download this model. Your recording has not been transcribed yet. Check your connection and try again, or choose a model already downloaded on this device. If the problem continues, copy the technical details for support. Details: " + loadErrorMessage.slice(0,240));
     }
+    if (rdtIsMemoryPressureFailure(err)) {
+      throw new Error("WebGPU reported memory pressure while loading this model. Another GPU session was not allocated. Try a smaller model or free GPU memory first. Details: " + loadErrorMessage.slice(0,180));
+    }
 
-    if (!hasGpu) throw err;
+    const isOnnxProtobufFailure = /protobuf parsing failed/i.test(loadErrorMessage);
+    if (!hasGpu && initialDevice === "wasm" && isOnnxProtobufFailure) {
+      const previousArtifactCheck = rdtLastOnnxArtifactCacheCheck;
+      // This is the error path, so perform one bounded-memory-impact full digest
+      // of any present large selected model artifact. It distinguishes a valid-size
+      // but corrupt decoder from an ONNX/runtime incompatibility.
+      const deepHashLargeOnFailure = modelId === "onnx-community/whisper-tiny" && rdtIsLegacyNonSimdRuntime();
+      rdtLastOnnxArtifactCacheCheck = await rdtInspectOnnxArtifactCache(modelId, revision, initialDevice, variant, expected, true, deepHashLargeOnFailure);
+      rdtLastOnnxArtifactCacheCheck.failureAudit = {
+        capturedAt: rdtLastOnnxArtifactCacheCheck.capturedAt,
+        deepHashLargeOnFailure,
+        strategy: rdtLastOnnxArtifactCacheCheck.strategy,
+        allSelectedArtifactsMatchPinnedSha256: Array.isArray(rdtLastOnnxArtifactCacheCheck.files) && rdtLastOnnxArtifactCacheCheck.files.length > 0 && rdtLastOnnxArtifactCacheCheck.files.every(f => f.present === true && f.sizeMatches === true && f.sha256Checked === true && f.sha256Matches === true),
+        files: (rdtLastOnnxArtifactCacheCheck.files || []).map(f => ({ path: f.path, present: f.present, sizeMatches: f.sizeMatches, sha256Checked: f.sha256Checked, sha256Matches: f.sha256Matches, cacheEntryEvicted: f.cacheEntryEvicted }))
+      };
+      if (rdtLastOnnxArtifactCacheCheck.failureAudit.allSelectedArtifactsMatchPinnedSha256) {
+        rdtLastOnnxArtifactCacheCheck.failureAudit.interpretation = "Selected ONNX files match their pinned size and SHA-256 values; the protobuf error is not explained by a size/hash mismatch. Runtime/parser/model compatibility remains unresolved.";
+      }
+      if (previousArtifactCheck && previousArtifactCheck.preflight) {
+        rdtLastOnnxArtifactCacheCheck.preflight = {
+          ...previousArtifactCheck.preflight,
+          failureAuditPerformed: true,
+          failureAuditDeepHashLarge: deepHashLargeOnFailure,
+          failureAuditAt: rdtLastOnnxArtifactCacheCheck.capturedAt
+        };
+        rdtLastOnnxArtifactCacheCheck.prefetchAttempts = previousArtifactCheck.prefetchAttempts || [];
+        if (previousArtifactCheck.cacheStatusAfterPrefetch) rdtLastOnnxArtifactCacheCheck.cacheStatusAfterPrefetch = previousArtifactCheck.cacheStatusAfterPrefetch;
+      }
+      if (Array.isArray(rdtLastOnnxArtifactCacheCheck.evictedFiles) && rdtLastOnnxArtifactCacheCheck.evictedFiles.length) {
+        rdtDeepHashLargeOnNextLegacyRetry = deepHashLargeOnFailure && rdtLastOnnxArtifactCacheCheck.evictedFiles.some(path => {
+          const item = (rdtLastOnnxArtifactCacheCheck.files || []).find(f => f.path === path);
+          return !!(item && Number(item.expectedBytes) > 12 * 1024 * 1024);
+        });
+        reply({ id, type: "progress", phase: "cache-integrity-recovery", fallbackReason: "invalid-cached-onnx-artifact", note: "A cached Whisper model file failed its expected-size or SHA-256 check. Removed only the invalid model file and retrying the load once." });
+        rdtSetOperationStage("cache-integrity-recovery", { invalidCachedArtifactCount: rdtLastOnnxArtifactCacheCheck.evictedFiles.length });
+        transcriber = null; currentModelId = null; currentDevice = null;
+        const failureAudit = JSON.parse(JSON.stringify(rdtLastOnnxArtifactCacheCheck));
+        try {
+          await buildPipeline(id, modelId, revision, initialDevice, variant, initialWasmProfile);
+          if (lastLoad) lastLoad.wasmExecutionProfile = rdtIsLegacyNonSimdRuntime() ? "legacy-non-simd" : initialWasmProfile;
+          rdtLastOnnxArtifactCacheCheck.repairAudit = failureAudit;
+          rdtLastOnnxArtifactCacheCheck.retryAttempted = true;
+          rdtLastOnnxArtifactCacheCheck.retrySucceeded = true;
+          cacheIntegrityRecovered = true;
+        } catch (retryErr) {
+          rdtLastOnnxArtifactCacheCheck.repairAudit = failureAudit;
+          rdtLastOnnxArtifactCacheCheck.retryAttempted = true;
+          rdtLastOnnxArtifactCacheCheck.retrySucceeded = false;
+          rdtLastOnnxArtifactCacheCheck.retryError = String(retryErr && retryErr.message || retryErr).slice(0, 500);
+          throw retryErr;
+        }
+      }
+    }
+    if (!cacheIntegrityRecovered && !hasGpu) throw err;
 
-    if (variant === "mobile-lite") {
+    if (!cacheIntegrityRecovered && variant === "mobile-lite") {
 
       reply({ id, type: "progress", phase: "fallback", note: "Light WebGPU variant unavailable; trying standard WebGPU" });
 
@@ -660,26 +1581,32 @@ async function handleLoad(id, payload) {
       try {
 
         await buildPipeline(id, modelId, revision, "webgpu", "mobile-standard");
+        lastLoad = { ...lastLoad, variant: "mobile-standard", dtype: pickDtype("webgpu", modelId, "mobile-standard"), effectiveDevice: "webgpu", webgpuPowerPreference: rdtWebGPUSelectedPowerPreference };
 
       } catch (gpuErr) {
 
-        wasmPreferredModels.add(modelKey);
-        reply({ id, type: "progress", phase: "fallback", note: "Both WebGPU variants failed for this model; switching to WASM for this session: " + (gpuErr && gpuErr.message || gpuErr) });
-
-        transcriber = null; currentModelId = null; currentDevice = null;
-
-        await buildPipeline(id, modelId, revision, "wasm", null);
+        let lowerPowerRetry = { attempted: false, ok: false };
+        if (!rdtIsRemoteFetchFailure(gpuErr)) lowerPowerRetry = await rdtTryLowerPowerGpuPipeline(id, modelId, revision, "mobile-standard");
+        if (!lowerPowerRetry.ok) {
+          wasmPreferredModels.add(modelKey);
+          reply({ id, type: "progress", phase: "fallback", note: "Both Tiny WebGPU variants and the lower-power GPU fallback are exhausted or unavailable; switching to CPU/WASM: " + String(lowerPowerRetry.error && lowerPowerRetry.error.message || gpuErr && gpuErr.message || gpuErr).slice(0, 180) });
+          transcriber = null; currentModelId = null; currentDevice = null;
+          await buildPipeline(id, modelId, revision, "wasm", null, rdtWasmCompatibilityPreferredModels.has(modelKey) ? "legacy-android-basic" : "standard");
+          lastLoad = { ...lastLoad, device: "wasm", effectiveDevice: "wasm", variant: null, dtype: pickDtype("wasm", modelId, null), webgpuPowerPreference: null };
+        }
 
       }
 
-    } else {
+    } else if (!cacheIntegrityRecovered) {
 
-      wasmPreferredModels.add(modelKey);
-      reply({ id, type: "progress", phase: "fallback", note: "WebGPU model load failed; switching to WASM for this session: " + (err && err.message || err) });
-
-      transcriber = null; currentModelId = null; currentDevice = null;
-
-      await buildPipeline(id, modelId, revision, "wasm", null);
+      const lowerPowerRetry = await rdtTryLowerPowerGpuPipeline(id, modelId, revision, variant);
+      if (!lowerPowerRetry.ok) {
+        wasmPreferredModels.add(modelKey);
+        reply({ id, type: "progress", phase: "fallback", note: "High-performance and lower-power WebGPU attempts are exhausted or unavailable; switching to CPU/WASM for this session: " + String(lowerPowerRetry.error && lowerPowerRetry.error.message || err && err.message || err).slice(0, 180) });
+        transcriber = null; currentModelId = null; currentDevice = null;
+        await buildPipeline(id, modelId, revision, "wasm", null, rdtWasmCompatibilityPreferredModels.has(modelKey) ? "legacy-android-basic" : "standard");
+        lastLoad = { ...lastLoad, device: "wasm", effectiveDevice: "wasm", variant: null, dtype: pickDtype("wasm", modelId, null), webgpuPowerPreference: null };
+      }
 
     }
 
@@ -687,6 +1614,7 @@ async function handleLoad(id, payload) {
 
   let verify = { checked: 0, skipped: 0, failed: [] };
 
+  rdtSetOperationStage("verify-model-artifacts", { expectedFileCount: Array.isArray(expected) ? expected.length : 0 });
   if (expected && expected.length) {
 
     try {
@@ -711,6 +1639,7 @@ async function handleLoad(id, payload) {
 
   }
 
+  rdtSetOperationStage("model-ready", { effectiveDevice: currentDevice, modelId: currentModelId, fullyCached: cached, verifiedFileCount: verify.checked, skippedVerificationCount: verify.skipped });
   reply({
 
     id,
@@ -733,6 +1662,292 @@ async function handleLoad(id, payload) {
 
   });
 
+}
+
+async function rdtCountCachedResponseBytes(response, expectedBytes, onProgress) {
+  const clone = response.clone();
+  if (clone.body && typeof clone.body.getReader === "function") {
+    const reader = clone.body.getReader();
+    let total = 0;
+    let lastProgressAt = 0;
+    const emitProgress = (force = false) => {
+      if (typeof onProgress !== "function") return;
+      const now = Date.now();
+      if (!force && now - lastProgressAt < 300) return;
+      lastProgressAt = now;
+      try { onProgress(total); } catch {}
+    };
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        total += part.value ? part.value.byteLength : 0;
+        emitProgress(false);
+        // A size mismatch is already proven; stop early instead of reading an
+        // unexpectedly huge/corrupt cache entry into memory.
+        if (Number.isFinite(Number(expectedBytes)) && Number(expectedBytes) >= 0 && total > Number(expectedBytes)) {
+          emitProgress(true);
+          try { await reader.cancel(); } catch {}
+          return total;
+        }
+      }
+      emitProgress(true);
+      return total;
+    } finally { try { reader.releaseLock(); } catch {} }
+  }
+  const blob = await clone.blob();
+  if (typeof onProgress === "function") { try { onProgress(blob.size); } catch {} }
+  return blob.size;
+}
+
+async function rdtInspectOnnxArtifactCache(modelId, revision, device, variant, expected, evictInvalid, deepHashLarge = false) {
+  const report = {
+    capturedAt: new Date().toISOString(),
+    modelId: String(modelId || "").slice(0, 120),
+    revision: /^[0-9a-f]{40}$/i.test(String(revision || "")) ? String(revision) : null,
+    strategy: deepHashLarge
+      ? "selected-onnx-file-size-and-sha256-check-including-large-file"
+      : "selected-onnx-file-size-and-small-file-sha256-check",
+    deepHashLargeFilesChecked: !!deepHashLarge,
+    inspectionPurpose: evictInvalid ? "integrity-audit-and-selective-repair" : "read-only-cache-inspection",
+    files: [],
+    evictedFiles: []
+  };
+  try {
+    if (!self.caches) { report.error = "cache-storage-unavailable"; return report; }
+    const cache = await caches.open("transformers-cache");
+    const selected = expectedFilesForVariant(modelId, device, variant, expected)
+      .filter(f => f && typeof f.path === "string" && f.path.startsWith("onnx/"));
+    for (const f of selected) {
+      const exactUrl = cacheUrlFor(modelId, revision, f.path);
+      // Inspect and, if needed, evict under the same key lock used by Cache.match/put.
+      // This prevents another tab from replacing a valid entry between the check and delete.
+      const item = await rdtWithCacheEntryLock(exactUrl, evictInvalid ? "inspect-and-repair" : "inspect", async () => {
+        const keys = await cache.keys();
+        let matchRequest = exactUrl;
+        let response = await cache.match(exactUrl);
+        if (!response) {
+          const alternative = keys.find(req => req && typeof req.url === "string" && req.url.indexOf("/resolve/" + revision + "/" + f.path) !== -1);
+          if (alternative) { matchRequest = alternative; response = await cache.match(alternative); }
+        }
+        const result = {
+          path: f.path,
+          present: !!response,
+          expectedBytes: Number.isFinite(Number(f.size)) ? Number(f.size) : null,
+          actualBytes: null,
+          sizeMatches: null,
+          sha256Checked: false,
+          sha256Matches: null,
+          cacheEntryEvicted: false
+        };
+        if (!response) return result;
+        try {
+          result.actualBytes = await rdtCountCachedResponseBytes(response, result.expectedBytes);
+          if (result.expectedBytes !== null) result.sizeMatches = result.actualBytes === result.expectedBytes;
+        } catch (e) {
+          result.readError = String(e && e.message || e).slice(0, 180);
+        }
+        // Hash only small ONNX artifacts to keep peak memory bounded on low-RAM devices.
+        if (result.sizeMatches === true && result.expectedBytes !== null && (result.expectedBytes <= 12 * 1024 * 1024 || deepHashLarge) && typeof f.sha256 === "string" && typeof crypto !== "undefined" && crypto.subtle) {
+          try {
+            const bytes = await response.clone().arrayBuffer();
+            const digest = await crypto.subtle.digest("SHA-256", bytes);
+            const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+            result.sha256Checked = true;
+            result.sha256Matches = hex.toLowerCase() === f.sha256.toLowerCase();
+          } catch (e) {
+            result.sha256Error = String(e && e.message || e).slice(0, 180);
+          }
+        }
+        const invalid = result.sizeMatches === false || result.sha256Matches === false;
+        if (invalid && evictInvalid) {
+          try {
+            await cache.delete(matchRequest);
+            if (matchRequest !== exactUrl) await cache.delete(exactUrl);
+            result.cacheEntryEvicted = true;
+          } catch (e) {
+            result.evictError = String(e && e.message || e).slice(0, 180);
+          }
+        }
+        return result;
+      });
+      if (item.cacheEntryEvicted) report.evictedFiles.push(f.path);
+      report.files.push(item);
+    }
+  } catch (e) {
+    report.error = String(e && e.message || e).slice(0, 240);
+  }
+  return report;
+}
+
+async function rdtSha256ResponseHex(response) {
+  const bytes = await response.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function rdtPrefetchMissingOnnxArtifact(id, modelId, revision, file, deepHashLarge, report) {
+  const exactUrl = cacheUrlFor(modelId, revision, file.path);
+  const expectedBytes = Number.isFinite(Number(file.size)) ? Number(file.size) : null;
+  return rdtWithCacheEntryLock(exactUrl, "prefetch-missing-onnx", async () => {
+    const cache = await caches.open("transformers-cache");
+    // Re-check after acquiring the same per-key cross-tab lock. If another tab
+    // finished downloading while we waited, use its complete cache entry.
+    const existing = await cache.match(exactUrl);
+    if (existing) {
+      const row = {
+        path: file.path, present: true, expectedBytes, actualBytes: null,
+        sizeMatches: null, sha256Checked: false, sha256Matches: null,
+        cacheEntryEvicted: false, cacheSource: "existing-exact-cache-key",
+        downloadedBeforePipeline: false
+      };
+      report.files.push(row);
+      return row;
+    }
+
+    const row = {
+      path: file.path, present: false, expectedBytes, actualBytes: null,
+      sizeMatches: null, sha256Checked: false, sha256Matches: null,
+      cacheEntryEvicted: false, cacheSource: "missing-before-prefetch",
+      downloadedBeforePipeline: false, attempts: []
+    };
+    if (expectedBytes === null || expectedBytes <= 0) {
+      row.error = "pinned-expected-byte-size-unavailable";
+      report.files.push(row);
+      throw new Error("EasyWhisper cannot safely prefetch " + file.path + ": pinned expected byte size is unavailable.");
+    }
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let putPromise = null;
+      try {
+        reply({
+          id, type: "progress", phase: "model-file-preflight",
+          file: file.path, loaded: 0, total: expectedBytes, progress: 0,
+          note: "Preparing the missing Whisper model file before opening the WASM session."
+        });
+        const response = await rdtHfAwareFetch(exactUrl, { cache: "no-store" });
+        if (!response || !response.ok || response.status !== 200) {
+          throw new Error("unexpected-model-file-http-status:" + (response ? response.status : "no-response"));
+        }
+        const countPromise = rdtCountCachedResponseBytes(response.clone(), expectedBytes, loaded => {
+          reply({
+            id, type: "progress", phase: "model-file-prefetch-progress",
+            file: file.path, loaded, total: expectedBytes,
+            progress: expectedBytes > 0 ? Math.min(100, loaded / expectedBytes * 100) : null,
+            note: "Downloading and validating the missing ONNX file before session creation."
+          });
+        });
+        const shouldHash = !!(file.sha256 && typeof crypto !== "undefined" && crypto.subtle &&
+          (expectedBytes <= 12 * 1024 * 1024 || deepHashLarge));
+        const hashPromise = shouldHash ? rdtSha256ResponseHex(response.clone()) : Promise.resolve(null);
+        // Cache.put and byte counting run concurrently to avoid accumulating the
+        // whole 30.7 MB decoder in a second memory buffer. Readers are blocked by
+        // the same lock until the complete size/hash checks have finished.
+        putPromise = cache.put(exactUrl, response.clone());
+        const [actualBytes, hashHex] = await Promise.all([countPromise, hashPromise, putPromise]).then(([actual, hash]) => [actual, hash]);
+        row.actualBytes = actualBytes;
+        row.sizeMatches = actualBytes === expectedBytes;
+        if (shouldHash) {
+          row.sha256Checked = true;
+          row.sha256Matches = String(hashHex).toLowerCase() === String(file.sha256).toLowerCase();
+        }
+        if (row.sizeMatches !== true) {
+          await cache.delete(exactUrl);
+          throw new Error("download-size-mismatch:expected=" + expectedBytes + ":actual=" + actualBytes);
+        }
+        if (row.sha256Checked && row.sha256Matches !== true) {
+          await cache.delete(exactUrl);
+          throw new Error("download-sha256-mismatch:" + file.path);
+        }
+        row.present = true;
+        row.cacheEntryEvicted = false;
+        row.cacheSource = "downloaded-and-verified-before-pipeline";
+        row.downloadedBeforePipeline = true;
+        row.attempts.push({ attempt, status: "verified", actualBytes });
+        row.attemptCount = attempt;
+        report.prefetchAttempts.push({ path: file.path, attempt, status: "verified", actualBytes });
+        report.files.push(row);
+        return row;
+      } catch (error) {
+        lastError = String(error && error.message || error).slice(0, 300);
+        try { if (putPromise) await putPromise; } catch {}
+        try { await cache.delete(exactUrl); } catch {}
+        row.attempts.push({ attempt, status: "failed", error: lastError });
+        report.prefetchAttempts.push({ path: file.path, attempt, status: "failed", error: lastError });
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    row.error = lastError || "download-failed";
+    row.present = false;
+    report.files.push(row);
+    throw new Error("EasyWhisper could not download and verify " + file.path + " after two attempts. " + row.error);
+  });
+}
+
+async function rdtRefreshModelCacheSummary(modelId, revision, device, variant, expected, source) {
+  const cacheExpected = expectedFilesForVariant(modelId, device, variant, expected);
+  const inspection = await inspectModelCache(modelId, revision, cacheExpected);
+  const files = Array.isArray(cacheExpected) ? cacheExpected.filter(f => f && f.path) : [];
+  const metadataListed = files.some(f => !String(f.path).startsWith("onnx/"));
+  const requiredMetadataCount = metadataListed ? 0 : REQUIRED_META.length;
+  const expectedFileCount = files.length + requiredMetadataCount;
+  const missingFileCount = Array.isArray(inspection.missing) ? inspection.missing.length : null;
+  const presentFileCount = missingFileCount === null ? null : Math.max(0, expectedFileCount - missingFileCount);
+  const summary = {
+    state: String(inspection.state || "unknown"),
+    expectedFileCount,
+    presentFileCount,
+    missingFileCount,
+    fullyCached: inspection.state === "full",
+    online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
+    checkedAt: new Date().toISOString(),
+    source: String(source || "cache-inspection").slice(0, 80),
+    missing: Array.isArray(inspection.missing) ? inspection.missing.slice(0, 12) : []
+  };
+  rdtModelCacheSummary = summary;
+  return summary;
+}
+
+async function rdtEnsureLegacyWasmArtifactsCached(id, modelId, revision, variant, expected) {
+  const report = {
+    capturedAt: new Date().toISOString(),
+    modelId: String(modelId || "").slice(0, 120),
+    revision: /^[0-9a-f]{40}$/i.test(String(revision || "")) ? String(revision) : null,
+    strategy: "legacy-wasm-prefetch-missing-selected-onnx-before-session",
+    files: [], evictedFiles: [], prefetchAttempts: [],
+    preflight: { started: true, completed: false, deepHashLarge: !!rdtDeepHashLargeOnNextLegacyRetry }
+  };
+  rdtLastOnnxArtifactCacheCheck = report;
+  try {
+    if (!self.caches || typeof caches.open !== "function") {
+      report.preflight.skipped = "cache-storage-unavailable";
+      report.preflight.completed = true;
+      return report;
+    }
+    const selected = expectedFilesForVariant(modelId, "wasm", variant, expected)
+      .filter(f => f && typeof f.path === "string" && f.path.startsWith("onnx/") && Number.isFinite(Number(f.size)));
+    if (!selected.length) {
+      report.preflight.skipped = "no-pinned-onnx-artifact-list";
+      report.preflight.completed = true;
+      return report;
+    }
+    const deepHashLarge = !!rdtDeepHashLargeOnNextLegacyRetry;
+    rdtDeepHashLargeOnNextLegacyRetry = false;
+    report.preflight.deepHashLarge = deepHashLarge;
+    const results = await Promise.allSettled(selected.map(file => rdtPrefetchMissingOnnxArtifact(id, modelId, revision, file, deepHashLarge, report)));
+    const failed = results.find(result => result.status === "rejected");
+    if (failed) throw failed.reason;
+    report.preflight.completed = true;
+    report.preflight.filesFetched = report.prefetchAttempts.filter(x => x.status === "verified").map(x => x.path).filter((v, i, a) => a.indexOf(v) === i);
+    report.cacheStatusAfterPrefetch = await rdtRefreshModelCacheSummary(modelId, revision, "wasm", variant, expected, "post-legacy-wasm-prefetch");
+    return report;
+  } catch (error) {
+    report.preflight.completed = false;
+    report.preflight.error = String(error && error.message || error).slice(0, 500);
+    try { report.cacheStatusAfterPrefetch = await rdtRefreshModelCacheSummary(modelId, revision, "wasm", variant, expected, "failed-legacy-wasm-prefetch"); } catch {}
+    throw error;
+  }
 }
 
 async function verifySmallFiles(modelId, revision, expected) {
@@ -939,6 +2154,14 @@ async function runBatchedInference(id, audio, opts) {
     const input = inferenceWindow(audio, inputStart, inputEnd);
 
     const started = performance.now();
+    rdtSetOperationStage("onnx-inference-call", {
+      batchIndex: i + 1,
+      batchTotal: total,
+      windowDurationSeconds: Math.round((input.length / 16000) * 1000) / 1000,
+      effectiveDevice: currentDevice,
+      modelId: currentModelId,
+      resolvedLanguage: opts && opts.language ? opts.language : "auto"
+    });
 
     const result = await transcriber(input, opts);
 
@@ -1588,10 +2811,25 @@ function sanitizeLangInput(s){
 
 }
 
+async function rdtRunAudioWithActivePipeline(id, audio, opts, isAutoMixed) {
+  if (isAutoMixed && audio.length > 15 * 16000) {
+    const detectedRef = { value: null };
+    const result = await runBatchedInferenceAuto(id, audio, opts, detectedRef);
+    return { result, detectedLanguage: detectedRef.value };
+  }
+  return { result: await runBatchedInference(id, audio, opts), detectedLanguage: null };
+}
+
 async function handleRun(id, payload) {
+  rdtSetOperationStage("validate-run-request", { loadedModelId: currentModelId, effectiveDevice: currentDevice });
   if (!transcriber) throw new Error("run: model not loaded; send load first");
 
   const audio = normalizeAudio(payload.audio);
+  rdtSetOperationStage("audio-normalized", {
+    sampleCount: audio.length,
+    durationSeconds: Math.round((audio.length / 16000) * 1000) / 1000,
+    selectedLanguage: typeof payload.language === "string" ? payload.language : "auto"
+  });
 
   // Preserve "auto" explicitly: if payload.language is missing, undefined, or "auto", we trigger auto-detection.
 
@@ -1814,26 +3052,78 @@ async function handleRun(id, payload) {
   let result;
 
   const isAutoMixed = (language === "auto");
+  rdtSetOperationStage("language-configured", { selectedLanguage: language, resolvedLanguage: opts.language || "auto", task, chunkLengthSeconds: opts.chunk_length_s, audioDurationSeconds: Math.round(durationSec * 1000) / 1000 });
 
   try {
 
-    if (isAutoMixed && audio.length > 15 * 16000) {
-
-      // For auto with longer audio (mixed Chinese/English), detect per 30s window
-
-      const detectedRef = { value: null };
-
-      result = await runBatchedInferenceAuto(id, audio, opts, detectedRef);
-
-      detectedLanguage = detectedRef.value;
-
-    } else {
-
-      result = await runBatchedInference(id, audio, opts);
-
-    }
+    // For long Auto Detect recordings, preserve per-window language detection.
+    const initialExecution = await rdtRunAudioWithActivePipeline(id, audio, opts, isAutoMixed);
+    result = initialExecution.result;
+    if (initialExecution.detectedLanguage) detectedLanguage = initialExecution.detectedLanguage;
 
   } catch (err) {
+
+    // Do not create a second runtime/session after an inaccessible model resource or a
+    // memory-pressure signal. These conditions are not evidence of an architecture mismatch.
+    if (rdtIsRemoteFetchFailure(err)) {
+      throw new Error("EasyWhisper couldn't access a required model resource while transcribing. The current job was not retried with another runtime because it needs the same resource. Try again when the connection is stable, or use Local Server. Technical details: " + String(err && err.message || err).slice(0,320));
+    }
+    if (rdtIsMemoryPressureFailure(err)) {
+      throw new Error("EasyWhisper reported memory pressure during inference. Runtime compatibility retry was skipped to avoid a second high-memory attempt. Try a smaller model or a shorter recording. Details: " + String(err && err.message || err).slice(0,180));
+    }
+
+    let recoveredByLegacyAndroidRetry = false;
+
+    // On the confirmed legacy ARM Android/Tiny profile, a raw WASM numeric execution failure
+    // can indicate runtime/architecture incompatibility rather than a missing model file. Give
+    // the pinned model one controlled retry through the non-SIMD-compatible ORT 1.17.3 runtime.
+    // Never build this second runtime for a memory-pressure or remote-fetch failure (handled above).
+    if (currentDevice === "wasm" && lastLoad && rdtIsLegacyArmAndroidTinyWasmFault(lastLoad.modelId, err) && !rdtIsLegacyNonSimdRuntime()) {
+      const compatKey = modelRevisionKey(lastLoad.modelId, lastLoad.revision);
+      const defaultRuntimeError = String(err && err.message !== undefined ? err.message : err).slice(0, 220);
+      if (!rdtLegacyCompatibilityAttemptedModels.has(compatKey)) {
+        rdtLegacyCompatibilityAttemptedModels.add(compatKey);
+        const compatLoad = { ...lastLoad };
+        reply({ id, type: "progress", phase: "fallback", fallbackReason: "legacy-arm32-runtime-compatibility", note: "The default WASM runtime failed on this older Android device. Retrying once with the version-matched compatibility runtime and the same pinned INT8 model files." });
+        rdtSetOperationStage("legacy-arm32-runtime-retry", { modelId: compatLoad.modelId, effectiveDevice: "wasm", originalRuntimeError: defaultRuntimeError });
+        await rdtDisposeActivePipelineForRetry();
+        try {
+          await buildPipeline(id, compatLoad.modelId, compatLoad.revision, "wasm", null, "legacy-android-basic", "legacy-non-simd");
+          const compatRuntimeInfo = rdtRuntimeDiagnosticInfo();
+          lastLoad = {
+            ...compatLoad,
+            device: "wasm",
+            effectiveDevice: "wasm",
+            variant: null,
+            dtype: pickDtype("wasm", compatLoad.modelId, null),
+            wasmExecutionProfile: rdtCurrentWasmExecutionProfile,
+            runtimeFallbackReason: "legacy-arm32-runtime-compatibility",
+            runtimeKind: compatRuntimeInfo.runtimeKind,
+            transformersPackage: compatRuntimeInfo.transformersPackage,
+            onnxRuntimePackage: compatRuntimeInfo.onnxRuntimePackage,
+            runtimeSelectionReason: compatRuntimeInfo.selectionReason,
+            wasmSIMDSupported: compatRuntimeInfo.wasmSIMDSupported,
+            architectureHint: compatRuntimeInfo.architectureHint,
+            nativeAndroidABIAvailableToBrowser: false
+          };
+          const compatExecution = await rdtRunAudioWithActivePipeline(id, audio, opts, isAutoMixed);
+          result = compatExecution.result;
+          if (compatExecution.detectedLanguage) detectedLanguage = compatExecution.detectedLanguage;
+          recoveredByLegacyAndroidRetry = true;
+          reply({ id, type: "progress", phase: "fallback", fallbackReason: "legacy-arm32-runtime-compatibility", note: "Tiny transcription recovered using the non-SIMD-compatible runtime." });
+        } catch (compatErr) {
+          const compatibilityError = String(compatErr && compatErr.message !== undefined ? compatErr.message : compatErr).slice(0, 260);
+          try { await rdtDisposeActivePipelineForRetry(); }
+          catch (disposeErr) { rdtSetOperationStage("legacy-arm32-runtime-retry-dispose-failed", { disposeError: String(disposeErr && disposeErr.message || disposeErr).slice(0, 180) }); }
+          rdtSetOperationStage("legacy-arm32-runtime-retry-failed", { originalRuntimeError: defaultRuntimeError, compatibilityRuntimeError: compatibilityError });
+          throw new Error("EasyWhisper Tiny failed with the default WASM runtime and with the version-matched non-SIMD compatibility runtime. Default runtime: " + defaultRuntimeError + "; compatibility runtime: " + compatibilityError + ". No second compatibility retry will be attempted in this worker session.");
+        }
+      }
+    }
+
+    if (!recoveredByLegacyAndroidRetry && currentDevice === "wasm" && lastLoad && rdtIsLegacyArmAndroidTinyWasmFault(lastLoad.modelId, err) && rdtIsLegacyNonSimdRuntime()) {
+      throw new Error("EasyWhisper Tiny inference also failed in the non-SIMD-compatible legacy runtime. Runtime error: " + String(err && err.message !== undefined ? err.message : err).slice(0, 220) + ". The pinned model files were not changed.");
+    }
 
     // Runtime WebGPU failures can occur after the model loaded. Retry the whole
 
@@ -1846,29 +3136,86 @@ async function handleRun(id, payload) {
       throw new Error("WebGPU reported memory pressure during inference. WASM retry was skipped to avoid a second high-memory attempt. Try a smaller model or a shorter recording. Details: " + String(err && err.message || err).slice(0,180));
     }
     if (/couldn't identify the spoken language/i.test(String(err && err.message || err))) throw err;
-    if (currentDevice !== "webgpu" || !lastLoad) throw err;
 
-    const failedModelKey = modelRevisionKey(lastLoad.modelId, lastLoad.revision);
-    wasmPreferredModels.add(failedModelKey);
-    reply({ id, type: "progress", phase: "fallback", note: "A WebGPU inference error occurred; retrying this transcription once in WASM and remembering that choice for this model until the worker restarts." });
+    // LG LM-X320 evidence: Android 9 / armv7l / 2 GiB / no WebGPU or SAB;
+    // Tiny Q8 loads successfully but ONNX inference throws a raw numeric WASM error.
+    // If the one-time runtime retry was already attempted, do not stack another session.
+    if (!recoveredByLegacyAndroidRetry && currentDevice === "wasm" && lastLoad && rdtIsLegacyArmAndroidTinyWasmFault(lastLoad.modelId, err) && !rdtIsLegacyNonSimdRuntime()) {
+      const tinyWasmKey = modelRevisionKey(lastLoad.modelId, lastLoad.revision);
+      const firstError = String(err && err.message !== undefined ? err.message : err).slice(0, 180);
+      if (!rdtWasmCompatibilityPreferredModels.has(tinyWasmKey)) {
+        rdtWasmCompatibilityPreferredModels.add(tinyWasmKey);
+        const retryLoad = { ...lastLoad };
+        reply({ id, type: "progress", phase: "fallback", fallbackReason: "legacy-android-wasm-basic-optimization", note: "Tiny loaded, but this older Android WASM runtime failed during inference. Retrying once with the version-matched compatibility runtime; the pinned INT8 files are unchanged." });
+        rdtSetOperationStage("wasm-android-compatibility-retry", { modelId: retryLoad.modelId, effectiveDevice: "wasm", graphOptimizationLevel: "basic", originalRuntimeError: firstError });
+        await rdtDisposeActivePipelineForRetry();
+        try {
+          await buildPipeline(id, retryLoad.modelId, retryLoad.revision, "wasm", null, "legacy-android-basic");
+          lastLoad = { ...retryLoad, device: "wasm", effectiveDevice: "wasm", variant: null, dtype: pickDtype("wasm", retryLoad.modelId, null), wasmExecutionProfile: rdtCurrentWasmExecutionProfile };
+          rdtSetOperationStage("onnx-inference-compatibility-retry", { modelId: currentModelId, effectiveDevice: currentDevice, graphOptimizationLevel: "basic" });
+          const retryExecution = await rdtRunAudioWithActivePipeline(id, audio, opts, isAutoMixed);
+          result = retryExecution.result;
+          if (retryExecution.detectedLanguage) detectedLanguage = retryExecution.detectedLanguage;
+          recoveredByLegacyAndroidRetry = true;
+          reply({ id, type: "progress", phase: "fallback", fallbackReason: "legacy-android-wasm-basic-optimization", note: "Tiny transcription recovered using the conservative Android WASM compatibility profile." });
+        } catch (retryErr) {
+          try { await rdtDisposeActivePipelineForRetry(); }
+          catch (disposeErr) { rdtSetOperationStage("wasm-android-compatibility-retry-dispose-failed", { disposeError: String(disposeErr && disposeErr.message || disposeErr).slice(0, 180) }); }
+          rdtSetOperationStage("wasm-android-compatibility-retry-failed", { modelId: retryLoad.modelId, effectiveDevice: currentDevice || "wasm", graphOptimizationLevel: "basic", originalRuntimeError: firstError, retryRuntimeError: String(retryErr && retryErr.message !== undefined ? retryErr.message : retryErr).slice(0, 180) });
+          throw new Error("EasyWhisper Tiny inference failed on this older Android WASM profile, including a one-time retry with conservative ONNX graph optimization. Original runtime error: " + firstError + "; compatibility retry: " + String(retryErr && retryErr.message !== undefined ? retryErr.message : retryErr).slice(0, 180));
+        }
+      } else if (rdtCurrentWasmExecutionProfile === "legacy-android-basic") {
+        throw new Error("EasyWhisper Tiny inference failed using the conservative Android WASM profile. Runtime error: " + firstError + ". No second pipeline was loaded; the selected model files remain unchanged.");
+      }
+    }
 
-    transcriber = null; currentModelId = null; currentDevice = null;
+    if (!recoveredByLegacyAndroidRetry) {
+      if (currentDevice !== "webgpu" || !lastLoad) throw err;
 
-    await buildPipeline(id, lastLoad.modelId, lastLoad.revision, "wasm", null);
-    lastLoad = { ...lastLoad, device: "wasm", variant: null };
+      const failedLoad = { ...lastLoad };
+      const failedModelKey = modelRevisionKey(failedLoad.modelId, failedLoad.revision);
+      const failedPreference = rdtWebGPUSelectedPowerPreference || failedLoad.webgpuPowerPreference || "high-performance";
+      rdtWebGPUFailedPreferences.add(failedPreference);
+      let recoveredByLowerPowerGpu = false;
 
-    if (isAutoMixed && audio.length > 15 * 16000) {
+      if (failedPreference === "high-performance") {
+        const lowerPowerAdapterReady = await rdtSelectWebGPUAdapter("low-power");
+        if (lowerPowerAdapterReady) {
+          reply({ id, type: "progress", phase: "fallback", fallbackReason: "webgpu-low-power-retry", note: "High-performance WebGPU inference failed. Retrying this audio with the lower-power WebGPU adapter before CPU/WASM." });
+          transcriber = null; currentModelId = null; currentDevice = null;
+          try {
+            await buildPipeline(id, failedLoad.modelId, failedLoad.revision, "webgpu", failedLoad.variant);
+            lastLoad = { ...failedLoad, device: "webgpu", effectiveDevice: "webgpu", webgpuPowerPreference: "low-power", gpuSelectionStrategy: "high-performance-then-low-power-then-wasm" };
+            const lowerPowerExecution = await rdtRunAudioWithActivePipeline(id, audio, opts, isAutoMixed);
+            result = lowerPowerExecution.result;
+            if (lowerPowerExecution.detectedLanguage) detectedLanguage = lowerPowerExecution.detectedLanguage;
+            recoveredByLowerPowerGpu = true;
+            reply({ id, type: "progress", phase: "fallback", fallbackReason: "webgpu-low-power-retry", note: "Transcription recovered using the lower-power WebGPU adapter." });
+          } catch (lowGpuErr) {
+            if (rdtIsRemoteFetchFailure(lowGpuErr)) {
+              throw new Error("EasyWhisper couldn't access a required model resource during the lower-power GPU retry. The job was not retried with CPU/WASM because it needs the same resource. Technical details: " + String(lowGpuErr && lowGpuErr.message || lowGpuErr).slice(0, 240));
+            }
+            if (rdtIsMemoryPressureFailure(lowGpuErr)) {
+              throw new Error("The lower-power WebGPU retry also reported memory pressure. CPU/WASM retry was skipped to avoid another allocation after a GPU memory failure. Try a smaller model or shorter recording. Details: " + String(lowGpuErr && lowGpuErr.message || lowGpuErr).slice(0, 180));
+            }
+            rdtWebGPUFailedPreferences.add("low-power");
+            rdtLastWebGPUFallbackError = String(lowGpuErr && lowGpuErr.message !== undefined ? lowGpuErr.message : lowGpuErr).slice(0, 220);
+            rdtSetOperationStage("low-power-webgpu-inference-failed", { webgpuPowerPreference: "low-power", fallbackError: rdtLastWebGPUFallbackError });
+            transcriber = null; currentModelId = null; currentDevice = null;
+          }
+        }
+      }
 
-      const detectedRef = { value: null };
-
-      result = await runBatchedInferenceAuto(id, audio, opts, detectedRef);
-
-      detectedLanguage = detectedRef.value;
-
-    } else {
-
-      result = await runBatchedInference(id, audio, opts);
-
+      if (!recoveredByLowerPowerGpu) {
+        wasmPreferredModels.add(failedModelKey);
+        reply({ id, type: "progress", phase: "fallback", note: "High-performance and lower-power WebGPU attempts are exhausted or unavailable; retrying this transcription in CPU/WASM for this model until the worker restarts." });
+        transcriber = null; currentModelId = null; currentDevice = null;
+        await buildPipeline(id, failedLoad.modelId, failedLoad.revision, "wasm", null, rdtWasmCompatibilityPreferredModels.has(failedModelKey) ? "legacy-android-basic" : "standard");
+        lastLoad = { ...failedLoad, device: "wasm", effectiveDevice: "wasm", variant: null, dtype: pickDtype("wasm", failedLoad.modelId, null), wasmExecutionProfile: rdtCurrentWasmExecutionProfile, webgpuPowerPreference: null };
+        const wasmExecution = await rdtRunAudioWithActivePipeline(id, audio, opts, isAutoMixed);
+        result = wasmExecution.result;
+        if (wasmExecution.detectedLanguage) detectedLanguage = wasmExecution.detectedLanguage;
+      }
     }
 
   }

@@ -4998,6 +4998,11 @@ fn list_available_browsers() -> Vec<BrowserOption> {
 }
 
 #[tauri::command]
+fn reveal_main_window_after_tray_error(app: AppHandle) {
+    show_main_window(&app);
+}
+
+#[tauri::command]
 fn open_voice_window(
     app: AppHandle,
     state: State<'_, BackendState>,
@@ -5009,17 +5014,53 @@ fn open_voice_window(
         .port
         .ok_or_else(|| "Start the local backend first.".to_string())?;
 
-    // Exchange the bearer token for a short-lived, single-use handoff code. The
-    // real token never enters the URL, browser history, screenshots, or copied links.
-    let handoff = api_request(&state, "POST", "/v1/browser-handoff", Some(json!({})))?;
-    let code = handoff.get("code").and_then(Value::as_str)
-        .filter(|value| value.len() >= 32)
-        .ok_or_else(|| "The backend did not return a valid one-time browser handoff code. Update the RDT Voice backend, rebuild the bundled resources, and try again.".to_string())?;
-
+    // The bearer token never enters a URL. The one-time code is bound to the
+    // selected page origin and can only be redeemed by that origin.
     let backend_url = status
         .local_url
         .clone()
         .ok_or_else(|| "The local server has no active endpoint.".to_string())?;
+    let parsed_local_url = url::Url::parse(&backend_url)
+        .map_err(|e| format!("The active local server URL is invalid: {e}"))?;
+    if !matches!(parsed_local_url.scheme(), "http" | "https")
+        || !matches!(parsed_local_url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))
+        || parsed_local_url.port().is_none()
+        || !parsed_local_url.username().is_empty()
+        || parsed_local_url.password().is_some()
+        || parsed_local_url.query().is_some()
+        || parsed_local_url.fragment().is_some()
+    {
+        return Err("The active local server URL is not a valid loopback HTTP(S) endpoint.".to_string());
+    }
+    let mut local_launch_url = parsed_local_url;
+    local_launch_url.set_path("/");
+    local_launch_url.set_query(None);
+    local_launch_url.set_fragment(None);
+    let local_origin = local_launch_url.origin().ascii_serialization();
+
+    let official_url = url::Url::parse("https://rolandoristech.github.io/rdt-voice/")
+        .map_err(|e| format!("Could not build the official RDT Voice browser URL: {e}"))?;
+    // Bounded check only chooses the page. It never changes the active server scheme.
+    let public_available = Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .and_then(|client| client.get(official_url.as_str()).send())
+        .map(|response| response.status().is_success())
+        .unwrap_or(false);
+    let (mut launch_url, expected_origin) = if public_available {
+        (official_url, "https://rolandoristech.github.io".to_string())
+    } else {
+        (local_launch_url, local_origin)
+    };
+    let handoff = api_request(
+        &state,
+        "POST",
+        "/v1/browser-handoff",
+        Some(json!({"origin": expected_origin})),
+    )?;
+    let code = handoff.get("code").and_then(Value::as_str)
+        .filter(|value| value.len() >= 32)
+        .ok_or_else(|| "The backend did not return a valid one-time browser handoff code. Update the RDT Voice backend, rebuild the bundled resources, and try again.".to_string())?;
     // The locale is an allowlisted, non-secret UI preference. Keep it in the
     // query so RDT Voice can read it before its first render. The one-time
     // handoff code and backend URL remain in the fragment; the real API token
@@ -5031,8 +5072,6 @@ fn open_voice_window(
         .append_pair("rdt_connect_handoff", code)
         .append_pair("rdt_connect_backend", &backend_url)
         .finish();
-    let mut launch_url = url::Url::parse("https://rolandoristech.github.io/rdt-voice/")
-        .map_err(|e| format!("Could not build the official RDT Voice browser URL: {e}"))?;
     launch_url
         .query_pairs_mut()
         .append_pair("rdt_connect_lang", &active_locale);
@@ -6132,10 +6171,21 @@ fn main() {
             });
 
             let menu = build_tray_menu(app.handle(), &state).map_err(std::io::Error::other)?;
-            // Black-and-clear template mask adapts to macOS appearance; the Dock icon stays full color.
+            // Use a monochrome template mask on macOS; preserve the full-color Dock icon.
+            #[cfg(target_os = "macos")]
+            let (tray_icon, tray_icon_is_template) = (
+                tauri::include_image!("icons/rdt-menu-bar-template.png"),
+                true,
+            );
+            #[cfg(not(target_os = "macos"))]
+            let (tray_icon, tray_icon_is_template) = (
+                tauri::include_image!("icons/rdt-menu-bar-icon.png"),
+                false,
+            );
+
             TrayIconBuilder::with_id("rdt-connect-menu-bar")
-                .icon(tauri::include_image!("icons/rdt-menu-bar-icon.png"))
-                .icon_as_template(false)
+                .icon(tray_icon)
+                .icon_as_template(tray_icon_is_template)
                 .menu(&menu)
                 .tooltip("RDT Connect")
                 .show_menu_on_left_click(true)
@@ -6154,13 +6204,7 @@ fn main() {
                         refresh_tray_menu(app);
                     }
                     "open-voice" => {
-                        if let Some(state) = app.try_state::<BackendState>() {
-                            if let Err(error) = open_voice_window(app.clone(), state, None, None) {
-                                eprintln!("[RDT Connect] Menu-bar Open RDT Voice failed: {error}");
-                                show_main_window(app);
-                                let _ = app.emit("rdt-tray-open-voice-failed", error);
-                            }
-                        }
+                        let _ = app.emit("rdt-tray-open-voice-request", ());
                         refresh_tray_menu(app);
                     }
                     "start-server" => {
@@ -6224,7 +6268,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_build_info, get_backend_status, get_backend_connection_status, open_backend_log, get_recent_backend_log, get_app_diagnostics, get_orphaned_backends, stop_orphaned_backend,
-            get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, open_voice_window,
+            get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, open_voice_window, reveal_main_window_after_tray_error,
             get_model_storage_status, set_model_storage_locations, pick_model_storage_directory,
             get_model_download_status, start_model_download, cancel_model_download, delete_rdt_model_caches, open_easywhisper_model_manager,
             get_local_https_status, pick_tls_file, setup_local_https_certificate, link_local_https_certificate, trust_local_https_ca, remove_rdt_https_trust, set_local_transport,

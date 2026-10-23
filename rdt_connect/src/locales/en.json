@@ -989,5 +989,7 @@
     "updater.upToDate": "RDT Connect is up to date.",
     "updater.reopenApp": "Reopen App",
     "updater.installedReopen": "Update installed. Select Reopen App to use the new version."
-  }
+  },
+  "msg.rdt_voice_rdt_connect_third_party_libraries.607f9167": "License terms can differ between RDT Connect, RDT Voice, third-party libraries, and models. RDT Voice's current source code is licensed under PolyForm Noncommercial 1.0.0; older MIT terms apply to earlier releases. Please check the license information for this RDT Connect release and the model you use.",
+  "msg.model_weights_and_runtime_dependencies_retai.d56ae58f": "Models, third-party libraries, and runtime components may have their own license terms and notices. See the relevant license notices for details."
 }

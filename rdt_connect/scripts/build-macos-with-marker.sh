@@ -11,7 +11,7 @@ if [[ ! -f "$MARKER_FILE" ]]; then
   exit 2
 fi
 MARKER="$(tr -d '[:space:]' < "$MARKER_FILE")"
-if [[ ! "$MARKER" =~ ^[0-9][A-Z][0-9]{2,}$ ]]; then
+if [[ ! "$MARKER" =~ ^[0-5][A-Z][0-9]{2}$ ]]; then
   echo "ERROR: invalid build marker: $MARKER" >&2
   exit 2
 fi

@@ -164,8 +164,8 @@ jobs:
           $toolPython = Join-Path $toolVenv 'Scripts/python.exe'
           & $toolPython -m pip install --disable-pip-version-check --no-cache-dir --index-url https://pypi.org/simple --only-binary=:all: --upgrade 'pip==26.2.2' 'pip-tools==7.6.2'
           if ($LASTEXITCODE -ne 0) { throw 'Could not install the version-pinned lock-generation tools.' }
-          $pipVersion = (& $toolPython -m pip --version).Trim()
-          $pipToolsVersion = (& $toolPython -m piptools compile --version).Trim()
+          $pipVersion = (& $toolPython -m pip --version | Out-String).Trim()
+          $pipToolsVersion = (& $toolPython -m piptools compile --version | Out-String).Trim()
           $toolFreeze = (& $toolPython -m pip freeze | Out-String).Trim()
           Write-Host "PIP_TOOL_VERSION=$pipVersion"
           Write-Host "PIP_TOOLS_VERSION=$pipToolsVersion"

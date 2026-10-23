@@ -1,0 +1,309 @@
+name: RDT Connect Windows Python Lock Qualification
+
+# Deliberately manual-only. This workflow resolves/tests dependency locks and never
+# builds an installer, creates a release, commits, or pushes generated lock files.
+# GitHub requires workflow_dispatch workflows to exist on the default branch; select
+# the candidate ref in the UI, then pass its exact commit SHA and direct-input hash.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        description: Full 40-character commit SHA selected for this run
+        required: true
+        type: string
+      expected_direct_requirements_sha256:
+        description: SHA-256 of backend/windows/requirements-windows.txt reviewed for this run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-python-lock-qualification-${{ inputs.expected_source_sha }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-lock:
+    name: Qualify Python dependency lock (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: ARM64
+            runner: windows-11-arm
+            python-architecture: arm64
+            expected-machines: ARM64,AARCH64
+            wheel-platform: win_arm64
+            lock-file: requirements-windows-arm64.txt
+            artifact-subdir: arm64
+          - arch: x64
+            runner: windows-2022
+            python-architecture: x64
+            expected-machines: AMD64,X86_64,X64
+            wheel-platform: win_amd64
+            lock-file: requirements-windows-x64.txt
+            artifact-subdir: x64
+
+    steps:
+      - name: Check out selected candidate commit
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Guard source commit and direct requirements input
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+          EXPECTED_REQUIREMENTS_SHA256: ${{ inputs.expected_direct_requirements_sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:EXPECTED_SOURCE_SHA -notmatch '^[0-9a-fA-F]{40}$') {
+            throw 'expected_source_sha must be an exact 40-character Git commit SHA.'
+          }
+          if ($env:EXPECTED_REQUIREMENTS_SHA256 -notmatch '^[0-9a-fA-F]{64}$') {
+            throw 'expected_direct_requirements_sha256 must be an exact 64-character SHA-256.'
+          }
+          $actualSha = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Could not determine checked-out source SHA.' }
+          $expectedSha = $env:EXPECTED_SOURCE_SHA.ToLowerInvariant()
+          if ($actualSha -ne $expectedSha) {
+            throw "Source SHA mismatch: expected $($env:EXPECTED_SOURCE_SHA), checked out $actualSha."
+          }
+          $direct = Join-Path $env:GITHUB_WORKSPACE 'backend/windows/requirements-windows.txt'
+          if (-not (Test-Path -LiteralPath $direct -PathType Leaf)) {
+            throw "Direct dependency input missing: $direct"
+          }
+          $directHash = (Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedRequirementsHash = $env:EXPECTED_REQUIREMENTS_SHA256.ToLowerInvariant()
+          if ($directHash -ne $expectedRequirementsHash) {
+            throw "Direct-requirements SHA-256 mismatch: expected $($env:EXPECTED_REQUIREMENTS_SHA256), actual $directHash."
+          }
+          $validator = Join-Path $env:GITHUB_WORKSPACE 'backend/windows/scripts/validate_windows_requirements_lock.py'
+          if (-not (Test-Path -LiteralPath $validator -PathType Leaf)) {
+            throw 'The lock validator is missing from this checked-out commit. Integrate and commit the reviewed validator before running native qualification.'
+          }
+          $markerPath = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/scripts/build-id-sequence-windows.txt'
+          $marker = if (Test-Path -LiteralPath $markerPath -PathType Leaf) { (Get-Content -LiteralPath $markerPath -Raw).Trim() } else { 'MISSING' }
+          $ref = $env:GITHUB_REF
+          Write-Host "SOURCE_REF=$ref"
+          Write-Host "SOURCE_SHA=$actualSha"
+          Write-Host "DIRECT_REQUIREMENTS_PATH=backend/windows/requirements-windows.txt"
+          Write-Host "DIRECT_REQUIREMENTS_SHA256=$directHash"
+          Write-Host "VALIDATOR_SHA256=$((Get-FileHash -LiteralPath $validator -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "WINDOWS_MARKER_AT_CHECKED_OUT_COMMIT=$marker"
+          Write-Host 'SCOPE=DEPENDENCY_LOCK_QUALIFICATION_ONLY_NO_INSTALLER_BUILD'
+
+      - name: Set up exact native CPython
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.16'
+          architecture: ${{ matrix.python-architecture }}
+          check-latest: false
+
+      - name: Verify native Python architecture and version
+        shell: pwsh
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          EXPECTED_MACHINES: ${{ matrix.expected-machines }}
+          EXPECTED_WHEEL_PLATFORM: ${{ matrix.wheel-platform }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = (Get-Command python.exe -ErrorAction Stop).Source
+          $probe = (& $python -c 'import platform,sys,sysconfig; print("|".join((platform.python_version(),sys.platform,platform.machine(),sysconfig.get_platform())))').Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Python identity probe failed.' }
+          $parts = $probe -split '\|'
+          if ($parts.Count -ne 4 -or $parts[0] -ne '3.13.16' -or $parts[1] -ne 'win32') {
+            throw "Expected native Windows CPython 3.13.16; got $probe."
+          }
+          $expectedMachines = $env:EXPECTED_MACHINES -split ','
+          if ($parts[2].ToUpperInvariant() -notin $expectedMachines) {
+            throw "Wrong process architecture for $($env:TARGET_ARCH): $probe"
+          }
+          $actualPlatform = $parts[3].Replace('-', '_').ToLowerInvariant()
+          if ($actualPlatform -ne $env:EXPECTED_WHEEL_PLATFORM) {
+            throw "Wrong Python platform tag for $($env:TARGET_ARCH): expected $($env:EXPECTED_WHEEL_PLATFORM), got $actualPlatform."
+          }
+          Write-Host "PYTHON_EXE=$python"
+          Write-Host "PYTHON_IDENTITY=$probe"
+          Write-Host "NATIVE_ARCHITECTURE_QUALIFICATION=PASS"
+
+      - name: Generate hash-pinned lock candidate
+        shell: pwsh
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          LOCK_FILE: ${{ matrix.lock-file }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = $env:GITHUB_WORKSPACE
+          $direct = Join-Path $repo 'backend/windows/requirements-windows.txt'
+          $work = Join-Path $env:RUNNER_TEMP ("rdt-lockgen-" + $env:TARGET_ARCH.ToLowerInvariant())
+          $toolVenv = Join-Path $work 'tools'
+          $inputFile = Join-Path $work 'requirements-windows.in'
+          $wheelhouse = Join-Path $work 'wheelhouse'
+          $candidateDir = Join-Path $repo (Join-Path 'lock-candidates' $env:TARGET_ARCH.ToLowerInvariant())
+          $candidateLock = Join-Path $candidateDir $env:LOCK_FILE
+          $report = Join-Path $candidateDir 'qualification-report.txt'
+          New-Item -ItemType Directory -Force -Path $work,$candidateDir,$wheelhouse | Out-Null
+          Copy-Item -LiteralPath $direct -Destination $inputFile
+          $basePython = (Get-Command python.exe -ErrorAction Stop).Source
+          & $basePython -m venv $toolVenv
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create isolated lock-tool environment.' }
+          $toolPython = Join-Path $toolVenv 'Scripts/python.exe'
+          & $toolPython -m pip install --disable-pip-version-check --no-cache-dir --index-url https://pypi.org/simple --only-binary=:all: --upgrade 'pip==26.2.2' 'pip-tools==7.6.2'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the version-pinned lock-generation tools.' }
+          $pipVersion = (& $toolPython -m pip --version).Trim()
+          $pipToolsVersion = (& $toolPython -m piptools compile --version).Trim()
+          $toolFreeze = (& $toolPython -m pip freeze | Out-String).Trim()
+          Write-Host "PIP_TOOL_VERSION=$pipVersion"
+          Write-Host "PIP_TOOLS_VERSION=$pipToolsVersion"
+          Write-Host "LOCK_TOOL_ENVIRONMENT=$toolFreeze"
+          if (-not $pipVersion.Contains('pip 26.2.2')) { throw "Unexpected pip version: $pipVersion" }
+          if (-not $pipToolsVersion.Contains('7.6.2')) { throw "Unexpected pip-tools version: $pipToolsVersion" }
+          & $toolPython -m piptools compile `
+            --no-config `
+            --index-url https://pypi.org/simple `
+            --no-emit-index-url `
+            --no-emit-options `
+            --resolver=backtracking `
+            --generate-hashes `
+            --allow-unsafe `
+            --no-reuse-hashes `
+            --rebuild `
+            --upgrade `
+            --no-header `
+            --uploaded-prior-to=2026-10-23T00:00:00Z `
+            --pip-args=--only-binary=:all: `
+            --output-file $candidateLock `
+            $inputFile
+          if ($LASTEXITCODE -ne 0) { throw 'pip-compile failed; no qualified lock will be emitted.' }
+          $validator = Join-Path $repo 'backend/windows/scripts/validate_windows_requirements_lock.py'
+          & $toolPython $validator --lock $candidateLock --target-arch $env:TARGET_ARCH --direct-requirements $direct
+          if ($LASTEXITCODE -ne 0) { throw 'Static/native lock validation failed.' }
+          $lockHash = (Get-FileHash -LiteralPath $candidateLock -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "LOCK_PATH=$candidateLock"
+          Write-Host "LOCK_SHA256=$lockHash"
+          Write-Host "LOCK_PACKAGE_COUNT=$((Get-Content -LiteralPath $candidateLock | Select-String -Pattern '^\s*[A-Za-z0-9][A-Za-z0-9._-]*==').Count)"
+          @(
+            "SOURCE_REF=$env:GITHUB_REF"
+            "SOURCE_SHA=$((git -C $repo rev-parse HEAD).Trim())"
+            "TARGET_ARCH=$env:TARGET_ARCH"
+            "PYTHON_IDENTITY=$((& $basePython -c 'import platform,sys,sysconfig; print("|".join((platform.python_version(),sys.platform,platform.machine(),sysconfig.get_platform())))').Trim())"
+            "PIP_VERSION=$pipVersion"
+            "PIP_TOOLS_VERSION=$pipToolsVersion"
+            "PIP_TOOLS_FREEZE_BEGIN"
+            $toolFreeze
+            "PIP_TOOLS_FREEZE_END"
+            "LOCK_FILE=$env:LOCK_FILE"
+            "LOCK_SHA256=$lockHash"
+            "DIRECT_REQUIREMENTS_SHA256=$((Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant())"
+            "RESOLUTION_UPLOAD_CUTOFF=2026-10-23T00:00:00Z"
+          ) | Set-Content -LiteralPath $report -Encoding utf8
+
+      - name: Download only hash-verified compatible wheels
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = $env:GITHUB_WORKSPACE
+          $arch = '${{ matrix.arch }}'.ToLowerInvariant()
+          $lock = Join-Path $repo (Join-Path (Join-Path 'lock-candidates' $arch) '${{ matrix.lock-file }}')
+          $wheelhouse = Join-Path (Join-Path $env:RUNNER_TEMP ("rdt-lockgen-" + $arch)) 'wheelhouse'
+          $python = Join-Path (Join-Path (Join-Path $env:RUNNER_TEMP ("rdt-lockgen-" + $arch)) 'tools') 'Scripts/python.exe'
+          & $python -m pip download --disable-pip-version-check --no-cache-dir --index-url https://pypi.org/simple --require-hashes --only-binary=:all: --dest $wheelhouse --requirement $lock
+          if ($LASTEXITCODE -ne 0) { throw 'Wheel-only hash-enforced download failed; candidate is not qualified.' }
+          $wheelFiles = @(Get-ChildItem -LiteralPath $wheelhouse -Filter '*.whl' -File)
+          if ($wheelFiles.Count -eq 0) { throw 'No wheels were downloaded for qualification.' }
+          $inventory = Join-Path (Join-Path $repo (Join-Path 'lock-candidates' $arch)) 'wheel-inventory.sha256'
+          $wheelFiles | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content -LiteralPath $inventory -Encoding ascii
+          Write-Host "WHEEL_COUNT=$($wheelFiles.Count)"
+          Write-Host "WHEEL_INVENTORY=$inventory"
+
+      - name: Audit actual wheel platform tags
+        shell: pwsh
+        env:
+          EXPECTED_WHEEL_PLATFORM: ${{ matrix.wheel-platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $arch = $env:TARGET_ARCH.ToLowerInvariant()
+          $wheelhouse = Join-Path (Join-Path $env:RUNNER_TEMP ("rdt-lockgen-" + $arch)) 'wheelhouse'
+          $bad = @()
+          foreach ($wheel in Get-ChildItem -LiteralPath $wheelhouse -Filter '*.whl' -File) {
+            $name = $wheel.Name.ToLowerInvariant()
+            $allowedPattern = '-(any|' + [regex]::Escape($env:EXPECTED_WHEEL_PLATFORM) + ').whl$'
+            if ($name -notmatch $allowedPattern) {
+              $bad += $wheel.Name
+            }
+          }
+          if ($bad.Count -gt 0) { throw "Wheel filename has a non-target platform tag: $($bad -join ', ')" }
+          Write-Host "WHEEL_PLATFORM_AUDIT=PASS"
+          Write-Host "EXPECTED_PLATFORM=$($env:EXPECTED_WHEEL_PLATFORM)"
+
+      - name: Install offline into a clean environment with hash checking
+        shell: pwsh
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = $env:GITHUB_WORKSPACE
+          $arch = $env:TARGET_ARCH.ToLowerInvariant()
+          $work = Join-Path $env:RUNNER_TEMP ("rdt-lockgen-" + $arch)
+          $candidateDir = Join-Path $repo (Join-Path 'lock-candidates' $arch)
+          $lock = Join-Path $candidateDir ("requirements-windows-$arch.txt")
+          $wheelhouse = Join-Path $work 'wheelhouse'
+          $basePython = (Get-Command python.exe -ErrorAction Stop).Source
+          & $basePython -m venv $work\qualification
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create clean offline qualification environment.' }
+          $qualPython = Join-Path (Join-Path $work 'qualification') 'Scripts/python.exe'
+          & $qualPython -m pip install --disable-pip-version-check --no-index --find-links $wheelhouse --require-hashes --only-binary=:all: --no-cache-dir --requirement $lock
+          if ($LASTEXITCODE -ne 0) { throw 'Offline hash-enforced install failed.' }
+          & $qualPython -m pip check
+          if ($LASTEXITCODE -ne 0) { throw 'pip check failed in clean qualification environment.' }
+          & $qualPython -c 'import fastapi,numpy,PIL,multipart,qrcode,uvicorn,PyInstaller; from qrcode.image.svg import SvgPathImage; print("RUNTIME_IMPORT_SMOKE=PASS"); print("NUMPY="+numpy.__version__); print("PILLOW="+PIL.__version__); print("PYINSTALLER="+PyInstaller.__version__)'
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime dependency import smoke test failed.' }
+          $validator = Join-Path $repo 'backend/windows/scripts/validate_windows_requirements_lock.py'
+          $lockedJson = (& $qualPython -c 'import json,runpy,sys; ns=runpy.run_path(sys.argv[1]); p=ns["parse_lock"](open(sys.argv[2],encoding="utf-8").read()); print(json.dumps({k:v["version"] for k,v in p.items()}))' $validator $lock | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Could not parse exact locked dependency graph.' }
+          $locked = $lockedJson | ConvertFrom-Json -AsHashtable
+          $installedJson = (& $qualPython -c 'import importlib.metadata as m,json,re; norm=lambda s:re.sub(r"[-_.]+","-",s).lower(); print(json.dumps({norm(d.metadata["Name"]):d.version for d in m.distributions() if d.metadata.get("Name")}))' | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect installed dependency graph.' }
+          $installed = $installedJson | ConvertFrom-Json -AsHashtable
+          $missing = @($locked.Keys | Where-Object { -not $installed.ContainsKey($_) })
+          $wrong = @($locked.Keys | Where-Object { $installed.ContainsKey($_) -and $installed[$_] -ne $locked[$_] })
+          $extra = @($installed.Keys | Where-Object { -not $locked.ContainsKey($_) -and $_ -ne 'pip' })
+          if ($missing.Count -or $wrong.Count -or $extra.Count) {
+            throw "Installed graph differs from lock. Missing=$($missing -join ','); WrongVersions=$($wrong -join ','); UnlockedExtras=$($extra -join ',')"
+          }
+          $pipVersion = (& $qualPython -m pip --version).Trim()
+          $lockHash = (Get-FileHash -LiteralPath $lock -Algorithm SHA256).Hash.ToLowerInvariant()
+          $report = Join-Path $candidateDir 'qualification-report.txt'
+          Add-Content -LiteralPath $report -Encoding utf8 -Value @(
+            'WHEEL_ONLY_HASHED_DOWNLOAD=PASS'
+            'OFFLINE_REQUIRE_HASHES_INSTALL=PASS'
+            'PIP_CHECK=PASS'
+            'RUNTIME_IMPORT_SMOKE=PASS'
+            'INSTALLED_GRAPH_MATCHES_LOCK=PASS'
+            "INSTALLED_PACKAGE_COUNT=$($installed.Count)"
+            "PIP_IN_QUALIFICATION_ENV=$pipVersion"
+            "LOCK_SHA256=$lockHash"
+          )
+          Write-Host "LOCK_SHA256=$lockHash"
+          Write-Host "INSTALLED_PACKAGE_COUNT=$($installed.Count)"
+          Write-Host 'INSTALLED_GRAPH_MATCHES_LOCK=PASS'
+
+      - name: Upload qualified lock candidate and evidence
+        if: success()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: RDT-Windows-Python-Lock-Candidate-${{ matrix.arch }}
+          path: |
+            lock-candidates/${{ matrix.artifact-subdir }}/requirements-windows-${{ matrix.artifact-subdir }}.txt
+            lock-candidates/${{ matrix.artifact-subdir }}/qualification-report.txt
+            lock-candidates/${{ matrix.artifact-subdir }}/wheel-inventory.sha256
+          if-no-files-found: error
+          retention-days: 14

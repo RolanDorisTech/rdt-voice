@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0-dev.10.0D.53",
-  "notes": "Connect v0.2-dev.10 — Build 0D53. Restores the dedicated native About panel, fixes duplicate version presentation, and refreshes the branded About credits and custom macOS Apple Silicon installer. Signed updater artifacts are included.",
-  "pub_date": "2026-10-19T23:01:08Z",
+  "version": "0.2.0-dev.11.1A.10",
+  "notes": "RDT Connect v0.2.0-dev.11 — Build 1A10. Adds the adaptive macOS menu-bar icon verified in Light and Dark appearance, refreshes About and Credits, improves licensing guidance, and updates the Apple Silicon installer and offline runtime. The app is ad-hoc-signed and not notarized by Apple; first-launch security prompts may occur.",
+  "pub_date": "2026-10-23T14:52:38Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzdXMjB0V3RqMTVSMmtXeVBEK0F6N0JoMTZOTzcwNnVydEczKzljNGF1Q2xSRmh1R01KN3ZFZ1dXdENKcU5qMGJHQ1k1QktmaDN4L2RDRjl5UGFFelFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDQ5MTM1CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMC4wRC41Mwp6NHN2R2tCTWVkTlczbGpnT0tnSWNPZ2ZuYUxsV2xDV0JkNldOR2Q1akY2a1M0ekdOKzVoYzMzMlRCUThxbUZNUU4wZ0lEajFId2JHVHdBaEdaR1FCdz09Cg==",
-      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2-dev.10-0d53/RDT.Connect.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzRoTUIzMkpYZDJtWVZJNkk3RmtjNW9qREVHWDVGa01kRkFVd0RudEE4am9kOTZhTEM3L3ZQRlNzMFdNS3dFdnZwWkg5dzVRRnZ6L2R3ay9lWDhGRVFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNzYyODg3CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMS4xQS4xMApnQ2p4WFc0b2dZdFh4ZUkyaHh6dUlERmFReUNaWTU1ZW9jejRBdlprelZlSDdzVXFhYWp5RHRJS2tKcS9Eb1pPQ3BZQW5yM2QyVzVXQ1VGNTdDcm9DZz09Cg==",
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11/RDT.Connect.app.tar.gz"
     }
   }
 }

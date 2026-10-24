@@ -97,9 +97,12 @@ jobs:
           PYTHONPATH=backend/whisper_cpp "$RUNNER_TEMP/rdt-python/bin/python" \
             backend/whisper_cpp/tests/test_model_registry.py -v \
             2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/model-registry-tests.log"
+          "$RUNNER_TEMP/rdt-python/bin/python" backend/whisper_cpp/tests/test_packaged_qualification.py -v \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-qualifier-model-root-tests.log"
           "$RUNNER_TEMP/rdt-python/bin/python" -m py_compile \
             backend/linux/server.py backend/whisper_cpp/engine.py \
             backend/whisper_cpp/model_registry.py \
+            backend/whisper_cpp/qualification_support.py \
             backend/whisper_cpp/scripts/native_cpu_smoke.py \
             .github/scripts/qualify-packaged-linux-backend.py
           bash -n backend/linux/run-server.sh

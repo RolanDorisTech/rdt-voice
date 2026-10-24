@@ -92,14 +92,13 @@ def main() -> int:
         raise SystemExit("packaged_backend_or_worker_not_executable")
 
     # Verify the exact approved model bytes and sidecar using the source registry.
+    # Preserve the repository-root import setup used by this standalone script.
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    from backend.whisper_cpp.model_registry import model_spec, verify_cached_model
+    from backend.whisper_cpp.qualification_support import verify_model_in_directory
     model_id = "large-v3-turbo"
-    spec = model_spec(model_id)
-    model_path = model_dir / spec["file"]
-    sidecar = verify_cached_model(model_id, model_path)
+    spec, model_path, sidecar = verify_model_in_directory(model_id, model_dir)
 
     token = secrets.token_urlsafe(48)
     with tempfile.TemporaryDirectory(prefix="rdt-linux-package-smoke-") as td:

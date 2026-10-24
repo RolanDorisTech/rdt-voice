@@ -279,14 +279,14 @@ jobs:
           dpkg-deb -x "$DEB" "$RUNNER_TEMP/rdt-linux-deb-root"
           printf '%s\n' "$DEB" > "$RUNNER_TEMP/rdt-linux-qualification/deb-path.txt"
           find "$RUNNER_TEMP/rdt-linux-deb-root" -type f \
-            \( -path '*/resources/rdt_voice_backend/rdt_voice_backend' \
-               -o -path '*/resources/rdt_voice_backend/rdt_whisper_worker' \
-               -o -path '*/resources/rdt_voice_web/index.html' \
-               -o -path '*/resources/rdt_voice_web/worker.js' \) \
+            \( -path '*/rdt_voice_backend/rdt_voice_backend' \
+               -o -path '*/rdt_voice_backend/rdt_whisper_worker' \
+               -o -path '*/rdt_voice_web/index.html' \
+               -o -path '*/rdt_voice_web/worker.js' \) \
             -print | sort | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
-          grep -q '/resources/rdt_voice_backend/rdt_voice_backend$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
-          grep -q '/resources/rdt_voice_backend/rdt_whisper_worker$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
-          grep -q '/resources/rdt_voice_web/index.html$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_backend/rdt_voice_backend$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_backend/rdt_whisper_worker$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_web/index.html$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
           mkdir -p "$RUNNER_TEMP/rdt-linux-qualification/package"
           cp "$DEB" "$RUNNER_TEMP/rdt-linux-qualification/package/"
 
@@ -294,9 +294,9 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/rdt-linux-deb-root"
-          BACKEND="$(find "$ROOT" -type f -path '*/resources/rdt_voice_backend/rdt_voice_backend' -print -quit)"
-          WORKER="$(find "$ROOT" -type f -path '*/resources/rdt_voice_backend/rdt_whisper_worker' -print -quit)"
-          FRONTEND="$(find "$ROOT" -type f -path '*/resources/rdt_voice_web/index.html' -print -quit)"
+          BACKEND="$(find "$ROOT" -type f -path '*/rdt_voice_backend/rdt_voice_backend' -print -quit)"
+          WORKER="$(find "$ROOT" -type f -path '*/rdt_voice_backend/rdt_whisper_worker' -print -quit)"
+          FRONTEND="$(find "$ROOT" -type f -path '*/rdt_voice_web/index.html' -print -quit)"
           test -n "$BACKEND" && test -n "$WORKER" && test -n "$FRONTEND"
           FRONTEND_DIR="$(dirname "$FRONTEND")"
           "$RUNNER_TEMP/rdt-python/bin/python" .github/scripts/qualify-packaged-linux-backend.py \

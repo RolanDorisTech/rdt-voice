@@ -1,4 +1,4 @@
-name: RDT Connect Linux Native Qualification (manual)
+name: RDT Connect Linux ARM64 Native Qualification (manual)
 
 on:
   workflow_dispatch:
@@ -17,8 +17,8 @@ concurrency:
 
 jobs:
   linux-x64-native-qualification:
-    name: Build and qualify Linux x64 (no publish)
-    runs-on: ubuntu-22.04
+    name: Build and qualify Linux ARM64 Ubuntu (no publish)
+    runs-on: ubuntu-22.04-arm
     timeout-minutes: 100
     env:
       CARGO_TERM_COLOR: always
@@ -321,6 +321,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rdt-linux-qualification/package"
           cp "$DEB" "$RUNNER_TEMP/rdt-linux-qualification/package/"
 
+      - name: Verify native Ubuntu ARM64 Debian package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "aarch64"
+          test "$(dpkg --print-architecture)" = "arm64"
+          DEB="$(find "$RUNNER_TEMP/rdt-linux-qualification/package" -maxdepth 1 -name '*.deb' -type f -print -quit)"
+          test -n "$DEB"
+          dpkg-deb --info "$DEB"
+          test "$(dpkg-deb -f "$DEB" Architecture)" = "arm64"
+          test "$(dpkg-deb -f "$DEB" Version)" = "0.2.0-dev.11.4U.1"
+
       - name: One bounded real inference through the packaged API
         run: |
           set -euo pipefail
@@ -345,7 +357,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rdt-connect-dev11-linux-qualification-${{ github.run_id }}
+          name: rdt-connect-dev11-linux-arm64-qualification-${{ github.run_id }}
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/rdt-linux-qualification/**

@@ -1,11 +1,19 @@
 {
   "bundle": {
     "createUpdaterArtifacts": false,
-    "targets": ["deb"],
+    "targets": [
+      "deb"
+    ],
     "resources": {
       "resources/rdt_voice_web/": "rdt_voice_web/",
       "resources/third_party_notices/": "third_party_notices/",
       "resources/rdt_voice_backend/": "rdt_voice_backend/"
-    }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ]
   }
 }

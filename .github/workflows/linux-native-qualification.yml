@@ -270,7 +270,7 @@ jobs:
           test -d rdt_connect/src-tauri/resources/third_party_notices
           test -f rdt_connect/src-tauri/resources/rdt_voice_web/index.html
           test -f rdt_connect/src-tauri/resources/rdt_voice_web/worker.js
-          (cd rdt_connect && npx --no-install tauri build --bundles deb --verbose) \
+          (cd rdt_connect && npx --no-install tauri build --config src-tauri/tauri.linux.conf.json --bundles deb --verbose) \
             2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/tauri-linux-build.log"
           DEB="$(find rdt_connect/src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -type f -print -quit)"
           test -n "$DEB"

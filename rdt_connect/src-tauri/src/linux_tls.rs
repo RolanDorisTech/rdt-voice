@@ -402,13 +402,16 @@ pub(crate) fn generate_tls_files(https_dir: &Path) -> Result<GeneratedTls, Strin
     let serial = staging.join("rdt-local-ca.srl");
     write_new_private(&ca_cnf, CA_CNF)?;
     write_new_private(&ext, SERVER_EXT)?;
+    // Give each generated CA a unique issuer identity so an unrelated
+    // root with the same display name cannot create issuer ambiguity.
+    let ca_subject = format!("/CN=RDT Connect Local HTTPS CA {suffix}");
 
     openssl_ok(
         [
             OsStr::new("req"), OsStr::new("-new"), OsStr::new("-x509"), OsStr::new("-newkey"), OsStr::new("rsa:3072"),
             OsStr::new("-nodes"), OsStr::new("-days"), OsStr::new(CA_DAYS), OsStr::new("-sha256"),
             OsStr::new("-keyout"), ca_key.as_os_str(), OsStr::new("-out"), ca.as_os_str(),
-            OsStr::new("-subj"), OsStr::new("/CN=RDT Connect Local HTTPS CA"),
+            OsStr::new("-subj"), OsStr::new(ca_subject.as_str()),
             OsStr::new("-config"), ca_cnf.as_os_str(), OsStr::new("-extensions"), OsStr::new("v3_ca"),
         ],
         "generate the loopback-only local certificate authority",
@@ -1088,7 +1091,7 @@ mod tests {
         assert_eq!(empty.mode, "https");
         let (_tmp, g) = generated("serde");
         let json = serde_json::to_string(&config_for(&g)).unwrap();
-        assert!(json.contains("linuxCaSha256") && json.contains("windowsCertificateSha256"));
+        assert!(json.contains("linuxCaSha256") && json.contains("linuxCertificateSha256"));
         let back: LocalTlsConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back.linux_ca_sha256, config_for(&g).linux_ca_sha256);
     }

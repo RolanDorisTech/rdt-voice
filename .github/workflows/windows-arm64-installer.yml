@@ -146,7 +146,8 @@ jobs:
             throw "Expected native ARM64 runner; got $arch."
           }
 
-          $python = (& py -3.13 -c 'import sys; print(sys.executable)').Trim()
+          $pythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue
+          $python = if ($pythonCommand) { $pythonCommand.Source } else { $null }
           if (-not $python -or -not (Test-Path $python)) {
             throw 'Native Python 3.13 executable not found.'
           }
@@ -163,6 +164,15 @@ jobs:
             -FfmpegDir $env:RDT_FFMPEG_DIR `
             -EnableVulkan `
             -RequireGpuWorker
+
+      - name: Upload Windows ARM64 native worker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows-arm64-native-worker-diagnostics
+          path: ${{ runner.temp }}/rdt-ARM64-worker-*.log
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Install frontend dependencies
         working-directory: rdt_connect

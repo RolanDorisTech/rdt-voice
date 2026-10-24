@@ -91,18 +91,26 @@ function Build-WorkerVariant {
     [string]$Vulkan,
     [string]$ArmDotprod = 'OFF'
   )
-  $dir = Join-Path $buildRoot "worker-build-$Variant"
+  $workerBuildBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+  $dir = Join-Path $workerBuildBase "rdt-$TargetArch-worker-$Variant"
+  $buildLog = Join-Path $workerBuildBase "rdt-$TargetArch-worker-$Variant.log"
   cmake -S (Join-Path $RepoRoot 'backend/whisper_cpp/worker') `
     -B $dir -A $TargetArch `
     "-DWHISPER_CPP_SOURCE=$cmakeWhisperSource" `
     "-DRDT_ENABLE_CUDA=$Cuda" `
     "-DRDT_ENABLE_VULKAN=$Vulkan" `
     "-DRDT_ENABLE_ARM_DOTPROD=$ArmDotprod" `
-    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_BUILD_TYPE=Release 2>&1 | Tee-Object -FilePath $buildLog
   if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed for $Variant worker." }
 
-  cmake --build $dir --config Release --parallel 2
-  if ($LASTEXITCODE -ne 0) { throw "Native $Variant worker build failed." }
+  cmake --build $dir --config Release --parallel 2 --verbose 2>&1 | Tee-Object -FilePath $buildLog -Append
+  $buildExitCode = $LASTEXITCODE
+  if ($buildExitCode -ne 0) {
+    Write-Host "::group::Last 160 lines from $buildLog"
+    Get-Content -LiteralPath $buildLog -Tail 160 | ForEach-Object { Write-Host $_ }
+    Write-Host "::endgroup::"
+    throw "Native $Variant worker build failed (exit $buildExitCode). Full log: $buildLog"
+  }
 
   $exe = Join-Path $dir 'bin/rdt_whisper_worker.exe'
   if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {

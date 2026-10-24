@@ -192,6 +192,22 @@ jobs:
           $validator = Join-Path $repo 'backend/windows/scripts/validate_windows_requirements_lock.py'
           & $toolPython $validator --lock $candidateLock --target-arch $env:TARGET_ARCH --direct-requirements $direct
           if ($LASTEXITCODE -ne 0) { throw 'Static/native lock validation failed.' }
+
+          # Use the same canonical UTF-8/LF hash definition as the source guard.
+          # Keep the raw checkout hash separate for diagnostics only.
+          $directBytes = [System.IO.File]::ReadAllBytes($direct)
+          $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+          $directText = $strictUtf8.GetString($directBytes)
+          $canonicalText = $directText.Replace("`r`n", "`n").Replace("`r", "`n")
+          $canonicalBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $directHash = [Convert]::ToHexString($sha256.ComputeHash($canonicalBytes)).ToLowerInvariant()
+          } finally {
+            $sha256.Dispose()
+          }
+          $directRawHash = (Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant()
+
           $lockHash = (Get-FileHash -LiteralPath $candidateLock -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "LOCK_PATH=$candidateLock"
           Write-Host "LOCK_SHA256=$lockHash"
@@ -208,7 +224,8 @@ jobs:
             "PIP_TOOLS_FREEZE_END"
             "LOCK_FILE=$env:LOCK_FILE"
             "LOCK_SHA256=$lockHash"
-            "DIRECT_REQUIREMENTS_SHA256=$((Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant())"
+            "DIRECT_REQUIREMENTS_SHA256=$directHash"
+            "DIRECT_REQUIREMENTS_RAW_SHA256=$directRawHash"
             "RESOLUTION_UPLOAD_CUTOFF=2026-10-23T00:00:00Z"
           ) | Set-Content -LiteralPath $report -Encoding utf8
 

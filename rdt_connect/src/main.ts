@@ -257,11 +257,49 @@ function modelMenuInfo(option: HTMLOptionElement) {
   return modelMenuDetails[option.value] || { name: option.textContent || option.value, description: "Whisper model", size: "Size varies" };
 }
 function modelToneFor(model: string): "tiny" | "base" | "small" | "turbo" | "large" {
-  if (model.endsWith("whisper-tiny-mlx")) return "tiny";
-  if (model.endsWith("whisper-base-mlx")) return "base";
-  if (model.endsWith("whisper-small-mlx")) return "small";
-  if (model.endsWith("whisper-large-v3-turbo")) return "turbo";
+  if (model === "tiny" || model.endsWith("whisper-tiny-mlx")) return "tiny";
+  if (model === "base" || model.endsWith("whisper-base-mlx")) return "base";
+  if (model === "small" || model.endsWith("whisper-small-mlx")) return "small";
+  if (model === "large-v3-turbo" || model.endsWith("whisper-large-v3-turbo")) return "turbo";
   return "large";
+}
+function isNativeGgmlCatalog(): boolean {
+  return modelSelect.options.length > 0 && modelSelect.options[0].value === "tiny";
+}
+type PlatformModelOption = { id: string; name: string; description: string; size: string; recommended: boolean };
+async function initializePlatformModelCatalog() {
+  try {
+    const catalog = await invoke<PlatformModelOption[]>("get_platform_model_catalog");
+    if (!Array.isArray(catalog) || catalog.length !== 5 || catalog.some((item) => !item || typeof item.id !== "string" || typeof item.name !== "string" || typeof item.description !== "string" || typeof item.size !== "string")) return;
+    const previousValue = modelSelect.value;
+    for (const key of Object.keys(modelMenuDetails)) delete modelMenuDetails[key];
+    modelOptionBaseLabels.clear();
+    modelSelect.replaceChildren();
+    for (const item of catalog) {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.name;
+      modelSelect.appendChild(option);
+      modelOptionBaseLabels.set(item.id, item.name);
+      modelMenuDetails[item.id] = { name: item.name, description: item.description, size: item.size, recommended: item.recommended };
+    }
+    let savedValue: string | null = null;
+    try { savedValue = localStorage.getItem("rdt_voice_desktop_model"); } catch { /* optional preference */ }
+    const recommended = catalog.find((item) => item.recommended)?.id || catalog[0].id;
+    modelSelect.value = catalog.some((item) => item.id === savedValue) ? savedValue! : (catalog.some((item) => item.id === previousValue) ? previousValue : recommended);
+    const label = modelSelect.closest(".local-model-label")?.querySelector("label");
+    if (label) label.textContent = isNativeGgmlCatalog() ? "Choose a model — GGML (CPU baseline):" : "Choose a model — Apple MLX:";
+    const current = modelMenuInfo(modelSelect.options[modelSelect.selectedIndex]);
+    modelSelectCurrentName.textContent = current.name;
+    modelSelectCurrentDetail.textContent = `${current.size}${current.recommended ? " · Recommended" : ""}`;
+    renderModelSelectMenu();
+    syncModelSelectPresentation();
+    void refreshModelCacheBadges();
+    void refreshModelStorageStatus();
+    void refreshModelDownloadStatus();
+  } catch {
+    // Older native binaries retain the bundled platform-specific catalog.
+  }
 }
 function syncModelSelectPresentation() {
   const selected = modelSelect.options[modelSelect.selectedIndex];
@@ -527,6 +565,7 @@ try {
   }
 } catch { /* Private browsing/storage policies should not block startup. */ }
 renderModelSelectMenu();
+void initializePlatformModelCatalog();
 let preferredBrowserId = "default";
 try { preferredBrowserId = localStorage.getItem("rdt_connect_preferred_browser") || "default"; } catch { /* optional preference */ }
 modelSelect.addEventListener("change", () => {
@@ -1539,7 +1578,7 @@ function updateSettingsLockHelp() {
     [linkTlsButton, "Link and validate the selected certificate and matching key."],
     [trustTlsButton, "Add the selected root CA to this Mac's login Keychain."],
     [removeTlsTrustButton, "Remove only HTTPS trust entries previously added by RDT Connect."],
-    [deleteRdtModelsButton, "Delete only supported RDT Connect MLX Whisper cache entries; other repositories remain untouched."],
+    [deleteRdtModelsButton, "Delete only supported RDT Connect Whisper model caches; unrelated files and repositories remain untouched."],
   ];
   for (const [element, title] of titledControls) element.title = stopServerSettingTitle(title);
   for (const element of Array.from(modelStorageLocationsEl.querySelectorAll<HTMLButtonElement>("button"))) {
@@ -1552,7 +1591,7 @@ function updateSettingsLockHelp() {
     ? stopServerSettingTitle("Finish or cancel active downloads before deleting cached models.")
     : modelDownloadBusy
       ? "Finish or cancel the active model download to use this feature. Other model repositories are not touched."
-      : "Delete only the supported RDT Connect MLX Whisper cache entries; other repositories are not touched.";
+      : "Delete only the supported RDT Connect Whisper model caches; unrelated files and repositories are not touched.";
   transportHttpsInput.disabled = locked;
   transportHttpInput.disabled = locked;
   transportHttpsInput.title = stopServerSettingTitle("Use HTTPS with a valid, trusted certificate.");
@@ -1606,7 +1645,7 @@ function renderModelStorageSummary(status: ModelStorageStatus) {
     modelStorageSummary.textContent = `Verified local model copy found. RDT Connect will use ${status.activeRoot} for ${status.model}.`;
     modelStorageSummary.className = "tls-status tls-good";
   } else {
-    modelStorageSummary.textContent = `No verified local snapshot found for ${status.model}. A new download will be stored in ${status.activeRoot}.`;
+    modelStorageSummary.textContent = `No verified local model copy found for ${status.model}. A new download will be stored in ${status.activeRoot}.`;
     modelStorageSummary.className = "tls-status tls-warning";
   }
   if (backend.running) modelStorageSummary.textContent += " Stop the server before editing storage locations.";
@@ -1637,6 +1676,8 @@ async function refreshModelStorageStatus(showErrors = false) {
 }
 
 function friendlyModelName(model: string): string {
+  const platformModel = modelMenuDetails[model];
+  if (platformModel) return `Whisper ${platformModel.name}`;
   const names: Record<string, string> = {
     "mlx-community/whisper-large-v3-turbo": "Whisper Large v3 Turbo",
     "mlx-community/whisper-large-v3-mlx": "Whisper Large v3",
@@ -1647,6 +1688,8 @@ function friendlyModelName(model: string): string {
   return names[model] || model.split("/").pop() || "Whisper model";
 }
 function approximateModelSizeLabel(model: string): string {
+  const platformModel = modelMenuDetails[model];
+  if (platformModel) return platformModel.size;
   const sizes: Record<string, string> = {
     "mlx-community/whisper-large-v3-turbo": "~1.61 GB",
     "mlx-community/whisper-large-v3-mlx": "~3.08 GB",
@@ -1962,7 +2005,7 @@ deleteRdtModelsButton.addEventListener("click", async () => {
     const option = Array.from(modelSelect.options).find((candidate) => candidate.value === model);
     return option ? modelMenuInfo(option).name : model;
   });
-  const approved = window.confirm(`Permanently delete only these selected RDT Connect MLX model caches?\n\n${selectedNames.map((name) => `• ${name}`).join("\n")}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.`);
+  const approved = window.confirm(`Permanently delete only these selected RDT Connect Whisper model caches?\n\n${selectedNames.map((name) => `• ${name}`).join("\n")}\n\nUnselected models, unrelated files and repositories, and EasyWhisper browser data will remain untouched.`);
   if (!approved) return;
   deleteRdtModelsButton.disabled = true;
   try {

@@ -41,6 +41,10 @@ fn app_version_label() -> String {
     format!("v{version}")
 }
 #[cfg(target_os = "linux")]
+mod linux_ggml_models;
+#[cfg(target_os = "linux")]
+mod linux_paths;
+#[cfg(target_os = "linux")]
 mod linux_tls;
 
 const BUILD_ID: &str = env!("RDT_BUILD_ID");
@@ -61,12 +65,9 @@ fn stop_trace_mutex() -> &'static Mutex<String> {
 }
 
 fn stop_trace_log_path() -> Option<PathBuf> {
-    home_dir().ok().map(|home| {
-        home.join("Library")
-            .join("Logs")
-            .join("RDT Connect")
-            .join("stop-previous-server.log")
-    })
+    application_log_dir("RDT Connect")
+        .ok()
+        .map(|directory| directory.join("stop-previous-server.log"))
 }
 
 fn unix_epoch_millis() -> u128 {
@@ -236,10 +237,10 @@ fn sha256_file_hex(path: &Path) -> Result<String, String> {
         .args(["dgst", "-sha256"])
         .arg(path)
         .output()
-        .map_err(|e| format!("Could not calculate a TLS integrity hash: {e}"))?;
+        .map_err(|e| format!("Could not calculate a SHA-256 integrity hash: {e}"))?;
     if !output.status.success() {
         return Err(format!(
-            "Could not calculate a TLS integrity hash: {}",
+            "Could not calculate a SHA-256 integrity hash: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
@@ -338,6 +339,46 @@ fn home_dir() -> Result<PathBuf, String> {
         .map(PathBuf::from)
         .ok_or_else(|| "Could not determine the current user's home folder.".to_string())
 }
+fn application_support_dir(app_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(home_dir()?
+            .join("Library")
+            .join("Application Support")
+            .join(app_name));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Preserve the legacy path used by this branch on Windows; relocating it
+        // is a separate state-migration task and is not required for the Linux fix.
+        return Ok(home_dir()?
+            .join("Library")
+            .join("Application Support")
+            .join(app_name));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return linux_paths::application_support_dir(app_name);
+    }
+    #[allow(unreachable_code)]
+    Err("Application-data paths are unsupported on this operating system.".into())
+}
+fn application_log_dir(app_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(home_dir()?.join("Library").join("Logs").join(app_name));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(home_dir()?.join("Library").join("Logs").join(app_name));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return linux_paths::application_log_dir(app_name);
+    }
+    #[allow(unreachable_code)]
+    Err("Application log paths are unsupported on this operating system.".into())
+}
 
 fn resolve_resource_dir(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(dir) = app.path().resource_dir() {
@@ -345,34 +386,40 @@ fn resolve_resource_dir(app: &AppHandle) -> Result<PathBuf, String> {
             return Ok(dir);
         }
     }
-    // In `tauri dev`, resources are left in the source tree. In a packaged app,
-    // the first branch points at Contents/Resources.
+    // In `tauri dev`, resources are left in the source tree. In packaged builds,
+    // use the platform's actual Tauri resource directory.
     let source_resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
     if source_resources.exists() {
         return Ok(source_resources);
     }
-    Err("Desktop bundle resources are missing. Run scripts/prepare-macos-bundle.sh before building.".into())
+    Err("Desktop bundle resources are missing. Run the platform resource-preparation script before building.".into())
 }
 
 impl BackendState {
     fn new(resource_dir: PathBuf) -> Result<Self, String> {
-        let home = home_dir()?;
-        let app_support = home
-            .join("Library")
-            .join("Application Support")
-            .join("RDT Voice Server");
+        // Keep existing token/config paths when present; use XDG for new Linux installs.
+        let app_support = application_support_dir("RDT Voice Server")?;
         fs::create_dir_all(&app_support)
             .map_err(|e| format!("Could not create the desktop application-support folder: {e}"))?;
+        #[cfg(target_os = "linux")]
+        set_private_permissions(&app_support, 0o700)?;
         let token_path = app_support.join("server-token");
         let lock_path = app_support.join("rdt-connect-backend.lock");
         let menu_bar_pref_path = app_support.join("show-in-menu-bar");
-        let rdt_support = home
-            .join("Library")
-            .join("Application Support")
-            .join("RDT Connect");
+        let rdt_support = application_support_dir("RDT Connect")?;
+        fs::create_dir_all(&rdt_support).map_err(|e| {
+            format!("Could not create the RDT Connect application-support folder: {e}")
+        })?;
         let https_dir = rdt_support.join("https");
+        #[cfg(target_os = "linux")]
+        linux_paths::validate_directory_target(&https_dir, "HTTPS settings")?;
         fs::create_dir_all(&https_dir)
             .map_err(|e| format!("Could not create the local HTTPS settings folder: {e}"))?;
+        #[cfg(target_os = "linux")]
+        {
+            set_private_permissions(&rdt_support, 0o700)?;
+            set_private_permissions(&https_dir, 0o700)?;
+        }
         let _ = fs::set_permissions(&rdt_support, fs::Permissions::from_mode(0o700));
         let _ = fs::set_permissions(&https_dir, fs::Permissions::from_mode(0o700));
         let tls_config_path = rdt_support.join("local-https.json");
@@ -382,19 +429,19 @@ impl BackendState {
         let keep_in_menu_bar = fs::read_to_string(&menu_bar_pref_path)
             .map(|v| v.trim().eq_ignore_ascii_case("true"))
             .unwrap_or(true);
-        // Keep existing application-support/auth/recordings paths for compatibility,
-        // while giving the newly branded app its own visible log directory.
-        let log_dir = home.join("Library").join("Logs").join("RDT Connect");
+        // Preserve a prior log directory when present; otherwise follow XDG_STATE_HOME.
+        let log_dir = application_log_dir("RDT Connect")?;
         fs::create_dir_all(&log_dir)
             .map_err(|e| format!("Could not create the RDT Connect log folder: {e}"))?;
         let log_path = log_dir.join("backend.log");
-        let legacy_log = home
-            .join("Library")
-            .join("Logs")
-            .join("RDT Voice Server")
-            .join("backend.log");
-        if !log_path.exists() && legacy_log.is_file() {
-            let _ = fs::copy(&legacy_log, &log_path);
+        let legacy_log =
+            application_log_dir("RDT Voice Server").map(|directory| directory.join("backend.log"));
+        if !log_path.exists() {
+            if let Ok(legacy_log) = legacy_log {
+                if legacy_log != log_path && legacy_log.is_file() {
+                    let _ = fs::copy(&legacy_log, &log_path);
+                }
+            }
         }
         Ok(Self {
             inner: Mutex::new(BackendInner::default()),
@@ -1765,7 +1812,8 @@ fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
             "HTTP is selected for development only. HTTPS is the normal default; no automatic HTTP fallback is used.".to_string()
         } else if !configured {
             linux_tls::validate_config(config).err().unwrap_or_else(|| {
-                "A valid RDT-generated HTTPS certificate and matching private key are required.".into()
+                "A valid RDT-generated HTTPS certificate and matching private key are required."
+                    .into()
             })
         } else if !trusted {
             linux_tls::untrusted_message(config)
@@ -1787,37 +1835,35 @@ fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
 
     #[cfg(not(target_os = "linux"))]
     {
-
-    let configured = validate_tls_material(config).is_ok();
-    let trusted = config
-        .certificate_path
-        .as_deref()
-        .map(Path::new)
-        .map(certificate_trusted)
-        .unwrap_or(false);
-    let message = if config.mode.eq_ignore_ascii_case("http") {
-        "HTTP is selected for development only. HTTPS is the normal default; no automatic HTTP fallback is used.".to_string()
-    } else if !configured {
-        validate_tls_material(config).err().unwrap_or_else(|| {
-            "A trusted HTTPS certificate and matching private key are required.".into()
-        })
-    } else if !trusted {
-        "The certificate and key match, but macOS does not currently trust this certificate for 127.0.0.1. Trust the selected root CA, then recheck.".into()
-    } else {
-        "HTTPS is configured: the certificate is valid for 127.0.0.1 and macOS trust verification passed.".into()
-    };
-    LocalHttpsStatus {
-        mode: config.mode.clone(),
-        configured,
-        trusted,
-        generated: config.generated,
-        certificate_path: config.certificate_path.clone(),
-        private_key_path: config.private_key_path.clone(),
-        ca_certificate_path: config.ca_certificate_path.clone(),
-        rdt_added_trust_count: config.managed_trust_fingerprints.len(),
-        message,
-    }
-
+        let configured = validate_tls_material(config).is_ok();
+        let trusted = config
+            .certificate_path
+            .as_deref()
+            .map(Path::new)
+            .map(certificate_trusted)
+            .unwrap_or(false);
+        let message = if config.mode.eq_ignore_ascii_case("http") {
+            "HTTP is selected for development only. HTTPS is the normal default; no automatic HTTP fallback is used.".to_string()
+        } else if !configured {
+            validate_tls_material(config).err().unwrap_or_else(|| {
+                "A trusted HTTPS certificate and matching private key are required.".into()
+            })
+        } else if !trusted {
+            "The certificate and key match, but macOS does not currently trust this certificate for 127.0.0.1. Trust the selected root CA, then recheck.".into()
+        } else {
+            "HTTPS is configured: the certificate is valid for 127.0.0.1 and macOS trust verification passed.".into()
+        };
+        LocalHttpsStatus {
+            mode: config.mode.clone(),
+            configured,
+            trusted,
+            generated: config.generated,
+            certificate_path: config.certificate_path.clone(),
+            private_key_path: config.private_key_path.clone(),
+            ca_certificate_path: config.ca_certificate_path.clone(),
+            rdt_added_trust_count: config.managed_trust_fingerprints.len(),
+            message,
+        }
     }
 }
 fn local_tls_client(config: &LocalTlsConfig, timeout: Duration) -> Result<Client, String> {
@@ -1950,7 +1996,10 @@ fn setup_local_https_certificate(
         let config = linux_tls::setup(&state)?;
         let status = local_https_status_from_config(&config);
         if !status.configured || !status.trusted {
-            return Err(format!("Linux HTTPS setup could not be verified: {}", status.message));
+            return Err(format!(
+                "Linux HTTPS setup could not be verified: {}",
+                status.message
+            ));
         }
         return Ok(status);
     }
@@ -2130,7 +2179,12 @@ fn link_local_https_certificate(
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = (&state, &certificate_path, &private_key_path, &ca_certificate_path);
+        let _ = (
+            &state,
+            &certificate_path,
+            &private_key_path,
+            &ca_certificate_path,
+        );
         return Err("Linux currently supports only RDT-generated, integrity-pinned local HTTPS certificates. Use Set up trusted local HTTPS; custom certificate linking is not supported yet.".into());
     }
     let cert = canonical_file(&certificate_path, "server certificate")?;
@@ -2164,7 +2218,10 @@ fn trust_local_https_ca(
     let mut config = load_local_tls_config(&state)?;
     #[cfg(target_os = "linux")]
     {
-        if let Some(path) = ca_certificate_path.as_deref().filter(|s| !s.trim().is_empty()) {
+        if let Some(path) = ca_certificate_path
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        {
             let selected = canonical_file(path, "root CA certificate")?;
             if config.ca_certificate_path.as_deref() != Some(selected.to_string_lossy().as_ref()) {
                 return Err("Linux trust can only install the CA belonging to the currently configured RDT-generated certificate.".into());
@@ -2173,7 +2230,10 @@ fn trust_local_https_ca(
         linux_tls::trust_ca(&state, &mut config)?;
         let status = local_https_status_from_config(&config);
         if !status.trusted {
-            return Err(format!("Linux system trust verification failed: {}", status.message));
+            return Err(format!(
+                "Linux system trust verification failed: {}",
+                status.message
+            ));
         }
         return Ok(status);
     }
@@ -2331,13 +2391,24 @@ fn model_lock_revision(model: &str) -> Option<String> {
 }
 
 fn validate_model(model: &str) -> Result<(), String> {
-    if model_lock_entry(model).is_some()
-        && model_lock_revision(model).is_some()
-        && model_lock_sha256(model).is_some()
+    #[cfg(target_os = "linux")]
     {
-        Ok(())
-    } else {
-        Err("Choose one of the pinned MLX Whisper models from the list.".into())
+        return if linux_ggml_models::spec(model).is_some() {
+            Ok(())
+        } else {
+            Err("Choose one of the approved native GGML Whisper models from the list.".into())
+        };
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        if model_lock_entry(model).is_some()
+            && model_lock_revision(model).is_some()
+            && model_lock_sha256(model).is_some()
+        {
+            Ok(())
+        } else {
+            Err("Choose one of the pinned MLX Whisper models from the list.".into())
+        }
     }
 }
 
@@ -2675,8 +2746,9 @@ fn start_model_download(
             model: Some(model),
             destination_root: Some(cache_status.active_root),
             phase: "complete".into(),
-            message: "A verified local MLX model copy is already available; no download is needed."
-                .into(),
+            message:
+                "A fully verified local model copy is already available; no download is needed."
+                    .into(),
             progress_percent: 100,
             downloaded_bytes: 0,
             total_bytes: Some(0),
@@ -2691,6 +2763,8 @@ fn start_model_download(
         return Ok(result);
     }
     let (root, _) = resolve_model_storage_root(&state, &model)?;
+    #[cfg(target_os = "linux")]
+    linux_ggml_models::invalidate_model_cache(&root, &model);
     let hub_cache = root.join("hub");
     let xet_cache = root.join("xet");
     let exe = state
@@ -2698,7 +2772,7 @@ fn start_model_download(
         .join("rdt_voice_backend")
         .join("rdt_voice_backend");
     if !exe.is_file() {
-        return Err(format!("Bundled model downloader was not found at {}. Run scripts/prepare-macos-bundle.sh first.", exe.display()));
+        return Err(format!("Bundled model downloader was not found at {}. Run the platform resource-preparation script first.", exe.display()));
     }
     let (log_path, log_writer) = create_model_download_log()?;
     state
@@ -2732,11 +2806,8 @@ fn start_model_download(
         .env_remove("HUGGING_FACE_HUB_TOKEN")
         .env_remove("WRITE_TOKEN")
         .env_remove("PYTHONPATH")
-        // Model downloads must use the official Hugging Face origin. Do not inherit
-        // a shell-defined HF_ENDPOINT that silently redirects every model request.
+        // Model downloads use the official immutable model source.
         .env("HF_ENDPOINT", "https://huggingface.co")
-        // Hugging Face reads these before import. Bound idle network stalls while
-        // allowing slower connections to large MLX weight files to make progress.
         .env("HF_HUB_DOWNLOAD_TIMEOUT", "60")
         .env("HF_HUB_ETAG_TIMEOUT", "20")
         .env("HF_HOME", &root)
@@ -2752,6 +2823,14 @@ fn start_model_download(
         // The supervisor tails it non-blockingly and owns all child cleanup.
         .stdout(Stdio::from(log_writer))
         .stderr(Stdio::null());
+    #[cfg(target_os = "linux")]
+    command
+        .env("RDT_GGML_MODEL_DIR", &root)
+        .env_remove("HF_HOME")
+        .env_remove("HF_HUB_CACHE")
+        .env_remove("HUGGINGFACE_HUB_CACHE")
+        .env_remove("TRANSFORMERS_CACHE")
+        .env_remove("HF_XET_CACHE");
     command.process_group(0);
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -3275,7 +3354,7 @@ fn cancel_model_download(
                     &app_for_escalation,
                     &status_store,
                     "complete",
-                    "The MLX model files are complete and verified. The downloader has been safely stopped and the model is ready to use.",
+                    "The model files are fully verified. The downloader has been safely stopped and the model is ready to use.",
                     false,
                 );
             } else {
@@ -3283,7 +3362,7 @@ fn cancel_model_download(
                     &app_for_escalation,
                     &status_store,
                     "cancelled",
-                    "Download canceled. Only complete, verified MLX model files will be shown as Downloaded; completed files can be reused on retry.",
+                    "Download canceled. Only complete, fully verified model files will be shown as Downloaded; completed files can be reused on retry.",
                     false,
                 );
             }
@@ -3353,14 +3432,59 @@ fn delete_rdt_model_caches(
     if models.is_empty() {
         return Err("Select at least one downloaded RDT Connect model to delete.".into());
     }
+    let allowed_models = platform_model_ids();
     if models
         .iter()
-        .any(|model| !MODEL_IDS.contains(&model.as_str()))
+        .any(|model| !allowed_models.contains(&model.as_str()))
     {
         return Err("The deletion request included an unsupported model ID.".into());
     }
     let selected_models: Vec<&str> = models.iter().map(String::as_str).collect();
     let roots = load_model_storage_locations(&state)?;
+    #[cfg(target_os = "linux")]
+    {
+        let mut deleted = 0usize;
+        let mut bytes = 0u64;
+        let mut checked = 0usize;
+        let mut failures: Vec<String> = Vec::new();
+        for root_text in &roots {
+            let root = Path::new(root_text);
+            if !root.is_dir() {
+                continue;
+            }
+            checked += 1;
+            for model in selected_models.iter().copied() {
+                match linux_ggml_models::delete_model_cache(root, model) {
+                    Ok(removed_bytes) if removed_bytes > 0 => {
+                        deleted += 1;
+                        bytes = bytes.saturating_add(removed_bytes);
+                    }
+                    Ok(_) => {}
+                    Err(error) => failures.push(format!("{}: {error}", root.display())),
+                }
+            }
+        }
+        if !failures.is_empty() && deleted == 0 {
+            return Err(format!(
+                "No model-cache files were deleted: {}",
+                failures.join("; ")
+            ));
+        }
+        let message = if failures.is_empty() {
+            format!("Removed {deleted} selected GGML model cache(s).")
+        } else {
+            format!(
+                "Removed {deleted} GGML model cache(s); some locations were skipped: {}",
+                failures.join("; ")
+            )
+        };
+        return Ok(ModelCacheDeleteResult {
+            deleted_repositories: deleted,
+            locations_checked: checked,
+            approximate_bytes_freed: bytes,
+            message,
+        });
+    }
     const MODEL_IDS: [&str; 5] = [
         "mlx-community/whisper-large-v3-turbo",
         "mlx-community/whisper-large-v3-mlx",
@@ -3491,8 +3615,118 @@ struct ModelStorageStatus {
     model_cached: bool,
     server_running: bool,
 }
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PlatformModelOption {
+    id: String,
+    name: String,
+    description: String,
+    size: String,
+    recommended: bool,
+}
+fn platform_model_ids() -> Vec<&'static str> {
+    #[cfg(target_os = "linux")]
+    {
+        return linux_ggml_models::MODELS
+            .iter()
+            .map(|model| model.id)
+            .collect();
+    }
+    #[cfg(not(target_os = "linux"))]
+    vec![
+        "mlx-community/whisper-large-v3-turbo",
+        "mlx-community/whisper-large-v3-mlx",
+        "mlx-community/whisper-small-mlx",
+        "mlx-community/whisper-base-mlx",
+        "mlx-community/whisper-tiny-mlx",
+    ]
+}
+#[tauri::command]
+fn get_platform_model_catalog() -> Vec<PlatformModelOption> {
+    #[cfg(target_os = "linux")]
+    {
+        return linux_ggml_models::MODELS
+            .iter()
+            .map(|model| PlatformModelOption {
+                id: model.id.into(),
+                name: model.name.into(),
+                description: model.description.into(),
+                size: format!(
+                    "~{} MB",
+                    (model.approximate_bytes as f64 / 1_000_000.0).round() as u64
+                ),
+                recommended: model.recommended,
+            })
+            .collect();
+    }
+    #[cfg(not(target_os = "linux"))]
+    vec![
+        PlatformModelOption {
+            id: "mlx-community/whisper-tiny-mlx".into(),
+            name: "Tiny".into(),
+            description: "Fastest · smallest download".into(),
+            size: "~74 MB".into(),
+            recommended: false,
+        },
+        PlatformModelOption {
+            id: "mlx-community/whisper-base-mlx".into(),
+            name: "Base".into(),
+            description: "Lightweight choice".into(),
+            size: "~144 MB".into(),
+            recommended: false,
+        },
+        PlatformModelOption {
+            id: "mlx-community/whisper-small-mlx".into(),
+            name: "Small".into(),
+            description: "Middle-size model".into(),
+            size: "~481 MB".into(),
+            recommended: false,
+        },
+        PlatformModelOption {
+            id: "mlx-community/whisper-large-v3-turbo".into(),
+            name: "Large v3 Turbo".into(),
+            description: "Strong balance of speed and quality".into(),
+            size: "~1.61 GB".into(),
+            recommended: true,
+        },
+        PlatformModelOption {
+            id: "mlx-community/whisper-large-v3-mlx".into(),
+            name: "Large v3".into(),
+            description: "Largest download in this list".into(),
+            size: "~3.08 GB".into(),
+            recommended: false,
+        },
+    ]
+}
 
 fn default_model_storage_locations() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let home = home_dir()?;
+        // Keep a pre-existing native GGML cache at the old default rather than
+        // silently making it disappear from the manager after the XDG correction.
+        let legacy = home.join("models").join("huggingface");
+        let legacy_is_normal_dir = fs::symlink_metadata(&legacy)
+            .map(|meta| meta.is_dir() && !meta.file_type().is_symlink())
+            .unwrap_or(false);
+        if legacy_is_normal_dir
+            && linux_ggml_models::MODELS
+                .iter()
+                .any(|entry| legacy.join(entry.filename).is_file())
+        {
+            return Ok(vec![legacy.display().to_string()]);
+        }
+        let xdg = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute());
+        let base = xdg.unwrap_or_else(|| home.join(".local").join("share"));
+        return Ok(vec![base
+            .join("RDT Connect")
+            .join("models")
+            .display()
+            .to_string()]);
+    }
+    #[cfg(not(target_os = "linux"))]
     Ok(vec![home_dir()?
         .join("models")
         .join("huggingface")
@@ -3645,15 +3879,22 @@ fn model_snapshot_is_complete(root: &Path, model: &str, snapshot_path: &Path) ->
 }
 
 fn model_cache_has_weights(root: &Path, model: &str) -> bool {
-    let repo_key = format!("models--{}", model.replace('/', "--"));
-    let snapshots = root.join("hub").join(repo_key).join("snapshots");
-    let entries = match fs::read_dir(snapshots) {
-        Ok(entries) => entries,
-        Err(_) => return false,
-    };
-    entries
-        .filter_map(Result::ok)
-        .any(|entry| model_snapshot_is_complete(root, model, &entry.path()))
+    #[cfg(target_os = "linux")]
+    {
+        return linux_ggml_models::model_cache_has_weights(root, model);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let repo_key = format!("models--{}", model.replace('/', "--"));
+        let snapshots = root.join("hub").join(repo_key).join("snapshots");
+        let entries = match fs::read_dir(snapshots) {
+            Ok(entries) => entries,
+            Err(_) => return false,
+        };
+        entries
+            .filter_map(Result::ok)
+            .any(|entry| model_snapshot_is_complete(root, model, &entry.path()))
+    }
 }
 
 fn make_model_storage_status(
@@ -3891,7 +4132,7 @@ async fn pick_model_storage_directory(
     let title = tray_text(
         &locale,
         "msg.choose_a_hugging_face_model_cache_home.f18816af",
-        "Choose a Hugging Face model-cache home",
+        "Choose a model-storage folder",
         &[],
     );
     let picked = app.dialog().file().set_title(title).blocking_pick_folder();
@@ -4106,7 +4347,7 @@ fn get_app_diagnostics(state: State<'_, BackendState>, preferred_port: u16) -> S
         {
             let tls =
                 local_https_status_from_config(&load_local_tls_config(&state).unwrap_or_default());
-            format!("Local transport: {}; certificate configured={}; macOS trust verified={}; RDT-added CA trust entries={}; {}", tls.mode.to_ascii_uppercase(), tls.configured, tls.trusted, tls.rdt_added_trust_count, tls.message)
+            format!("Local transport: {}; certificate configured={}; system trust verified={}; RDT-added CA trust entries={}; {}", tls.mode.to_ascii_uppercase(), tls.configured, tls.trusted, tls.rdt_added_trust_count, tls.message)
         },
         format!(
             "Selected/running model: {}",
@@ -4228,18 +4469,35 @@ fn get_app_diagnostics(state: State<'_, BackendState>, preferred_port: u16) -> S
                 .into(),
         );
         if let Some(model) = status.model.as_deref() {
-            let cache_name = format!("models--{}", model.replace('/', "--"));
-            let cache_found = home_dir()
-                .ok()
-                .map(|home| {
-                    home.join(".cache")
-                        .join("huggingface")
-                        .join("hub")
-                        .join(cache_name)
-                        .is_dir()
-                })
-                .unwrap_or(false);
-            lines.push(format!("Default Hugging Face cache: {} (targeted path check only; completeness not verified)", if cache_found { "model directory found" } else { "model directory not found" }));
+            #[cfg(target_os = "linux")]
+            {
+                let verified = make_model_storage_status(&state, model)
+                    .map(|cache| cache.model_cached)
+                    .unwrap_or(false);
+                lines.push(format!(
+                    "Native GGML cache: {} (full-file SHA-256 checked)",
+                    if verified {
+                        "verified"
+                    } else {
+                        "not verified / unavailable"
+                    }
+                ));
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let cache_name = format!("models--{}", model.replace('/', "--"));
+                let cache_found = home_dir()
+                    .ok()
+                    .map(|home| {
+                        home.join(".cache")
+                            .join("huggingface")
+                            .join("hub")
+                            .join(cache_name)
+                            .is_dir()
+                    })
+                    .unwrap_or(false);
+                lines.push(format!("Default Hugging Face cache: {} (targeted path check only; completeness not verified)", if cache_found { "model directory found" } else { "model directory not found" }));
+            }
         }
     } else {
         lines.push("Local /health check: NOT RUN — backend is stopped.".into());
@@ -4840,10 +5098,7 @@ fn start_backend_blocking(
         .map_err(|e| format!("Could not clone backend log handle: {e}"))?;
 
     let port_text = port.to_string();
-    let data_dir = home_dir()?
-        .join("Library")
-        .join("Application Support")
-        .join("RDT Voice Server");
+    let data_dir = application_support_dir("RDT Voice Server")?;
     fs::create_dir_all(&data_dir)
         .map_err(|e| format!("Could not create the RDT Voice Desktop data folder: {e}"))?;
     let auth_db = data_dir.join("auth.sqlite3");
@@ -4913,6 +5168,16 @@ fn start_backend_blocking(
         .env("PYTHONUNBUFFERED", "1")
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(stderr_log));
+    #[cfg(target_os = "linux")]
+    command
+        .env("RDT_GGML_MODEL_DIR", &model_storage_root)
+        // The Linux server's native registry is authoritative; do not inherit or
+        // advertise Hugging Face snapshot-cache semantics to the GGML backend.
+        .env_remove("HF_HOME")
+        .env_remove("HF_HUB_CACHE")
+        .env_remove("HUGGINGFACE_HUB_CACHE")
+        .env_remove("TRANSFORMERS_CACHE")
+        .env_remove("HF_XET_CACHE");
     command.process_group(0);
 
     let mut child = command
@@ -5150,14 +5415,19 @@ fn open_voice_window(
     let parsed_local_url = url::Url::parse(&backend_url)
         .map_err(|e| format!("The active local server URL is invalid: {e}"))?;
     if !matches!(parsed_local_url.scheme(), "http" | "https")
-        || !matches!(parsed_local_url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))
+        || !matches!(
+            parsed_local_url.host_str(),
+            Some("127.0.0.1" | "localhost" | "::1")
+        )
         || parsed_local_url.port().is_none()
         || !parsed_local_url.username().is_empty()
         || parsed_local_url.password().is_some()
         || parsed_local_url.query().is_some()
         || parsed_local_url.fragment().is_some()
     {
-        return Err("The active local server URL is not a valid loopback HTTP(S) endpoint.".to_string());
+        return Err(
+            "The active local server URL is not a valid loopback HTTP(S) endpoint.".to_string(),
+        );
     }
     let mut local_launch_url = parsed_local_url;
     local_launch_url.set_path("/");
@@ -5601,7 +5871,12 @@ fn read_last_server_choice(state: &BackendState) -> LastServerChoice {
         }
     }
     LastServerChoice {
-        model: "mlx-community/whisper-tiny-mlx".into(),
+        model: if cfg!(target_os = "linux") {
+            "large-v3-turbo"
+        } else {
+            "mlx-community/whisper-tiny-mlx"
+        }
+        .into(),
         preferred_port: 8888,
     }
 }
@@ -6396,7 +6671,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_app_build_info, get_backend_status, get_backend_connection_status, open_backend_log, get_recent_backend_log, get_app_diagnostics, get_orphaned_backends, stop_orphaned_backend,
             get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, open_voice_window, reveal_main_window_after_tray_error,
-            get_model_storage_status, set_model_storage_locations, pick_model_storage_directory,
+            get_model_storage_status, set_model_storage_locations, pick_model_storage_directory, get_platform_model_catalog,
             get_model_download_status, start_model_download, cancel_model_download, delete_rdt_model_caches, open_easywhisper_model_manager,
             get_local_https_status, pick_tls_file, setup_local_https_certificate, link_local_https_certificate, trust_local_https_ca, remove_rdt_https_trust, set_local_transport,
             get_tailscale_status, get_remote_access_diagnostics, enable_private_access, generate_pairing_qr,

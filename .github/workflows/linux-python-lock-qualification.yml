@@ -1,0 +1,640 @@
+name: RDT Connect Linux Python Lock Qualification
+
+# Push runs on the isolated Linux branch are candidate preflight runs.
+# Manual runs require independent source-SHA and direct-input hash values.
+# This workflow never builds or publishes an installer.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        description: Full 40-character commit SHA selected for this run
+        required: true
+        type: string
+      expected_direct_requirements_sha256:
+        description: Canonical SHA-256 of backend/linux/requirements-linux.txt
+        required: true
+        type: string
+  push:
+    branches:
+      - connect-linux-track2-dev11
+    paths:
+      - backend/linux/requirements-linux.txt
+      - backend/linux/python_qualification.py
+      - backend/linux/scripts/validate_linux_requirements_lock.py
+      - backend/linux/tests/test_python_qualification.py
+      - backend/linux/tests/test_linux_requirements_lock_validator.py
+      - backend/linux/requirements-linux-x64.lock
+      - .github/workflows/linux-python-lock-qualification.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-python-lock-qualification-${{ github.ref }}-${{ github.event.inputs.expected_source_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  qualify-linux-x64:
+    name: Linux x64 Python lock qualification
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Initialize failure-safe evidence directory
+        run: |
+          set -euo pipefail
+          EVIDENCE="$RUNNER_TEMP/rdt-linux-python-lock-qualification"
+          mkdir -p "$EVIDENCE/wheelhouse"
+          printf '%s\n' \
+            '{"qualification_status":"INCOMPLETE","all_required_checks_passed":false}' \
+            > "$EVIDENCE/qualification-report.json"
+          echo "EVIDENCE_DIR=$EVIDENCE" >> "$GITHUB_ENV"
+
+      - name: Validate manual qualification inputs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SOURCE_SHA_INPUT: ${{ inputs.expected_source_sha }}
+          EXPECTED_REQUIREMENTS_SHA256_INPUT: ${{ inputs.expected_direct_requirements_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA_INPUT" =~ ^[0-9a-fA-F]{40}$ ]] || {
+            echo "STOP: expected_source_sha must be 40 hexadecimal characters." >&2
+            exit 1
+          }
+          [[ "$EXPECTED_REQUIREMENTS_SHA256_INPUT" =~ ^[0-9a-fA-F]{64}$ ]] || {
+            echo "STOP: expected_direct_requirements_sha256 must be 64 hexadecimal characters." >&2
+            exit 1
+          }
+
+      - name: Check out selected source ref
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.expected_source_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up native CPython 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11.17'
+          check-latest: false
+
+      - name: Guard exact source SHA, requirements hash and native target
+        id: source_guard
+        continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          EXPECTED_SOURCE_SHA_INPUT: ${{ inputs.expected_source_sha }}
+          EXPECTED_REQUIREMENTS_SHA256_INPUT: ${{ inputs.expected_direct_requirements_sha256 }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$EXPECTED_SOURCE_SHA_INPUT" =~ ^[0-9a-fA-F]{40}$ ]] || {
+              echo "STOP: expected_source_sha must be 40 hexadecimal characters." >&2
+              exit 1
+            }
+            [[ "$EXPECTED_REQUIREMENTS_SHA256_INPUT" =~ ^[0-9a-fA-F]{64}$ ]] || {
+              echo "STOP: expected_direct_requirements_sha256 must be 64 hexadecimal characters." >&2
+              exit 1
+            }
+            EXPECTED_SHA="${EXPECTED_SOURCE_SHA_INPUT,,}"
+          else
+            EXPECTED_SHA="$EVENT_SHA"
+          fi
+
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA" || {
+            echo "STOP: Source SHA mismatch. Expected $EXPECTED_SHA; got $ACTUAL_SHA." >&2
+            exit 1
+          }
+
+          PYTHON_IDENTITY="$(python -c 'import platform,sys,sysconfig; print("|".join((platform.python_version(),platform.python_implementation(),platform.system(),platform.machine(),sysconfig.get_platform(),str(sysconfig.get_config_var("SOABI")))))')"
+          IFS='|' read -r PYVER IMPLEMENTATION OS MACHINE PLATFORM_TAG SOABI <<< "$PYTHON_IDENTITY"
+          [[ -n "$SOABI" ]] || {
+            echo "STOP: Python ABI tag is missing." >&2
+            exit 1
+          }
+
+          test "$PYVER" = "3.11.17"
+          test "$IMPLEMENTATION" = "CPython"
+          test "$OS" = "Linux"
+          test "$MACHINE" = "x86_64"
+          test "$PLATFORM_TAG" = "linux-x86_64"
+
+          HASH_JSON="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          from backend.linux.python_qualification import requirements_hashes
+          print(json.dumps(requirements_hashes(Path("backend/linux/requirements-linux.txt"))))
+          PY
+          )"
+
+          CANONICAL_SHA="$(printf '%s' "$HASH_JSON" | python -c 'import json,sys; print(json.load(sys.stdin)["DIRECT_REQUIREMENTS_SHA256"])')"
+          RAW_SHA="$(printf '%s' "$HASH_JSON" | python -c 'import json,sys; print(json.load(sys.stdin)["DIRECT_REQUIREMENTS_RAW_SHA256"])')"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            test "$CANONICAL_SHA" = "${EXPECTED_REQUIREMENTS_SHA256_INPUT,,}" || {
+              echo "STOP: Canonical direct-requirements hash does not match the supplied input." >&2
+              exit 1
+            }
+          fi
+
+          if [[ ! -f backend/linux/scripts/validate_linux_requirements_lock.py ]]; then
+            echo "STOP: Lock validator is missing from the selected source commit." >&2
+            exit 1
+          fi
+
+          {
+            echo "source_sha=$ACTUAL_SHA"
+            echo "canonical_hash=$CANONICAL_SHA"
+            echo "raw_hash=$RAW_SHA"
+            echo "python_identity=$PYTHON_IDENTITY"
+            echo "mode=$([[ "$EVENT_NAME" == workflow_dispatch ]] && echo manual || echo push-preflight)"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "SOURCE_SHA=$ACTUAL_SHA"
+            echo "DIRECT_REQUIREMENTS_SHA256=$CANONICAL_SHA"
+            echo "DIRECT_REQUIREMENTS_RAW_SHA256=$RAW_SHA"
+            echo "PYTHON_IDENTITY=$PYTHON_IDENTITY"
+          } | tee "$EVIDENCE_DIR/source-attestation.txt"
+
+      - name: Test canonical requirements hashing
+        id: hash_tests
+        if: steps.source_guard.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python backend/linux/tests/test_python_qualification.py -v \
+            2>&1 | tee "$EVIDENCE_DIR/canonical-hash-tests.log"
+
+      - name: Test lock validator
+        id: validator_tests
+        if: steps.source_guard.outcome == 'success' && steps.hash_tests.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python backend/linux/tests/test_linux_requirements_lock_validator.py -v \
+            2>&1 | tee "$EVIDENCE_DIR/lock-validator-tests.log"
+
+      - name: Select reviewed lock or candidate destination
+        id: select_lock
+        if: steps.source_guard.outcome == 'success' && steps.hash_tests.outcome == 'success' && steps.validator_tests.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          COMMITTED="$GITHUB_WORKSPACE/backend/linux/requirements-linux-x64.lock"
+
+          if [[ -f "$COMMITTED" ]]; then
+            MODE="committed"
+            LOCK="$COMMITTED"
+          else
+            MODE="candidate"
+            LOCK="$EVIDENCE_DIR/requirements-linux-x64.lock"
+          fi
+
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "path=$LOCK" >> "$GITHUB_OUTPUT"
+          echo "LOCK_MODE=$MODE"
+          echo "LOCK_PATH=$LOCK"
+
+      - name: Create isolated lock-tool environment
+        id: lock_tools
+        if: steps.select_lock.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          TOOL_VENV="$RUNNER_TEMP/rdt-linux-lock-tools"
+          python -m venv "$TOOL_VENV"
+          TOOL_PYTHON="$TOOL_VENV/bin/python"
+
+          "$TOOL_PYTHON" -m pip install \
+            --disable-pip-version-check --no-cache-dir \
+            --index-url https://pypi.org/simple --only-binary=:all: --upgrade \
+            "pip==26.2.2" "pip-tools==7.6.2"
+
+          "$TOOL_PYTHON" -m pip --version | tee "$EVIDENCE_DIR/pip-tool-version.txt"
+          "$TOOL_PYTHON" -m piptools compile --version | tee "$EVIDENCE_DIR/pip-tools-version.txt"
+          "$TOOL_PYTHON" -m pip freeze | tee "$EVIDENCE_DIR/lock-tool-environment.txt"
+
+          grep -Fq "pip 26.2.2" "$EVIDENCE_DIR/pip-tool-version.txt"
+          grep -Fq "7.6.2" "$EVIDENCE_DIR/pip-tools-version.txt"
+          echo "python=$TOOL_PYTHON" >> "$GITHUB_OUTPUT"
+
+      - name: Generate hash-pinned lock candidate when no committed lock exists
+        id: generate_lock
+        if: steps.select_lock.outputs.mode == 'candidate' && steps.lock_tools.outcome == 'success'
+        continue-on-error: true
+        env:
+          TOOL_PYTHON: ${{ steps.lock_tools.outputs.python }}
+          LOCK_PATH: ${{ steps.select_lock.outputs.path }}
+        run: |
+          set -euo pipefail
+          "$TOOL_PYTHON" -m piptools compile \
+            --no-config \
+            --index-url https://pypi.org/simple \
+            --no-emit-index-url \
+            --no-emit-options \
+            --resolver=backtracking \
+            --generate-hashes \
+            --allow-unsafe \
+            --no-reuse-hashes \
+            --rebuild \
+            --upgrade \
+            --no-header \
+            --uploaded-prior-to=2026-10-24T00:00:00Z \
+            --pip-args=--only-binary=:all: \
+            --output-file "$LOCK_PATH" \
+            "$GITHUB_WORKSPACE/backend/linux/requirements-linux.txt" \
+            2>&1 | tee "$EVIDENCE_DIR/lock-generation.log"
+
+      - name: Validate direct pins and lock hash declarations
+        id: static_validate
+        if: >-
+          steps.select_lock.outcome == 'success' &&
+          steps.lock_tools.outcome == 'success' &&
+          (steps.select_lock.outputs.mode == 'committed' || steps.generate_lock.outcome == 'success')
+        continue-on-error: true
+        env:
+          LOCK_PATH: ${{ steps.select_lock.outputs.path }}
+        run: |
+          set -euo pipefail
+          python backend/linux/scripts/validate_linux_requirements_lock.py \
+            --direct-requirements backend/linux/requirements-linux.txt \
+            --lock "$LOCK_PATH" \
+            --output-json "$EVIDENCE_DIR/lock-validation.json" \
+            2>&1 | tee "$EVIDENCE_DIR/static-lock-validation.log"
+
+      - name: Download only hash-verified Linux wheels
+        id: download_wheels
+        if: steps.static_validate.outcome == 'success'
+        continue-on-error: true
+        env:
+          TOOL_PYTHON: ${{ steps.lock_tools.outputs.python }}
+          LOCK_PATH: ${{ steps.select_lock.outputs.path }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR/wheelhouse"
+          "$TOOL_PYTHON" -m pip download \
+            --disable-pip-version-check --no-cache-dir \
+            --index-url https://pypi.org/simple \
+            --require-hashes --only-binary=:all: \
+            --dest "$EVIDENCE_DIR/wheelhouse" \
+            --requirement "$LOCK_PATH" \
+            2>&1 | tee "$EVIDENCE_DIR/hash-verified-wheel-download.log"
+
+      - name: Audit wheel architecture and inventory every downloaded artifact
+        id: wheel_audit
+        if: steps.download_wheels.outcome == 'success'
+        continue-on-error: true
+        env:
+          TOOL_PYTHON: ${{ steps.lock_tools.outputs.python }}
+        run: |
+          set -euo pipefail
+          "$TOOL_PYTHON" - "$EVIDENCE_DIR/wheelhouse" \
+            "$EVIDENCE_DIR/wheel-inventory.json" \
+            "$EVIDENCE_DIR/wheel-inventory.sha256" <<'PY'
+          from pathlib import Path
+          from packaging.utils import parse_wheel_filename
+          import hashlib
+          import json
+          import sys
+
+          wheelhouse = Path(sys.argv[1])
+          inventory_path = Path(sys.argv[2])
+          checksum_path = Path(sys.argv[3])
+          wheels = sorted(wheelhouse.glob("*.whl"))
+          if not wheels:
+              raise SystemExit("STOP: No wheel artifacts were downloaded.")
+
+          records = []
+          checksum_lines = []
+          for wheel in wheels:
+              _, _, _, tags = parse_wheel_filename(wheel.name)
+              platforms = sorted({tag.platform for tag in tags})
+              for platform in platforms:
+                  if platform == "any":
+                      continue
+                  if not (
+                      "x86_64" in platform
+                      and (
+                          "linux" in platform
+                          or "manylinux" in platform
+                          or "musllinux" in platform
+                      )
+                  ):
+                      raise SystemExit(
+                          f"STOP: Non-Linux-x64 wheel tag {platform!r} in {wheel.name}"
+                      )
+
+              digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+              records.append({
+                  "filename": wheel.name,
+                  "size_bytes": wheel.stat().st_size,
+                  "sha256": digest,
+                  "platform_tags": platforms,
+              })
+              checksum_lines.append(f"{digest}  {wheel.name}")
+
+          inventory_path.write_text(
+              json.dumps(records, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          checksum_path.write_text(
+              "\n".join(checksum_lines) + "\n", encoding="ascii"
+          )
+          print(f"WHEEL_COUNT={len(records)}")
+          print(f"WHEEL_INVENTORY_SHA256={hashlib.sha256(inventory_path.read_bytes()).hexdigest()}")
+          PY
+
+      - name: Install offline into a clean environment with hash enforcement
+        id: offline_install
+        if: steps.wheel_audit.outcome == 'success'
+        continue-on-error: true
+        env:
+          LOCK_PATH: ${{ steps.select_lock.outputs.path }}
+        run: |
+          set -euo pipefail
+          QUAL_VENV="$RUNNER_TEMP/rdt-linux-offline-venv"
+          python -m venv "$QUAL_VENV"
+          QUAL_PYTHON="$QUAL_VENV/bin/python"
+
+          PIP_CONFIG_FILE=/dev/null PIP_NO_INDEX=1 \
+            "$QUAL_PYTHON" -m pip install \
+              --disable-pip-version-check --no-index \
+              --find-links "$EVIDENCE_DIR/wheelhouse" \
+              --require-hashes --only-binary=:all: --no-cache-dir \
+              --requirement "$LOCK_PATH" \
+              2>&1 | tee "$EVIDENCE_DIR/offline-install.log"
+
+          echo "python=$QUAL_PYTHON" >> "$GITHUB_OUTPUT"
+
+      - name: Verify dependency consistency
+        id: pip_check
+        if: steps.offline_install.outcome == 'success'
+        continue-on-error: true
+        env:
+          QUAL_PYTHON: ${{ steps.offline_install.outputs.python }}
+        run: |
+          set -euo pipefail
+          "$QUAL_PYTHON" -m pip check 2>&1 | tee "$EVIDENCE_DIR/pip-check.log"
+
+      - name: Test runtime imports
+        id: runtime_imports
+        if: steps.offline_install.outcome == 'success'
+        continue-on-error: true
+        env:
+          QUAL_PYTHON: ${{ steps.offline_install.outputs.python }}
+        run: |
+          set -euo pipefail
+          "$QUAL_PYTHON" - <<'PY' 2>&1 | tee "$EVIDENCE_DIR/runtime-imports.log"
+          import fastapi, httpx, multipart, numpy, PyInstaller, qrcode, starlette, uvicorn
+          from qrcode.image.svg import SvgPathImage
+          import sys
+          print("RUNTIME_IMPORT_SMOKE=PASS")
+          print("PYTHON_VERSION=" + sys.version.replace("\n", " "))
+          for module in (fastapi, httpx, multipart, numpy, PyInstaller, qrcode, starlette, uvicorn):
+              print(f"{module.__name__}={getattr(module, '__version__', 'imported')}")
+          PY
+
+      - name: Compare installed package graph against the lock
+        id: graph_compare
+        if: steps.offline_install.outcome == 'success' && steps.static_validate.outcome == 'success'
+        continue-on-error: true
+        env:
+          QUAL_PYTHON: ${{ steps.offline_install.outputs.python }}
+          LOCK_PATH: ${{ steps.select_lock.outputs.path }}
+        run: |
+          set -euo pipefail
+          "$QUAL_PYTHON" - "$EVIDENCE_DIR/installed-packages.json" <<'PY'
+          from importlib import metadata
+          import json
+          import re
+          import sys
+
+          normalize = lambda s: re.sub(r"[-_.]+", "-", s).lower()
+          packages = {}
+          for distribution in metadata.distributions():
+              name = distribution.metadata.get("Name")
+              if not name:
+                  continue
+              key = normalize(name)
+              # pip bootstraps the virtual environment; it is not part of
+              # the application lock's installed dependency graph.
+              if key == "pip":
+                  continue
+              if key in packages:
+                  raise SystemExit(f"Duplicate installed distribution: {name}")
+              packages[key] = distribution.version
+
+          Path = __import__("pathlib").Path
+          Path(sys.argv[1]).write_text(
+              json.dumps(
+                  [{"name": name, "version": version} for name, version in sorted(packages.items())],
+                  indent=2,
+              ) + "\n",
+              encoding="utf-8",
+          )
+          print(f"INSTALLED_PACKAGE_COUNT={len(packages)}")
+          PY
+
+          python backend/linux/scripts/validate_linux_requirements_lock.py \
+            --direct-requirements backend/linux/requirements-linux.txt \
+            --lock "$LOCK_PATH" \
+            --installed-json "$EVIDENCE_DIR/installed-packages.json" \
+            --output-json "$EVIDENCE_DIR/installed-graph-validation.json" \
+            2>&1 | tee "$EVIDENCE_DIR/installed-graph-validation.log"
+
+      - name: Write independent qualification report
+        id: report
+        if: always()
+        continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_SOURCE_SHA_INPUT: ${{ inputs.expected_source_sha }}
+          EXPECTED_REQUIREMENTS_SHA256_INPUT: ${{ inputs.expected_direct_requirements_sha256 }}
+          SOURCE_SHA: ${{ steps.source_guard.outputs.source_sha }}
+          CANONICAL_HASH: ${{ steps.source_guard.outputs.canonical_hash }}
+          RAW_HASH: ${{ steps.source_guard.outputs.raw_hash }}
+          PYTHON_IDENTITY: ${{ steps.source_guard.outputs.python_identity }}
+          LOCK_MODE: ${{ steps.select_lock.outputs.mode }}
+          LOCK_PATH: ${{ steps.select_lock.outputs.path }}
+          SOURCE_GUARD_RESULT: ${{ steps.source_guard.outcome }}
+          HASH_TEST_RESULT: ${{ steps.hash_tests.outcome }}
+          VALIDATOR_TEST_RESULT: ${{ steps.validator_tests.outcome }}
+          SELECT_LOCK_RESULT: ${{ steps.select_lock.outcome }}
+          TOOL_SETUP_RESULT: ${{ steps.lock_tools.outcome }}
+          LOCK_GENERATION_RESULT: ${{ steps.generate_lock.outcome }}
+          STATIC_VALIDATION_RESULT: ${{ steps.static_validate.outcome }}
+          WHEEL_DOWNLOAD_RESULT: ${{ steps.download_wheels.outcome }}
+          WHEEL_AUDIT_RESULT: ${{ steps.wheel_audit.outcome }}
+          OFFLINE_INSTALL_RESULT: ${{ steps.offline_install.outcome }}
+          PIP_CHECK_RESULT: ${{ steps.pip_check.outcome }}
+          IMPORT_RESULT: ${{ steps.runtime_imports.outcome }}
+          GRAPH_RESULT: ${{ steps.graph_compare.outcome }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+
+          evidence = Path(os.environ["EVIDENCE_DIR"])
+          lock_text = os.environ.get("LOCK_PATH", "")
+          lock_path = Path(lock_text) if lock_text else None
+
+          outcomes = {
+              "source_sha_and_requirements_guard": os.environ.get("SOURCE_GUARD_RESULT", "skipped"),
+              "canonical_hash_regression_tests": os.environ.get("HASH_TEST_RESULT", "skipped"),
+              "lock_validator_regression_tests": os.environ.get("VALIDATOR_TEST_RESULT", "skipped"),
+              "lock_selection": os.environ.get("SELECT_LOCK_RESULT", "skipped"),
+              "resolver_tool_setup": os.environ.get("TOOL_SETUP_RESULT", "skipped"),
+              "static_lock_validation": os.environ.get("STATIC_VALIDATION_RESULT", "skipped"),
+              "hash_enforced_wheel_download": os.environ.get("WHEEL_DOWNLOAD_RESULT", "skipped"),
+              "wheel_platform_audit_and_inventory": os.environ.get("WHEEL_AUDIT_RESULT", "skipped"),
+              "offline_hash_enforced_install": os.environ.get("OFFLINE_INSTALL_RESULT", "skipped"),
+              "pip_check": os.environ.get("PIP_CHECK_RESULT", "skipped"),
+              "runtime_imports": os.environ.get("IMPORT_RESULT", "skipped"),
+              "installed_graph_comparison": os.environ.get("GRAPH_RESULT", "skipped"),
+          }
+
+          lock_mode = os.environ.get("LOCK_MODE", "")
+          if lock_mode == "candidate":
+              outcomes["lock_generation"] = os.environ.get("LOCK_GENERATION_RESULT", "skipped")
+
+          required = list(outcomes)
+          passed = all(outcomes[name] == "success" for name in required)
+
+          lock_sha = None
+          lock_filename = lock_text or None
+          if lock_path and lock_path.is_file():
+              lock_sha = hashlib.sha256(lock_path.read_bytes()).hexdigest()
+              lock_filename = lock_path.name
+
+          inventory_path = evidence / "wheel-inventory.json"
+          inventory_sha = (
+              hashlib.sha256(inventory_path.read_bytes()).hexdigest()
+              if inventory_path.is_file() else None
+          )
+          try:
+              inventory = json.loads(inventory_path.read_text(encoding="utf-8")) if inventory_sha else []
+          except (OSError, json.JSONDecodeError):
+              inventory = []
+
+          graph_path = evidence / "installed-packages.json"
+          try:
+              installed_count = len(json.loads(graph_path.read_text(encoding="utf-8"))) if graph_path.exists() else None
+          except (OSError, json.JSONDecodeError):
+              installed_count = None
+
+          event_name = os.environ.get("EVENT_NAME", "")
+          expected_source_sha = os.environ.get("EXPECTED_SOURCE_SHA_INPUT", "").strip().lower()
+          actual_source_sha = os.environ.get("SOURCE_SHA", "").strip().lower()
+          expected_requirements_sha = os.environ.get(
+              "EXPECTED_REQUIREMENTS_SHA256_INPUT", ""
+          ).strip().lower()
+          actual_requirements_sha = os.environ.get("CANONICAL_HASH", "").strip().lower()
+
+          source_sha_matches_expected = (
+              actual_source_sha == expected_source_sha
+              if expected_source_sha else None
+          )
+          requirements_hash_matches_expected = (
+              actual_requirements_sha == expected_requirements_sha
+              if expected_requirements_sha else None
+          )
+
+          if not passed:
+              status = "FAILED_OR_INCOMPLETE"
+          elif event_name != "workflow_dispatch":
+              status = "PUSH_PREFLIGHT_PASS_NOT_MANUAL_QUALIFICATION"
+          elif lock_mode == "candidate":
+              status = "CANDIDATE_VALIDATED_NOT_COMMITTED"
+          else:
+              status = "DEPENDENCY_LOCK_QUALIFIED_NOT_RELEASE_READY"
+
+          report = {
+              "schema": "rdt-linux-python-lock-qualification-v1",
+              "qualification_timestamp_utc": datetime.now(timezone.utc).isoformat(),
+              "source_sha": os.environ.get("SOURCE_SHA") or None,
+              "expected_source_sha": expected_source_sha or None,
+              "source_sha_matches_expected": source_sha_matches_expected,
+              "expected_direct_requirements_sha256": expected_requirements_sha or None,
+              "requirements_hash_matches_expected": requirements_hash_matches_expected,
+              "target_os": "ubuntu-22.04",
+              "target_arch": "x86_64",
+              "python_identity": os.environ.get("PYTHON_IDENTITY") or None,
+              "direct_requirements_file": "backend/linux/requirements-linux.txt",
+              "direct_requirements_sha256": os.environ.get("CANONICAL_HASH") or None,
+              "direct_requirements_raw_sha256": os.environ.get("RAW_HASH") or None,
+              "lock_file": lock_filename,
+              "lock_source_mode": lock_mode or None,
+              "lock_sha256": lock_sha,
+              "wheel_inventory_file": "wheel-inventory.json",
+              "wheel_inventory_sha256": inventory_sha,
+              "wheel_inventory": inventory,
+              "installed_package_count": installed_count,
+              "resolution_upload_cutoff_utc": "2026-10-24T00:00:00Z",
+              "resolver_tool_versions": {
+                  "pip": "26.2.2",
+                  "pip_tools": "7.6.2"
+              },
+              "test_results": outcomes,
+              "all_required_checks_passed": passed,
+              "qualification_status": status,
+              "dependency_lock_qualified": (
+                  passed and event_name == "workflow_dispatch" and lock_mode == "committed"
+              ),
+              "release_ready": False,
+              "release_gate_note": (
+                  "Dependency-lock qualification does not replace packaged application, "
+                  "TLS, installation, or real-transcription qualification."
+              )
+          }
+
+          (evidence / "qualification-report.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(f"QUALIFICATION_STATUS={status}")
+          print(f"ALL_REQUIRED_CHECKS_PASSED={passed}")
+          print(f"LOCK_SHA256={lock_sha}")
+          print(f"WHEEL_INVENTORY_SHA256={inventory_sha}")
+          PY
+
+      - name: Upload report, candidate lock, wheel inventory and logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: RDT-Linux-Python-Lock-Qualification-${{ github.run_id }}
+          path: ${{ runner.temp }}/rdt-linux-python-lock-qualification/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail the run if any required check failed
+        if: always()
+        env:
+          REPORT_RESULT: ${{ steps.report.outcome }}
+        run: |
+          set -euo pipefail
+          test "$REPORT_RESULT" = success || {
+            echo "STOP: Qualification report generation failed." >&2
+            exit 1
+          }
+          python - "$RUNNER_TEMP/rdt-linux-python-lock-qualification/qualification-report.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if report.get("all_required_checks_passed") is not True:
+              print("STOP: One or more required Python lock qualification checks failed.", file=sys.stderr)
+              for key, value in report.get("test_results", {}).items():
+                  if value != "success":
+                      print(f"  {key}: {value}", file=sys.stderr)
+              raise SystemExit(1)
+          print("All dependency-lock checks passed for this report's stated qualification scope.")
+          print("Release readiness remains false until the separate app/package gates pass.")
+          PY

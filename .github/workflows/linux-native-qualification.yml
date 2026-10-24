@@ -76,17 +76,45 @@ jobs:
           set -euo pipefail
           python -m venv "$RUNNER_TEMP/rdt-python"
           "$RUNNER_TEMP/rdt-python/bin/python" -m pip install --upgrade pip
-          "$RUNNER_TEMP/rdt-python/bin/python" -m pip install \
-            "fastapi==0.162.0" \
-            "uvicorn==0.54.0" \
-            "python-multipart==0.0.32" \
-            "qrcode==8.2" \
-            "numpy==2.4.6" \
-            "httpx==0.28.1" \
-            "PyInstaller==6.16.0"
+          "$RUNNER_TEMP/rdt-python/bin/python" -m pip install -r backend/linux/requirements-linux.txt
           "$RUNNER_TEMP/rdt-python/bin/python" -c \
             'import fastapi, starlette, uvicorn, multipart, qrcode, numpy, httpx, PyInstaller; print("qualification Python imports OK")'
 
+      - name: Record exact Linux backend packaging versions
+        run: |
+          set -euo pipefail
+          PY="$RUNNER_TEMP/rdt-python/bin/python"
+          mkdir -p "$RUNNER_TEMP/rdt-linux-qualification"
+          {
+            printf 'python_version='
+            "$PY" --version
+            printf 'pip_version='
+            "$PY" -m pip --version
+            "$PY" - <<'PY'
+          import platform
+          import sys
+          import sysconfig
+          from importlib.metadata import PackageNotFoundError, version
+
+          print("python_identity=" + sys.version.replace("\\n", " "))
+          print("platform=" + platform.platform())
+          print("machine=" + platform.machine())
+          print("python_soabi=" + str(sysconfig.get_config_var("SOABI")))
+
+          distributions = (
+              "setuptools", "PyInstaller", "pyinstaller-hooks-contrib",
+              "fastapi", "starlette", "uvicorn", "python-multipart",
+              "qrcode", "numpy", "httpx", "packaging", "pydantic",
+              "pydantic-core", "typing-extensions", "opentelemetry-api",
+          )
+          for name in distributions:
+              try:
+                  print(f"{name}=={version(name)}")
+              except PackageNotFoundError:
+                  print(f"{name}=NOT_INSTALLED")
+          PY
+          } | tee "$RUNNER_TEMP/rdt-linux-qualification/python-packaging-versions.txt"
+          "$PY" -m pip freeze --all | tee "$RUNNER_TEMP/rdt-linux-qualification/python-packaging-freeze.txt"
       - name: Run Linux server regression suite
         run: |
           set -euo pipefail

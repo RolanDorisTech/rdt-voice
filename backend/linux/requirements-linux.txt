@@ -1,0 +1,11 @@
+# RDT Connect Linux x64, CPython 3.11.
+# Direct dependency inputs matching the current native Linux CI install set.
+# This file is not a lock; the qualification workflow generates a hash-pinned
+# platform-specific candidate that must be validated and reviewed separately.
+fastapi==0.162.0
+httpx==0.28.1
+numpy==2.4.6
+PyInstaller==6.22.3
+python-multipart==0.0.32
+qrcode==8.2
+uvicorn==0.54.0

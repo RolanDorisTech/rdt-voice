@@ -262,7 +262,7 @@ jobs:
           $bad = @()
           foreach ($wheel in Get-ChildItem -LiteralPath $wheelhouse -Filter '*.whl' -File) {
             $name = $wheel.Name.ToLowerInvariant()
-            $allowedPattern = '-(any|' + [regex]::Escape($env:EXPECTED_WHEEL_PLATFORM) + ').whl$'
+            $allowedPattern = '-(any|' + [regex]::Escape($env:EXPECTED_WHEEL_PLATFORM) + ')\.whl$'
             if ($name -notmatch $allowedPattern) {
               $bad += $wheel.Name
             }

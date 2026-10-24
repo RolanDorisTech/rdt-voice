@@ -27,9 +27,11 @@ jobs:
       matrix:
         include:
           - arch: x64
+            build-marker: 3A01
             runner: windows-latest
             rust-target: x86_64-pc-windows-msvc
           - arch: arm64
+            build-marker: 2A05
             runner: windows-11-arm
             rust-target: aarch64-pc-windows-msvc
     steps:
@@ -58,11 +60,11 @@ jobs:
         working-directory: rdt_connect
         run: npm ci
 
-      - name: Stamp isolated Windows build version (2A01 namespace)
+      - name: Stamp isolated Windows build version (platform-specific namespace)
         working-directory: rdt_connect
         shell: pwsh
         run: |
-          node scripts/stamp-platform-build.cjs windows
+          node scripts/stamp-platform-build.cjs windows "${{ matrix.build-marker }}"
           if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
           node scripts/test-platform-build-stamping.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }

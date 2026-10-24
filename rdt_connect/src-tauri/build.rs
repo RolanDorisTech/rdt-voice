@@ -3,11 +3,13 @@ use std::{env, fs, path::PathBuf};
 fn main() {
     println!("cargo:rerun-if-env-changed=RDT_BUILD_ID");
     println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS");
+    println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_ARCH");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let build_id = match env::var("RDT_BUILD_ID") {
-        Ok(value) if is_valid_build_id_for_target(value.trim(), &target_os) => value.trim().to_string(),
+        Ok(value) if is_valid_build_id_for_target(value.trim(), &target_os, &target_arch) => value.trim().to_string(),
         Ok(value) if !value.trim().is_empty() && value.trim() != "dev-unmarked" => {
             panic!("Invalid RDT_BUILD_ID '{value}' for target '{target_os}'. Expected a marker in that platform's reserved namespace.");
         }
@@ -18,7 +20,7 @@ fn main() {
     tauri_build::build();
 }
 
-fn is_valid_build_id_for_target(value: &str, target_os: &str) -> bool {
+fn is_valid_build_id_for_target(value: &str, target_os: &str, target_arch: &str) -> bool {
     let bytes = value.as_bytes();
     if bytes.len() != 4
         || !matches!(bytes[0], b'0'..=b'5')
@@ -29,10 +31,18 @@ fn is_valid_build_id_for_target(value: &str, target_os: &str) -> bool {
         return false;
     }
     match target_os {
-        "macos" => matches!(bytes[0], b'0' | b'1'),
-        "windows" => matches!(bytes[0], b'2' | b'3'),
-        "linux" => matches!(bytes[0], b'4' | b'5'),
-        _ => true,
+        // Dev 11+: 0 reserved; 1 macOS ARM64; 2 Windows ARM64;
+        // 3 Windows x64; 4 Linux ARM64; 5 Linux x64.
+        "macos" => bytes[0] == b'1' && target_arch == "aarch64",
+        "windows" => {
+            (bytes[0] == b'2' && target_arch == "aarch64")
+                || (bytes[0] == b'3' && target_arch == "x86_64")
+        }
+        "linux" => {
+            (bytes[0] == b'4' && target_arch == "aarch64")
+                || (bytes[0] == b'5' && target_arch == "x86_64")
+        }
+        _ => false,
     }
 }
 
@@ -68,7 +78,8 @@ fn source_build_id(target_os: &str) -> String {
         )
     });
     let marker = stored.trim();
-    if !is_valid_build_id_for_target(marker, target_os) {
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    if !is_valid_build_id_for_target(marker, target_os, &target_arch) {
         panic!("Invalid RDT Connect build marker '{marker}' for target '{target_os}'. Run the tested platform-version stamping workflow.");
     }
     marker.to_string()

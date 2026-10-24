@@ -3,7 +3,10 @@ param(
   [ValidateSet('x64','ARM64')][string]$TargetArch = '',
   [string]$Python = '',
   [string]$FfmpegDir = $env:RDT_FFMPEG_DIR,
-  [string]$WhisperCppSource = $env:WHISPER_CPP_SOURCE
+  [string]$WhisperCppSource = $env:WHISPER_CPP_SOURCE,
+  [switch]$EnableVulkan,
+  [switch]$EnableCuda,
+  [switch]$RequireGpuWorker
 )
 $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -27,14 +30,28 @@ if (-not $FfmpegDir -or -not (Test-Path (Join-Path $FfmpegDir 'ffmpeg.exe')) -or
 }
 $noticesRoot = Join-Path $RepoRoot 'licenses/third-party'
 if (-not (Test-Path (Join-Path $noticesRoot 'opencc-js/NOTICE.md'))) { throw 'Required OpenCC-JS notice is missing.' }
+$directRequirements = Join-Path $RepoRoot 'backend/windows/requirements-windows.txt'
+$RequirementsLock = if ($TargetArch -eq 'ARM64') {
+  Join-Path $RepoRoot 'backend/windows/requirements-windows-arm64.txt'
+} else {
+  Join-Path $RepoRoot 'backend/windows/requirements-windows-x64.txt'
+}
+if (-not (Test-Path -LiteralPath $RequirementsLock -PathType Leaf)) {
+  throw "Required architecture-specific hash lock is missing: $RequirementsLock. Generate and qualify it on the target architecture; direct requirements are not a release-install fallback."
+}
+
 $buildRoot = Join-Path $ProjectDir "build/windows-$TargetArch"
 $venv = Join-Path $buildRoot 'venv'
 $pythonExe = Join-Path $venv 'Scripts/python.exe'
 if (-not (Test-Path $pythonExe)) { & $Python -m venv $venv; if ($LASTEXITCODE -ne 0) { throw 'Could not create isolated native build venv.' } }
 $pythonVersion = & $pythonExe -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])'
 if ($pythonVersion -ne '3.13.16') { throw "Build venv has Python $pythonVersion, expected 3.13.16." }
-& $pythonExe -m pip install --disable-pip-version-check -r (Join-Path $RepoRoot 'backend/windows/requirements-windows.txt')
-if ($LASTEXITCODE -ne 0) { throw 'Pinned build dependency install failed.' }
+
+& $pythonExe (Join-Path $RepoRoot 'backend/windows/scripts/validate_windows_requirements_lock.py') --lock $RequirementsLock --target-arch $TargetArch --direct-requirements $directRequirements
+if ($LASTEXITCODE -ne 0) { throw "Architecture-specific dependency lock validation failed for $TargetArch." }
+
+& $pythonExe -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r $RequirementsLock
+if ($LASTEXITCODE -ne 0) { throw "Hash-verified binary-wheel dependency installation failed for $TargetArch." }
 
 if (-not $WhisperCppSource) {
   $WhisperCppSource = Join-Path $buildRoot 'whisper.cpp'
@@ -52,7 +69,6 @@ if (-not $WhisperCppSource) {
 }
 & $pythonExe (Join-Path $RepoRoot 'backend/whisper_cpp/scripts/verify_engine_checkout.py') --source $WhisperCppSource --pins $PinFile --output (Join-Path $buildRoot 'engine-pin-report.json')
 if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp source/submodule pin verification failed.' }
-$workerBuild = Join-Path $buildRoot 'worker-build'
 $whisperCmakeLists = Join-Path $WhisperCppSource 'CMakeLists.txt'
 if (-not (Test-Path -LiteralPath $whisperCmakeLists -PathType Leaf)) {
   throw "Pinned whisper.cpp CMakeLists.txt is missing at: $WhisperCppSource"
@@ -60,12 +76,87 @@ if (-not (Test-Path -LiteralPath $whisperCmakeLists -PathType Leaf)) {
 $WhisperCppSource = (Resolve-Path -LiteralPath $WhisperCppSource).Path
 $cmakeWhisperSource = $WhisperCppSource.Replace('\', '/')
 Write-Host "Verified whisper.cpp source root: $cmakeWhisperSource"
-cmake -S (Join-Path $RepoRoot 'backend/whisper_cpp/worker') -B $workerBuild -A $TargetArch "-DWHISPER_CPP_SOURCE=$cmakeWhisperSource" -DCMAKE_BUILD_TYPE=Release
-if ($LASTEXITCODE -ne 0) { throw 'CMake worker configuration failed.' }
-cmake --build $workerBuild --config Release --parallel 2
-if ($LASTEXITCODE -ne 0) { throw 'Native persistent worker build failed.' }
-$worker = Join-Path $workerBuild 'bin/rdt_whisper_worker.exe'
-if (-not (Test-Path $worker)) { throw "Expected native worker missing: $worker" }
+
+if ($EnableVulkan -and -not $env:VULKAN_SDK) {
+  throw 'Vulkan was requested, but VULKAN_SDK is not set. Install the Vulkan SDK before building.'
+}
+if ($EnableCuda -and -not (Get-Command nvcc -ErrorAction SilentlyContinue)) {
+  throw 'CUDA was requested, but nvcc is unavailable. Install a compatible CUDA Toolkit before building.'
+}
+
+function Build-WorkerVariant {
+  param(
+    [string]$Variant,
+    [string]$Cuda,
+    [string]$Vulkan,
+    [string]$ArmDotprod = 'OFF'
+  )
+  $dir = Join-Path $buildRoot "worker-build-$Variant"
+  cmake -S (Join-Path $RepoRoot 'backend/whisper_cpp/worker') `
+    -B $dir -A $TargetArch `
+    "-DWHISPER_CPP_SOURCE=$cmakeWhisperSource" `
+    "-DRDT_ENABLE_CUDA=$Cuda" `
+    "-DRDT_ENABLE_VULKAN=$Vulkan" `
+    "-DRDT_ENABLE_ARM_DOTPROD=$ArmDotprod" `
+    -DCMAKE_BUILD_TYPE=Release
+  if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed for $Variant worker." }
+
+  cmake --build $dir --config Release --parallel 2
+  if ($LASTEXITCODE -ne 0) { throw "Native $Variant worker build failed." }
+
+  $exe = Join-Path $dir 'bin/rdt_whisper_worker.exe'
+  if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+    throw "Expected $Variant worker missing: $exe"
+  }
+  return $exe
+}
+
+# The portable CPU worker is mandatory; optimized workers are additive.
+$workers = @()
+$workers += [pscustomobject]@{
+  Path = (Build-WorkerVariant -Variant 'cpu' -Cuda 'OFF' -Vulkan 'OFF')
+  Name = 'rdt_whisper_worker.exe'
+}
+if ($TargetArch -eq 'ARM64') {
+  # This is optional: a toolchain/build failure must not block the baseline.
+  try {
+    $dotprodWorker = Build-WorkerVariant -Variant 'arm-dotprod' `
+      -Cuda 'OFF' -Vulkan 'OFF' -ArmDotprod 'ON'
+    if ($dotprodWorker) {
+      $workers += [pscustomobject]@{
+        Path = $dotprodWorker
+        Name = 'rdt_whisper_worker_dotprod.exe'
+      }
+    }
+  } catch {
+    Write-Warning "Optional ARM dot-product worker unavailable; retaining baseline. $($_.Exception.Message)"
+  }
+}
+if ($EnableCuda) {
+  $workers += [pscustomobject]@{
+    Path = (Build-WorkerVariant -Variant 'cuda' -Cuda 'ON' -Vulkan 'OFF')
+    Name = 'rdt_whisper_worker_cuda.exe'
+  }
+}
+if ($EnableVulkan) {
+  $workers += [pscustomobject]@{
+    Path = (Build-WorkerVariant -Variant 'vulkan' -Cuda 'OFF' -Vulkan 'ON')
+    Name = 'rdt_whisper_worker_vulkan.exe'
+  }
+}
+
+# A release explicitly requiring GPU support must never silently package
+# only the CPU worker. Requested GPU builds already fail on missing SDKs,
+# CMake errors, link errors, or missing executables.
+$gpuWorkers = @($workers | Where-Object {
+  $_.Name -in @('rdt_whisper_worker_cuda.exe', 'rdt_whisper_worker_vulkan.exe')
+})
+if ($RequireGpuWorker -and $gpuWorkers.Count -eq 0) {
+  throw 'GPU worker required for this release, but no CUDA or Vulkan worker was built.'
+}
+if ($RequireGpuWorker) {
+  Write-Host ("REQUIRED_GPU_WORKERS=" + (($gpuWorkers | ForEach-Object { $_.Name }) -join ','))
+}
 
 $stage = Join-Path $buildRoot 'stage'
 $dist = Join-Path $stage 'pyinstaller-dist'
@@ -73,8 +164,19 @@ $work = Join-Path $stage 'pyinstaller-work'
 $spec = Join-Path $stage 'pyinstaller-spec'
 $web = Join-Path $stage 'rdt_voice_web'
 $notices = Join-Path $stage 'third_party_notices'
+$guideStage = Join-Path $stage 'windows_installation_guide'
+$guideSource = Join-Path (Split-Path -Parent $PSScriptRoot) 'windows-package/guide'
 Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $dist,$work,$spec,$web,$notices | Out-Null
+New-Item -ItemType Directory -Force -Path $dist,$work,$spec,$web,$notices,$guideStage | Out-Null
+
+# Include the complete Windows installation guide in packaged resources.
+foreach ($file in @('windows_installation_guide.html','rdt_connect_guide_icon.png','rdt_connect_guide.ico')) {
+  $sourceFile = Join-Path $guideSource $file
+  if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
+    throw "Required Windows guide asset is missing: $sourceFile"
+  }
+  Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $guideStage $file) -Force
+}
 $env:PYTHONPATH = Join-Path $RepoRoot 'backend'
 $args = @('-m','PyInstaller','--noconfirm','--clean','--onedir','--name','rdt_voice_backend','--distpath',$dist,'--workpath',$work,'--specpath',$spec,'--paths',(Join-Path $RepoRoot 'backend'),'--hidden-import','model_registry','--hidden-import','engine','--hidden-import','whisper_cpp.model_registry','--hidden-import','whisper_cpp.engine','--hidden-import','qrcode.image.svg','--collect-all','qrcode')
 & $pythonExe @args (Join-Path $RepoRoot 'backend/windows/server.py')
@@ -82,7 +184,10 @@ if ($LASTEXITCODE -ne 0) { throw 'PyInstaller onedir backend build failed.' }
 $backendStage = Join-Path $dist 'rdt_voice_backend'
 if (-not (Test-Path (Join-Path $backendStage 'rdt_voice_backend.exe'))) { throw 'PyInstaller did not produce rdt_voice_backend.exe.' }
 & (Join-Path $RepoRoot 'rdt_connect/scripts/copy-msvc-runtime.ps1') -TargetArch $TargetArch -DestinationDir $backendStage
-Copy-Item $worker (Join-Path $backendStage 'rdt_whisper_worker.exe') -Force
+foreach ($variant in $workers) {
+  Copy-Item -LiteralPath $variant.Path -Destination (Join-Path $backendStage $variant.Name) -Force
+  Write-Host "Staged worker: $($variant.Name)"
+}
 Copy-Item (Join-Path $FfmpegDir 'ffmpeg.exe') $backendStage -Force
 Copy-Item (Join-Path $FfmpegDir 'ffprobe.exe') $backendStage -Force
 Copy-Item (Join-Path $RepoRoot 'index.html') (Join-Path $web 'index.html') -Force
@@ -91,22 +196,20 @@ Copy-Item (Join-Path $RepoRoot 'pcm-worklet.js') (Join-Path $web 'pcm-worklet.js
 Copy-Item (Join-Path $RepoRoot 'models.manifest.json') (Join-Path $web 'models.manifest.json') -Force
 Copy-Item (Join-Path $RepoRoot 'locales') $web -Recurse -Force
 Copy-Item (Join-Path $RepoRoot 'assets') $web -Recurse -Force
-Copy-Item (Join-Path $noticesRoot 'opencc-js') $notices -Recurse -Force
-if (-not (Test-Path (Join-Path $FfmpegDir 'LICENSE.txt')) -and -not (Test-Path (Join-Path $FfmpegDir 'LICENSE'))) { throw 'FFmpeg license notice is required in RDT_FFMPEG_DIR (LICENSE.txt or LICENSE).' }
-Copy-Item (Get-ChildItem $FfmpegDir -File | Where-Object { $_.Name -in @('LICENSE.txt','LICENSE') } | Select-Object -First 1).FullName $notices -Force
-@"
-# Build notices (Windows $TargetArch)
-
-- RDT Voice frontend: see repository LICENSE and `licenses/third-party/opencc-js/NOTICE.md`.
-- whisper.cpp / GGML: upstream MIT license from pinned source checkout; preserve upstream license files in release notices.
-- FFmpeg: bundled architecture-specific distribution from RDT_FFMPEG_DIR; its license notice is copied here.
-- Python and pip packages: see package licenses and package metadata for the locked requirements file.
-
-This is an inventory, not a complete transitive license audit. Confirm upstream licenses and binary hashes before public release.
-"@ | Set-Content -Encoding UTF8 (Join-Path $notices 'BUILD-NOTICES.md')
+# Collect notices from the actual staged binaries, pinned source checkout,
+# and installed runtime dependency closure. The collector requires an empty
+# destination and fails closed when license material or provenance is missing.
+& $pythonExe (Join-Path $RepoRoot 'backend/windows/scripts/collect_third_party_notices.py') `
+  --repo-root $RepoRoot `
+  --whisper-source $WhisperCppSource `
+  --ffmpeg-dir $FfmpegDir `
+  --site-packages (Join-Path $venv 'Lib/site-packages') `
+  --destination $notices `
+  --runtime-roots-file (Join-Path $RepoRoot 'backend/windows/runtime-package-roots.txt')
+if ($LASTEXITCODE -ne 0) { throw 'Third-party notice collection or verification failed.' }
 
 # Promote only after all required inputs and build outputs exist. Keep one rollback copy.
-$promote = @('rdt_voice_backend','rdt_voice_web','third_party_notices')
+$promote = @('rdt_voice_backend','rdt_voice_web','third_party_notices','windows_installation_guide')
 $rollback = Join-Path $buildRoot 'rollback-resources'
 Remove-Item -Recurse -Force $rollback -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $rollback | Out-Null
@@ -116,7 +219,7 @@ foreach ($name in $promote) {
 }
 try {
   foreach ($name in $promote) {
-    $source = if ($name -eq 'rdt_voice_backend') { $backendStage } elseif ($name -eq 'rdt_voice_web') { $web } else { $notices }
+    $source = if ($name -eq 'rdt_voice_backend') { $backendStage } elseif ($name -eq 'rdt_voice_web') { $web } elseif ($name -eq 'windows_installation_guide') { $guideStage } else { $notices }
     Copy-Item $source (Join-Path $ResourceRoot $name) -Recurse -Force
   }
 } catch {

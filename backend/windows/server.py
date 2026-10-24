@@ -785,9 +785,9 @@ def _allowed_pair_origin(value: str, request: Request) -> str:
         # A stale TAILSCALE_HOST from shell configuration must not break pairing.
         expected_host = (_tailscale_self_dns_name() or os.getenv("TAILSCALE_HOST", "").strip().split(":", 1)[0]).lower().rstrip(".")
         if host_is_tailscale and not expected_host:
-            raise ValueError("RDT Voice could not verify this Tailscale address. Open pairing on the Mac and use Set up private access.")
+            raise ValueError("RDT Voice could not verify this Tailscale address. Open pairing on the device running RDT Voice and use Set up private access.")
         if expected_host and host_is_tailscale and host != expected_host:
-            raise ValueError("This isn't the current Mac's Tailscale address. Use Set up private access to detect the correct address automatically.")
+            raise ValueError("This isn't the current device's Tailscale address. Use Set up private access to detect the correct address automatically.")
         if not host_is_tailscale and origin != configured_origin and origin != current_origin:
             raise ValueError("For a custom HTTPS hostname, set RDT_PUBLIC_URL on the backend to that exact origin first.")
         if origin == current_origin and _request_scheme(request) != "https":
@@ -988,7 +988,7 @@ def auth_tailscale_status(request: Request):
     check_host(_request_host(request))
     _require_pairing_admin(request)
     if not _local_direct_request(request):
-        raise HTTPException(status_code=403, detail="Open this page on the Mac running RDT Voice to configure private access.")
+        raise HTTPException(status_code=403, detail="Open this page on the device running RDT Voice to configure private access.")
     cli = _tailscale_cli_path()
     if not cli:
         return JSONResponse({"available": False, "ready": False, "message": "No supported Tailscale CLI candidate returned valid status JSON. Open DEV → Remote Access → Run diagnostics to see which locations failed; no Serve route was changed."}, headers={"Cache-Control": "no-store"})
@@ -997,7 +997,7 @@ def auth_tailscale_status(request: Request):
         self_info = status.get("Self") if isinstance(status, dict) else None
         dns_name = str((self_info or {}).get("DNSName", "") or "").strip().rstrip(".").lower()
         if not dns_name.endswith((".ts.net", ".tailscale.net")):
-            return JSONResponse({"available": False, "ready": False, "message": "Tailscale is installed, but this Mac has no active private DNS name. Connect Tailscale and reload."}, headers={"Cache-Control": "no-store"})
+            return JSONResponse({"available": False, "ready": False, "message": "Tailscale is installed, but this device has no active private DNS name. Connect Tailscale and reload."}, headers={"Cache-Control": "no-store"})
         serve_status = _tailscale_serve_status(cli)
         local_port = _local_server_port(request)
         existing_url = _tailscale_origin_for_local_port(serve_status, dns_name, local_port)
@@ -1018,7 +1018,7 @@ def auth_tailscale_setup(request: Request):
     _require_pairing_admin(request)
     _require_same_origin_admin_mutation(request)
     if not _local_direct_request(request):
-        raise HTTPException(status_code=403, detail="For safety, set up private access from the Mac itself at 127.0.0.1.")
+        raise HTTPException(status_code=403, detail="For safety, set up private access locally at 127.0.0.1 on the device running RDT Voice.")
     cli = _tailscale_cli_path()
     if not cli:
         raise HTTPException(status_code=503, detail="No supported Tailscale CLI candidate returned valid status JSON. Open DEV → Remote Access → Run diagnostics to inspect CLI candidate results; no Serve route was changed.")
@@ -1027,7 +1027,7 @@ def auth_tailscale_setup(request: Request):
         self_info = status.get("Self") if isinstance(status, dict) else None
         dns_name = str((self_info or {}).get("DNSName", "") or "").strip().rstrip(".").lower()
         if not dns_name.endswith((".ts.net", ".tailscale.net")):
-            raise HTTPException(status_code=503, detail="Tailscale is not connected on this Mac. Connect it and try again.")
+            raise HTTPException(status_code=503, detail="Tailscale is not connected on this device. Connect it and try again.")
         serve_status = _tailscale_serve_status(cli)
         local_port = _local_server_port(request)
         existing_url = _tailscale_origin_for_local_port(serve_status, dns_name, local_port)
@@ -1075,7 +1075,7 @@ def auth_tailscale_diagnostics(request: Request):
     check_host(_request_host(request))
     _require_pairing_admin(request)
     if not _local_direct_request(request):
-        raise HTTPException(status_code=403, detail="Tailscale diagnostics are available only on the Mac running RDT Voice.")
+        raise HTTPException(status_code=403, detail="Tailscale diagnostics are available only on the device running RDT Voice.")
 
     candidate_probes = _tailscale_cli_candidate_probes(check_all=True)
     selected_probe = next((item for item in candidate_probes if item.get("state") == "valid_status_json"), None)
@@ -1701,7 +1701,8 @@ def health(host: Optional[str]=Header(None)):
     check_host(host)
     engine_status = _ENGINE.status() if _ENGINE is not None else {
         "ready": False, "running": False, "engine": "whisper.cpp/v1.9.5",
-        "architecture": None, "provider": "CPU", "provider_reason": "Worker has not completed startup.",
+        "architecture": None, "provider": "CPU", "worker_variant": "unknown",
+        "provider_reason": "Worker has not completed startup.",
     }
     # Preserve old top-level status/model/features and add explicit inference readiness.
     return {"status":"ok", "model":MODEL_ID, "engine":engine_status,
@@ -1728,7 +1729,7 @@ def create_rdt_browser_handoff(
 ):
     check_host(host)
     if not _rdt_loopback_host(host):
-        raise HTTPException(status_code=403, detail="Browser handoff is available only to this Mac's loopback server.")
+        raise HTTPException(status_code=403, detail="Browser handoff is available only to this device's loopback server.")
     # In authenticated mode the desktop call must present the real bearer token.
     # For explicitly configured AUTH=off local-only development, loopback + Host checks still apply.
     require_bearer(authorization, tailscale_user_login)

@@ -1,0 +1,8 @@
+# Top-level Python distributions used by backend/windows/server.py at runtime.
+# Transitive runtime dependencies are derived from installed distribution metadata.
+fastapi
+numpy
+Pillow
+python-multipart
+qrcode
+uvicorn

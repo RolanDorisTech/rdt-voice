@@ -60,6 +60,18 @@ class WindowsBackendContractTests(unittest.TestCase):
         self.assertIn('target = _validate_openable_recording(target)', SERVER)
         self.assertIn('FFPROBE = shutil.which("ffprobe") or (str(pathlib.Path(FFMPEG).with_name(', SERVER)
 
+    def test_worker_variant_is_reported_in_engine_and_fallback_health(self):
+        for worker, variant in (
+            ("rdt_whisper_worker_cuda", "cuda"),
+            ("rdt_whisper_worker_vulkan", "vulkan"),
+            ("rdt_whisper_worker_dotprod", "arm-dotprod"),
+            ("rdt_whisper_worker", "cpu"),
+        ):
+            self.assertIn(f'"{worker}": "{variant}"', ENGINE)
+        self.assertIn('"worker_variant": self.worker_variant', ENGINE)
+        self.assertIn('"worker_variant": "unknown"', SERVER)
+        self.assertIn('"engine":engine_status', SERVER)
+
     def test_worker_protocol_is_bounded_and_persistent(self):
         self.assertIn('MAX_IPC_LINE = 64 * 1024', ENGINE)
         self.assertIn('READY_TIMEOUT_SECONDS', ENGINE)

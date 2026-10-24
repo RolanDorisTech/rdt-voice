@@ -2735,3 +2735,29 @@ html[dir="rtl"] [data-l10n-ignore] {
     white-space: nowrap !important;
   }
 }
+
+/* Windows installation guide actions in About. */
+.about-actions-row {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+#about-installation-guide-button {
+  width: auto !important;
+  max-width: 100%;
+  white-space: nowrap !important;
+}
+
+#about-installation-guide-button[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  .about-actions-row {
+    justify-content: flex-start;
+  }
+}

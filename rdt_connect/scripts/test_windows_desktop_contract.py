@@ -54,6 +54,36 @@ class WindowsBrowserContractTests(unittest.TestCase):
         self.assertIn('"mailto" => parsed.path() == "woknewsbusiness@gmail.com"', windows_open)
 
 
+
+    def test_arm64_vulkan_sdk_urls_are_plain_url_strings(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "windows-arm64-installer.yml").read_text(encoding="utf-8")
+        download_line = next(line for line in workflow.splitlines() if "$download =" in line)
+        checksum_line = next(line for line in workflow.splitlines() if "$checksumUri =" in line)
+
+        self.assertEqual(download_line.strip(), '$download = "https://sdk.lunarg.com/sdk/download/$version/warm/vulkan_sdk.exe"')
+        self.assertEqual(checksum_line.strip(), '$checksumUri = "https://sdk.lunarg.com/sdk/sha/$version/warm/vulkan_sdk.exe.json"')
+        self.assertNotIn("[", download_line)
+        self.assertNotIn("](", download_line)
+        self.assertNotIn("[", checksum_line)
+        self.assertNotIn("](", checksum_line)
+
+        self.assertIn("$checksum = Invoke-RestMethod -Uri $checksumUri", workflow)
+        self.assertIn('$expectedFile = "vulkansdk-windows-ARM64-$version.exe"', workflow)
+        self.assertIn("$checksum.version -ne $version", workflow)
+        self.assertIn("$checksum.platform -ne 'warm'", workflow)
+        self.assertIn("$checksum.file -ne $expectedFile", workflow)
+        self.assertIn("([string]$checksum.sha).ToLowerInvariant()", workflow)
+        self.assertIn("^[0-9a-f]{64}$", workflow)
+    def test_arm64_ffmpeg_preflight_checks_both_executables(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "windows-arm64-installer.yml").read_text(encoding="utf-8")
+        start = workflow.index("      - name: Prepare Windows ARM64 FFmpeg")
+        end = workflow.index("\n      - name:", start + 1)
+        step = workflow[start:end]
+        self.assertIn("$ffmpegVersion = & (Join-Path $destination 'ffmpeg.exe') -version", step)
+        self.assertIn("$ffprobeVersion = & (Join-Path $destination 'ffprobe.exe') -version", step)
+        self.assertGreaterEqual(step.count("if ($LASTEXITCODE -ne 0)"), 2)
+
+
 class WindowsTlsContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -95,7 +125,7 @@ class WindowsTlsContractTests(unittest.TestCase):
         self.assertIn("windows_private_key_sha256", self.source)
 
     def test_windows_tls_setup_reports_trusted_state_and_removes_only_tracked_fingerprints(self) -> None:
-        setup = block_between(self.source, "fn setup_local_https_certificate_windows", "#[tauri::command]\nfn setup_local_https_certificate")
+        setup = block_between(self.source, "fn setup_local_https_certificate_windows", "#[tauri::command]\nasync fn setup_local_https_certificate")
         removal = block_between(self.source, "fn remove_rdt_https_trust", "fn set_local_transport")
         self.assertIn("status.configured", setup)
         self.assertIn("status.trusted", setup)
@@ -106,6 +136,15 @@ class WindowsTlsContractTests(unittest.TestCase):
         block = block_between(self.source, "fn run_powershell_script", "fn powershell_read_certificate")
         self.assertIn("-EncodedCommand", block)
         self.assertIn("creation_flags(0x08000000)", block)
+
+
+
+    def test_save_local_tls_config_propagates_acl_failure(self) -> None:
+        source = (ROOT / "rdt_connect" / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
+        routine = source.split("fn save_local_tls_config(", 1)[1].split("\nfn sha256_file_hex", 1)[0]
+        self.assertIn("set_private_permissions(&state.tls_config_path, 0o600)", routine)
+        self.assertIn(".map_err(|error| format!(", routine)
+        self.assertNotIn("let _ = set_private_permissions", routine)
 
 
 class WindowsTlsUiContractTests(unittest.TestCase):
@@ -133,9 +172,9 @@ class WindowsPackagingContractTests(unittest.TestCase):
 class WindowsVersionStampContractTests(unittest.TestCase):
     def test_platform_marker_files_use_reserved_namespaces(self) -> None:
         connect = ROOT / "rdt_connect" / "scripts"
-        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A04")
-        self.assertEqual((connect / "build-id-sequence-linux.txt").read_text(encoding="utf-8").strip(), "4A01")
-        self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "0D54")
+        self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A05")
+        self.assertEqual((connect / "build-id-sequence-linux.txt").read_text(encoding="utf-8").strip(), "4U01")
+        self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "1D01")
 
     def test_windows_workflows_stamp_before_native_build(self) -> None:
         workflows = [

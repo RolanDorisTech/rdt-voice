@@ -12,7 +12,7 @@
         <a class="brand-mark brand-mark-link" id="brand-home-link" href="https://rolandoristech.github.io/rdt-voice/" target="_blank" rel="noopener noreferrer" aria-label="Open the official RDT Voice website"><img src="/rdt-brand-icon.png" alt="" /></a>
         <div class="topbar-top-row">
           <div class="brand">
-            <div class="brand-copy"><div class="brand-heading-row"><h1>RDT Connect</h1><p>— Private transcription, powered by your Mac.</p></div></div>
+            <div class="brand-copy"><div class="brand-heading-row"><h1>RDT Connect</h1><p>— Private transcription, running locally.</p></div></div>
           </div>
           <div class="header-tools">
             <span class="experimental-tag">Experimental</span>
@@ -53,7 +53,7 @@
               <p id="orphan-user-message" class="orphan-user-message"></p>
             </div>
             <section class="card remote-step-card remote-step-one local-step-card" aria-label="Step 1: Choose the transcription model">
-              <div class="local-model-label"><label class="field-label" for="model-select-trigger">Choose a model — Apple MLX:</label></div>
+              <div class="local-model-label"><label class="field-label" for="model-select-trigger">Choose a model:</label></div>
               <div class="model-select-row">
                 <div id="model-select-tooltip" class="model-select-shell" title="Choose which Whisper model the local server will use. Stop the server before changing models.">
                   <select id="model-select" class="model-select-source" aria-hidden="true" tabindex="-1" title="Choose which Whisper model the local server will use.">
@@ -91,7 +91,7 @@
               <p id="model-download-status" class="model-download-status muted" role="status" aria-live="polite">The selected model must be available before starting the server.</p>
             </div>
             <div id="local-https-quick-prompt" class="security-prompt hidden">
-              <div class="security-prompt-copy"><strong>Secure your local connection</strong><span>RDT Connect can set up the certificate and Mac trust for you. Your private key stays on this Mac.</span></div>
+              <div class="security-prompt-copy"><strong>Secure your local connection</strong><span>RDT Connect can set up a trusted local certificate for this device. Your private key stays on this device.</span></div>
               <button id="local-https-quick-setup-button" class="button secondary" type="button">Set up trusted HTTPS</button>
               <button id="local-https-details-button" class="text-link" type="button">More details</button>
             </div>
@@ -200,7 +200,7 @@
             <div class="card-heading"><h2>Local transport</h2><span class="eyebrow">HTTPS recommended</span></div>
             <fieldset class="transport-choice">
               <legend class="field-label">Connection type</legend>
-              <label class="transport-option"><input id="transport-https" type="radio" name="local-transport" value="https" checked /> <span><strong>HTTPS · Recommended</strong><small>Encrypted. Requires a valid certificate and verified trust on this Mac.</small></span></label>
+              <label class="transport-option"><input id="transport-https" type="radio" name="local-transport" value="https" checked /> <span><strong>HTTPS · Recommended</strong><small>Encrypted. Requires a valid certificate and verified system trust.</small></span></label>
               <label class="transport-option"><input id="transport-http" type="radio" name="local-transport" value="http" /> <span><strong>HTTP · Development only</strong><small>Unencrypted. Use only when you intentionally need plaintext local testing.</small></span></label>
             </fieldset>
             <details class="developer-help-details"><summary>Do I need to change this?</summary><p class="muted">Most users should leave HTTPS selected. Set up trusted HTTPS from Local Server. Changing a URL to begin with HTTPS does not enable TLS by itself.</p></details>
@@ -252,7 +252,7 @@
         <div class="grid remote-page-grid">
           <section class="column remote-step-column"><article class="card remote-step-card remote-step-one">
             <div class="card-heading remote-step-heading"><div class="remote-step-title"><span class="remote-step-number">1</span><h2>Connect another device</h2></div><span class="eyebrow">Private HTTPS</span></div>
-            <p class="remote-vpn-note" data-l10n-rich="remoteAccess.vpnRequirement">Remote access requires <strong data-l10n-slot="vpnServiceType">Tailscale or another VPN/private network</strong> that lets your phone securely reach this Mac.</p>
+            <p class="remote-vpn-note" data-l10n-rich="remoteAccess.vpnRequirement">Remote access requires <strong data-l10n-slot="vpnServiceType">Tailscale or another VPN/private network</strong> that lets your phone securely reach this device.</p>
             <details class="tailscale-help"><summary>How private access works</summary><p>Tailscale provides the private encrypted route; the QR code only requests browser access.</p><ol class="tailscale-steps"><li><strong>Connect both devices.</strong> Install Tailscale on this Mac and your phone, then sign in to the same account.</li><li><strong>Start and set up.</strong> Start the local server and choose Set up remote access.</li><li><strong>Pair and approve.</strong> Generate the short-lived QR, scan it with your phone, then approve the request in step 2.</li></ol><p class="muted field-help" data-l10n-rich="remoteAccess.installTailscale">Install Tailscale for macOS from <a data-l10n-slot="officialGuide" href="https://tailscale.com/docs/install/mac" target="_blank" rel="noopener noreferrer">the official guide</a>.</p></details>
             <div class="button-row">
               <button id="setup-remote" class="button primary full" disabled>Set up remote access</button>
@@ -354,7 +354,7 @@
             <div class="settings-group-heading"><h2 id="settings-models-heading">Models</h2><p class="muted">Choose model storage and manage cached models.</p></div>
             <div class="settings-group-grid settings-models-grid">
               <article class="card model-storage-card">
-            <div class="card-heading"><h2>Model storage</h2><span class="eyebrow">On this Mac</span></div>
+            <div class="card-heading"><h2>Model storage</h2><span class="eyebrow">On this device</span></div>
             <p class="muted">RDT Connect checks these folders from top to bottom and uses the first verified copy of your selected model. The order also guides future model downloads.</p>
             <div id="model-storage-summary" class="tls-status tls-needs-setup" role="status" aria-live="polite">Checking the selected model’s local cache…</div>
             <div id="model-storage-locations" class="model-storage-locations" aria-label="Model storage folders in priority order"></div>
@@ -363,12 +363,12 @@
           </article>
               <article class="card model-cleanup-card">
             <div class="card-heading"><h2>Model management</h2><span class="eyebrow">Separate storage</span></div>
-                        <p class="muted">Choose specific downloaded RDT Connect Mac models to remove. EasyWhisper browser data and other model repositories are never deleted here.</p>
+                        <p class="muted">Choose specific downloaded RDT Connect models on this device to remove. EasyWhisper browser data and other model repositories are never deleted here.</p>
             <div id="model-cache-selection-list" class="model-cache-selection-list" role="group" aria-label="Downloaded RDT Connect models">Checking model cache availability…</div>
             <div class="model-cleanup-actions">
               <button id="delete-rdt-models-button" class="button danger" type="button" title="Delete only the downloaded RDT Connect MLX models you select below.">Delete RDT Connect models</button>
             </div>
-            <p id="model-cleanup-status" class="muted field-help" role="status" aria-live="polite">Stop the local server and finish or cancel downloads before deleting Mac models.</p>
+            <p id="model-cleanup-status" class="muted field-help" role="status" aria-live="polite">Stop the local server and finish or cancel downloads before deleting models on this device.</p>
           </article>
             </div>
           </section>
@@ -376,12 +376,12 @@
             <div class="settings-group-heading"><h2 id="settings-security-heading">Security</h2><p class="muted">Set up the secure local browser connection.</p></div>
             <div class="settings-group-grid settings-security-grid">
               <article class="card local-https-card settings-security-card" id="settings-security">
-            <div class="card-heading"><h2>HTTPS for this Mac</h2><span class="eyebrow">Secure local connection</span></div>
-            <p class="muted">HTTPS encrypts the connection between this Mac and its local browser. RDT Connect can configure trusted HTTPS for you; the private key stays on this Mac.</p>
+            <div class="card-heading"><h2>HTTPS for this device</h2><span class="eyebrow">Secure local connection</span></div>
+            <p class="muted">HTTPS encrypts the connection between this device and its local browser. RDT Connect can configure trusted HTTPS for you; the private key stays on this Mac.</p>
             <div id="local-https-status" class="tls-status tls-needs-setup" role="status" aria-live="polite">Checking local HTTPS configuration…</div>
             <button id="setup-local-https-button" class="button primary full" type="button">Set up trusted HTTPS</button>
             <details class="https-details"><summary>Manage existing certificates · advanced</summary>
-            <p class="muted field-help">RDT Connect creates a local certificate authority for localhost and 127.0.0.1, then offers to add that CA to your macOS login Keychain. Your CA private key remains on this Mac. Never share it.</p>
+            <p class="muted field-help">RDT Connect creates a local certificate authority for localhost and 127.0.0.1, then offers to add that CA to your system trust store. Your CA private key remains on this Mac. Never share it.</p>
             <div class="tls-file-list">
               <div class="tls-file-row"><div><strong>Server certificate</strong><code id="tls-cert-path">Not selected</code></div><button id="choose-tls-cert-button" class="button secondary" type="button">Choose certificate…</button></div>
               <div class="tls-file-row"><div><strong>Matching private key</strong><code id="tls-key-path">Not selected</code></div><button id="choose-tls-key-button" class="button secondary" type="button">Choose private key…</button></div>
@@ -389,7 +389,7 @@
             </div>
             <div class="button-row tls-action-row" aria-label="Certificate actions"><button id="link-tls-button" class="button secondary" type="button" disabled title="Link and validate an existing certificate and matching private key">Link certificate</button><button id="trust-tls-button" class="button secondary" type="button" disabled title="Add the selected root CA to this Mac’s login Keychain">Trust root CA</button><button id="remove-tls-trust-button" class="button secondary" type="button" disabled title="Remove only HTTPS trust entries previously added by RDT Connect">Remove added trust</button></div>
             <p class="muted field-help" data-l10n-rich="settings.security.existingCertificateHelp">For existing files, select the certificate and matching private key, then click <strong data-l10n-slot="linkCertificate">Link certificate</strong>. If the certificate uses a private CA, select that self-signed root CA and click <strong data-l10n-slot="trustRootCA">Trust root CA</strong>. The certificate must be unexpired, match the key, and include <code data-l10n-slot="loopbackSAN">IP Address:127.0.0.1</code> in its Subject Alternative Name (SAN). RDT Connect uses the selected files in place; it does not copy your private key or certificates. Keep those paths stable, and update or relink the files when the certificate renews.</p>
-            <p class="muted field-help">For phone access, use Remote Access. Do not install this Mac’s local certificate authority on your phone.</p>
+            <p class="muted field-help">For phone access, use Remote Access. Do not install this device’s local certificate authority on your phone.</p>
             </details>
           </article>
             </div>
@@ -402,8 +402,8 @@
             <p class="muted">RDT Connect helps you run your own private, local transcription server. You choose when to connect another device, and the app keeps the security details visible instead of hiding them.</p>
             <div id="application-update-panel" class="application-update-panel" aria-hidden="true" inert><div class="card-heading"><h2>Application updates</h2></div><p id="application-update-message" class="muted" aria-live="polite"></p><div class="application-update-actions"><button id="application-update-action-button" class="button update-check-button" type="button" hidden disabled>Download and install update</button></div></div>
             <div class="about-channel-row">
-              <div class="about-company-block"><a id="about-company-link" class="about-company-link" href="https://github.com/RolanDorisTech/rdt-voice" target="_blank" rel="noopener noreferrer"><strong>Built by Rolan &amp; Doris Tech ↗</strong></a><small>Local AI Made Easy · Apple Silicon and on-device AI</small><small class="about-business-contact">Business contact · <a id="about-business-contact-link" href="mailto:woknewsbusiness@gmail.com">woknewsbusiness@gmail.com</a></small></div>
-              <button id="about-youtube-button" class="button secondary" type="button" title="Open the Rolan & Doris Tech YouTube channel in your default browser">Support us on YouTube ↗</button></div>
+              <div class="about-company-block"><a id="about-company-link" class="about-company-link" href="https://github.com/RolanDorisTech/rdt-voice" target="_blank" rel="noopener noreferrer"><strong>Built by Rolan &amp; Doris Tech ↗</strong></a><small>Local AI Made Easy · Private, on-device transcription</small><small class="about-business-contact">Business contact · <a id="about-business-contact-link" href="mailto:woknewsbusiness@gmail.com">woknewsbusiness@gmail.com</a></small></div>
+              <div class="about-actions-row"><button id="about-youtube-button" class="button secondary" type="button" title="Open the Rolan & Doris Tech YouTube channel in your default browser">Support us on YouTube ↗</button><button id="about-installation-guide-button" class="button secondary" type="button" title="Open the Windows installation guide" hidden>Windows installation guide ↗</button></div></div>
             <details class="legal-details">
               <summary>Licences and third-party acknowledgements</summary>
               <p class="muted">RDT Voice, RDT Connect, third-party libraries, and model files may have different terms. The current RDT Voice repository identifies its source license as PolyForm Noncommercial 1.0.0; the historical MIT text does not by itself establish the license for a current release. Always check the exact version and model card you use.</p>
@@ -416,7 +416,7 @@
           </section>
         </div>
       </section>
-      <footer class="foot"><span class="foot-brand-line"><strong>RDT Connect</strong><span id="footer-server-status-dot" class="foot-dot stopped" title="Server stopped" role="img" aria-label="Server stopped">●</span>Private transcription, powered by your Mac.</span></footer>
+      <footer class="foot"><span class="foot-brand-line"><strong>RDT Connect</strong><span id="footer-server-status-dot" class="foot-dot stopped" title="Server stopped" role="img" aria-label="Server stopped">●</span>Private transcription, running locally.</span></footer>
       <div id="qr-expanded-overlay" class="qr-expanded-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="qr-expanded-title">
         <div class="qr-expanded-panel">
           <div class="qr-expanded-heading"><strong id="qr-expanded-title">Private phone access</strong><button id="close-expanded-qr" class="button secondary compact-button" type="button">Close</button></div>
@@ -438,7 +438,7 @@
       </div>
       <p class="https-setup-success-kicker">SECURE CONNECTION READY</p>
       <h2>You're all set!</h2>
-      <p class="https-setup-success-copy">Trusted HTTPS is ready on this Mac.</p>
+      <p class="https-setup-success-copy">Trusted HTTPS is ready on this device.</p>
     </div>
   </div>
 

@@ -1,6 +1,7 @@
 // RDT-owned persistent worker around the pinned whisper.cpp C API.
 // IPC is bounded, line-oriented, UTF-8/base64url encoded, and intentionally not JSON.
 #include "whisper.h"
+#include "ggml-backend.h"
 
 #include <algorithm>
 #include <atomic>
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <initializer_list>
 #include <limits>
 #include <mutex>
 #include <queue>
@@ -202,6 +204,55 @@ static bool transcribe(struct whisper_context *ctx, const std::vector<std::strin
     return result == 0;
 }
 
+
+struct ProviderInfo {
+    std::string provider;
+    std::string device;
+};
+
+static bool select_provider(ProviderInfo &out) {
+#if defined(RDT_ENABLE_CUDA) && RDT_ENABLE_CUDA
+    const char *registry_name = "CUDA";
+    const char *provider_name = "CUDA";
+#elif defined(RDT_ENABLE_VULKAN) && RDT_ENABLE_VULKAN
+    const char *registry_name = "Vulkan";
+    const char *provider_name = "Vulkan";
+#else
+    out.provider = "CPU";
+    out.device = "CPU";
+    return true;
+#endif
+
+#if (defined(RDT_ENABLE_CUDA) && RDT_ENABLE_CUDA) || (defined(RDT_ENABLE_VULKAN) && RDT_ENABLE_VULKAN)
+    ggml_backend_reg_t reg = ggml_backend_reg_by_name(registry_name);
+    if (!reg) return false;
+
+    ggml_backend_dev_t selected = nullptr;
+    for (auto wanted_type : {GGML_BACKEND_DEVICE_TYPE_GPU, GGML_BACKEND_DEVICE_TYPE_IGPU}) {
+        for (size_t i = 0; i < ggml_backend_reg_dev_count(reg); ++i) {
+            ggml_backend_dev_t dev = ggml_backend_reg_dev_get(reg, i);
+            if (dev && ggml_backend_dev_type(dev) == wanted_type) {
+                selected = dev;
+                break;
+            }
+        }
+        if (selected) break;
+    }
+    if (!selected) return false;
+
+    const char *description = ggml_backend_dev_description(selected);
+    const char *name = ggml_backend_dev_name(selected);
+    out.provider = provider_name;
+    out.device = (description && *description) ? description :
+                 ((name && *name) ? name : provider_name);
+    std::replace(out.device.begin(), out.device.end(), '\t', ' ');
+    std::replace(out.device.begin(), out.device.end(), '\r', ' ');
+    std::replace(out.device.begin(), out.device.end(), '\n', ' ');
+    return true;
+#endif
+    return false;
+}
+
 int main(int argc, char **argv) {
     fs::path model;
     for (int i = 1; i < argc; ++i) {
@@ -209,11 +260,21 @@ int main(int argc, char **argv) {
         else { std::cerr << "invalid_argument"; return 2; }
     }
     if (model.empty()) { std::cerr << "model_required"; return 2; }
+    ProviderInfo provider;
+    if (!select_provider(provider)) {
+        std::cerr << "requested_gpu_backend_has_no_usable_device" << std::endl;
+        return 4;
+    }
     struct whisper_context_params cparams = whisper_context_default_params();
-    cparams.use_gpu = false;  // CPU is the qualification baseline; no GPU inference is implied.
+#if (defined(RDT_ENABLE_CUDA) && RDT_ENABLE_CUDA) || (defined(RDT_ENABLE_VULKAN) && RDT_ENABLE_VULKAN)
+    cparams.use_gpu = true;
+#else
+    cparams.use_gpu = false;
+#endif
     struct whisper_context *ctx = whisper_init_from_file_with_params(model.u8string().c_str(), cparams);
     if (!ctx) { std::cerr << "model_load_failed"; return 3; }
-    std::cout << "READY\t" << architecture_name() << "\twhisper.cpp/v1.9.5" << std::endl;
+    std::cout << "READY\t" << architecture_name() << "\twhisper.cpp/v1.9.5\t"
+              << provider.provider << "\t" << provider.device << std::endl;
     std::thread input(reader_thread);
     for (;;) {
         Command cmd;

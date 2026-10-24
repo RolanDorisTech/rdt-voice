@@ -2,14 +2,30 @@
 from __future__ import annotations
 
 import base64
+import ctypes
 import os
 import pathlib
+import platform
 import queue
 import subprocess
 import sys
 import threading
 import uuid
 from typing import Any
+
+def _windows_arm_dotprod_available() -> bool:
+    """Use the optimized ARM worker only when Windows confirms CPU support."""
+    if os.name != "nt" or platform.machine().lower() not in {"arm64", "aarch64"}:
+        return False
+    try:
+        check = ctypes.WinDLL("kernel32", use_last_error=True).IsProcessorFeaturePresent
+        check.argtypes = [ctypes.c_uint32]
+        check.restype = ctypes.c_int
+        # PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE
+        return bool(check(43))
+    except (AttributeError, OSError):
+        return False
+
 
 MAX_IPC_LINE = 64 * 1024
 READY_TIMEOUT_SECONDS = 60
@@ -48,52 +64,111 @@ class PersistentWhisperEngine:
         self.architecture = "unknown"
         self.engine_version = "whisper.cpp/v1.9.5"
         self.provider = "CPU"
-        self.provider_reason = "CPU qualification path; GPU execution has not been requested or verified."
+        self.worker_variant = "unknown"
+        self.provider_reason = "Worker has not completed startup."
+
+    @staticmethod
+    def worker_candidates() -> list[pathlib.Path]:
+        override = os.environ.get("RDT_WHISPER_WORKER_EXE", "").strip()
+        if override:
+            # An explicit override is authoritative; do not silently replace it.
+            return [pathlib.Path(override).expanduser().resolve()]
+
+        suffix = ".exe" if os.name == "nt" else ""
+        if getattr(sys, "frozen", False):
+            root = pathlib.Path(sys.executable).resolve().parent
+        else:
+            root = pathlib.Path(__file__).resolve().parent / "bin"
+
+        # Prefer usable GPU workers, then runtime-qualified ARM optimization,
+        # then the portable CPU fallback.
+        candidates = [
+            root / f"rdt_whisper_worker_cuda{suffix}",
+            root / f"rdt_whisper_worker_vulkan{suffix}",
+        ]
+        if _windows_arm_dotprod_available():
+            candidates.append(root / "rdt_whisper_worker_dotprod.exe")
+        candidates.append(root / f"rdt_whisper_worker{suffix}")
+        return candidates
 
     @staticmethod
     def worker_path() -> pathlib.Path:
-        override = os.environ.get("RDT_WHISPER_WORKER_EXE", "").strip()
-        if override:
-            return pathlib.Path(override).expanduser().resolve()
-        suffix = ".exe" if os.name == "nt" else ""
-        filename = f"rdt_whisper_worker{suffix}"
-        if getattr(sys, "frozen", False):
-            # PyInstaller onedir places the backend and its native worker together.
-            return pathlib.Path(sys.executable).resolve().parent / filename
-        return pathlib.Path(__file__).resolve().parent / "bin" / filename
+        # Compatibility for callers that still expect a single default path.
+        candidates = PersistentWhisperEngine.worker_candidates()
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return candidates[-1]
 
     def start(self) -> None:
         if self.process is not None and self.process.poll() is None:
             return
-        exe = self.worker_path()
-        if not exe.is_file():
+
+        candidates = self.worker_candidates()
+        available = [path for path in candidates if path.is_file()]
+        if not available:
             raise RuntimeError("persistent_worker_not_packaged")
+
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-        self._lines = queue.Queue(maxsize=16)
-        self.process = subprocess.Popen(
-            [str(exe), "--model", str(self.model_path)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            bufsize=0,
-            creationflags=creationflags,
-        )
-        self._reader = threading.Thread(target=self._read_stdout, name="rdt-whisper-stdout", daemon=True)
-        self._reader.start()
-        try:
-            line = self._lines.get(timeout=READY_TIMEOUT_SECONDS)
-        except queue.Empty as exc:
-            self.stop()
-            raise RuntimeError("persistent_worker_ready_timeout") from exc
-        if isinstance(line, BaseException) or line is None:
-            self.stop()
-            raise RuntimeError("persistent_worker_exited_before_ready") from (line if isinstance(line, BaseException) else None)
-        parts = line.decode("utf-8", "strict").strip().split("\t")
-        if len(parts) < 3 or parts[0] != "READY":
-            self.stop()
-            raise RuntimeError("persistent_worker_handshake_invalid")
-        self.architecture = parts[1][:32]
-        self.engine_version = parts[2][:64]
+        last_error = None
+
+        for exe in available:
+            attempt_error = None
+            self._lines = queue.Queue(maxsize=16)
+            try:
+                self.process = subprocess.Popen(
+                    [str(exe), "--model", str(self.model_path)],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    bufsize=0,
+                    creationflags=creationflags,
+                )
+                self._reader = threading.Thread(
+                    target=self._read_stdout,
+                    name="rdt-whisper-stdout",
+                    daemon=True,
+                )
+                self._reader.start()
+                line = self._lines.get(timeout=READY_TIMEOUT_SECONDS)
+
+                if isinstance(line, BaseException) or line is None:
+                    raise RuntimeError("persistent_worker_exited_before_ready")
+
+                parts = line.decode("utf-8", "strict").strip().split("\t")
+                if len(parts) < 3 or parts[0] != "READY":
+                    raise RuntimeError("persistent_worker_handshake_invalid")
+
+                self.architecture = parts[1][:32]
+                self.engine_version = parts[2][:64]
+                self.provider = parts[3][:32] if len(parts) > 3 and parts[3] else "CPU"
+                device = parts[4][:256] if len(parts) > 4 and parts[4] else self.provider
+                self.worker_variant = {
+                    "rdt_whisper_worker_cuda": "cuda",
+                    "rdt_whisper_worker_vulkan": "vulkan",
+                    "rdt_whisper_worker_dotprod": "arm-dotprod",
+                    "rdt_whisper_worker": "cpu",
+                }.get(exe.stem, "custom")
+                self.provider_reason = (
+                    f"Worker variant {self.worker_variant}; "
+                    f"provider {self.provider}; device {device}"
+                )
+                return
+
+            except queue.Empty:
+                attempt_error = RuntimeError("persistent_worker_ready_timeout")
+            except (OSError, RuntimeError, UnicodeError) as exc:
+                attempt_error = exc
+            finally:
+                if attempt_error is not None:
+                    self.stop()
+
+            if attempt_error is not None:
+                last_error = attempt_error
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("persistent_worker_start_failed")
 
     def _read_stdout(self) -> None:
         assert self.process is not None and self.process.stdout is not None
@@ -198,6 +273,7 @@ class PersistentWhisperEngine:
         return {
             "ready": bool(alive), "running": bool(alive), "engine": self.engine_version,
             "architecture": self.architecture, "provider": self.provider,
+            "worker_variant": self.worker_variant,
             "provider_reason": self.provider_reason,
         }
 

@@ -263,6 +263,17 @@ function modelToneFor(model: string): "tiny" | "base" | "small" | "turbo" | "lar
   if (model === "large-v3-turbo" || model.endsWith("whisper-large-v3-turbo")) return "turbo";
   return "large";
 }
+function isLinuxRuntime(): boolean {
+  return /Linux/i.test(`${navigator.userAgent} ${navigator.platform}`) && !/Android/i.test(navigator.userAgent);
+}
+function isWindowsRuntime(): boolean {
+  return /Windows/i.test(`${navigator.userAgent} ${navigator.platform}`);
+}
+function isWindowsOrLinuxRuntime(): boolean {
+  return /Windows|Linux/i.test(`${navigator.userAgent} ${navigator.platform}`);
+}
+let platformModelCatalogFailed = false;
+
 function isNativeGgmlCatalog(): boolean {
   return modelSelect.options.length > 0 && modelSelect.options[0].value === "tiny";
 }
@@ -270,7 +281,10 @@ type PlatformModelOption = { id: string; name: string; description: string; size
 async function initializePlatformModelCatalog() {
   try {
     const catalog = await invoke<PlatformModelOption[]>("get_platform_model_catalog");
-    if (!Array.isArray(catalog) || catalog.length !== 5 || catalog.some((item) => !item || typeof item.id !== "string" || typeof item.name !== "string")) return;
+    if (!Array.isArray(catalog) || catalog.length !== 5 || catalog.some((item) => !item || typeof item.id !== "string" || typeof item.name !== "string")) {
+      failPlatformModelCatalog();
+      return;
+    }
     const previousValue = modelSelect.value;
     for (const key of Object.keys(modelMenuDetails)) delete modelMenuDetails[key];
     modelOptionBaseLabels.clear();
@@ -294,8 +308,24 @@ async function initializePlatformModelCatalog() {
     syncModelSelectPresentation();
     void refreshModelCacheBadges();
   } catch {
-    // Keep the bundled macOS-first catalog if running with an older native binary.
+    if (isWindowsOrLinuxRuntime()) {
+      failPlatformModelCatalog();
+      return;
+    }
+    // Preserve the bundled catalog fallback for older macOS native binaries.
   }
+}
+
+function failPlatformModelCatalog() {
+  if (!isWindowsOrLinuxRuntime()) return;
+  platformModelCatalogFailed = true;
+  modelSelect.replaceChildren();
+  modelSelect.disabled = true;
+  const label = modelSelect.closest(".local-model-label")?.querySelector("label");
+  if (label) label.textContent = "Model catalog unavailable:";
+  modelIdDetail.textContent = "Unavailable";
+  modelHelp.textContent =
+    "The native model catalog could not be loaded. Restart or repair RDT Connect; incompatible models will not be offered on this platform.";
 }
 function syncModelSelectPresentation() {
   const selected = modelSelect.options[modelSelect.selectedIndex];
@@ -343,7 +373,7 @@ function renderModelCacheSelection() {
     empty.className = "muted field-help";
     empty.textContent = unknown
       ? "Cache status is still being checked or could not be verified. Reopen Settings to retry."
-      : "No downloaded RDT Connect MLX models were found in your configured storage locations.";
+      : "No downloaded RDT Connect models were found in your configured storage locations.";
     modelCacheSelectionList.appendChild(empty);
     renderModelCleanupButtons();
     return;
@@ -525,6 +555,8 @@ const startProgressText = $("start-progress-text");
 const startProgressDescription = $("start-progress-description");
 const aboutCompanyLink = $("about-company-link") as HTMLAnchorElement;
 const aboutYoutubeButton = $("about-youtube-button") as HTMLButtonElement;
+const aboutInstallationGuideButton = $("about-installation-guide-button") as HTMLButtonElement;
+aboutInstallationGuideButton.hidden = !/Windows/i.test(navigator.userAgent);
 const aboutBusinessContactLink = $("about-business-contact-link") as HTMLAnchorElement;
 const openButton = $("open-button") as HTMLButtonElement;
 const browserSelect = $("browser-select") as HTMLSelectElement;
@@ -1112,16 +1144,16 @@ function setBusy(value: boolean) {
   copyTokenButton.disabled = value;
   openButton.disabled = value || !browserPreflightPassed();
   testConnectionButton.disabled = value || !backend.running;
-  modelSelect.disabled = value || modelDownloadStatus.active;
+  modelSelect.disabled = value || modelDownloadStatus.active || platformModelCatalogFailed;
   modelSelect.title = backend.running
     ? "Browse models while running; select another model and choose Switch Model to restart safely."
-    : (isNativeGgmlCatalog() ? "GGML models use the bundled whisper.cpp CPU worker. GPU use is not implied." : "All choices use Apple MLX acceleration on Apple Silicon.");
+    : (isNativeGgmlCatalog() ? "GGML models use the bundled whisper.cpp CPU worker. GPU use is not implied." : "All choices use the inference backend supported by this device.");
   modelSelectTooltip.setAttribute("title", modelSelect.title);
   modelSelectTooltip.setAttribute("data-tooltip", modelSelect.title);
   syncModelSelectPresentation();
   modelHelp.textContent = isNativeGgmlCatalog()
     ? "GGML model files are shared across compatible Windows/Linux CPU architectures. GPU acceleration is not implied; the qualified baseline is CPU inference."
-    : "All available models use Apple MLX acceleration on Apple Silicon.";
+    : "Available models use the inference backend supported by this device.";
   renderBrowserChoiceRow();
   renderModelDownloadUI();
   preferredPortTooltip.setAttribute("data-tooltip", backend.running
@@ -1248,7 +1280,7 @@ function renderLocalHttpsStatus(status: LocalHttpsStatus) {
 
   localHttpsQuickPrompt.classList.toggle("hidden", secureReady);
   localHttpsAdvancedStatusEl.textContent = secureReady
-    ? "✓ Trusted HTTPS is ready on this Mac."
+    ? "✓ Trusted HTTPS is ready for this device."
     : "";
   localHttpsAdvancedStatusEl.className = secureReady
     ? "local-https-advanced-status tls-good"
@@ -2203,7 +2235,7 @@ async function performLocalHttpsSetup(triggerButton: HTMLButtonElement) {
   localHttpsQuickStatus.className = "local-https-quick-status tls-needs-setup";
   localHttpsStatusEl.textContent = "Setting up trusted HTTPS…";
   localHttpsStatusEl.className = "tls-status tls-needs-setup";
-  showNotice("Setting up trusted HTTPS…", "info");
+  showNotice(isLinuxRuntime() ? "Setting up trusted HTTPS… your system will ask for administrator authorization to trust the local CA." : "Setting up trusted HTTPS…", "info");
 
   let setupError: unknown = null;
 
@@ -2275,19 +2307,23 @@ linkTlsButton.addEventListener("click", async () => {
     const status = await invoke<LocalHttpsStatus>("link_local_https_certificate", { certificatePath, privateKeyPath, caCertificatePath });
     selectedTlsCertificate = status.certificatePath || ""; selectedTlsKey = status.privateKeyPath || ""; selectedTlsCa = status.caCertificatePath || "";
     renderLocalHttpsStatus(status);
-    showNotice(status.trusted ? "Certificate and key linked and validated; macOS trust verification passed." : "Certificate and key linked and validated, but trust is not confirmed yet. Trust the self-signed root CA or check its Keychain status.", status.trusted ? "good" : "warning");
+    showNotice(status.trusted ? "Certificate and key linked and validated; operating-system trust verification passed." : "Certificate and key linked and validated, but trust is not confirmed yet. Check the operating-system certificate trust status.", status.trusted ? "good" : "warning");
   } catch (error) { showNotice(`Could not link that certificate: ${String(error)}`, "error"); }
   finally { await refreshLocalHttpsStatus(); }
 });
 
 trustTlsButton.addEventListener("click", async () => {
-  const ok = window.confirm("Add the selected issuer/root CA certificate to this Mac's login Keychain? This changes macOS trust decisions for certificates issued by that CA. Only continue if you control or explicitly trust this self-signed root CA. Intermediate CAs are not promoted to roots. RDT Connect will record the exact fingerprint so it can offer to remove this entry later.");
+  const ok = isLinuxRuntime()
+    ? window.confirm("Add the RDT Connect local root CA to this computer's system trust store? Your system will ask for administrator authorization. The CA is restricted to localhost, 127.0.0.1 and ::1, and RDT Connect records its exact fingerprint so it can remove only this entry later. Firefox and Chrome/Chromium may keep separate certificate stores and are not changed.")
+    : isWindowsRuntime()
+    ? window.confirm("Add the RDT Connect local root CA to the Windows current-user certificate trust store? RDT Connect records its exact fingerprint so it can remove only this entry later.")
+    : window.confirm("Add the selected issuer/root CA certificate to this Mac's login Keychain? This changes macOS trust decisions for certificates issued by that CA. Only continue if you control or explicitly trust this self-signed root CA. Intermediate CAs are not promoted to roots. RDT Connect will record the exact fingerprint so it can offer to remove this entry later.");
   if (!ok) return;
   trustTlsButton.disabled = true;
   try {
     const status = await invoke<LocalHttpsStatus>("trust_local_https_ca", { caCertificatePath: selectedTlsCa || currentLocalHttps?.caCertificatePath || null });
     renderLocalHttpsStatus(status);
-    showNotice("The selected CA was added to the login Keychain and recorded for targeted removal.", "good");
+    showNotice(isLinuxRuntime() ? "The RDT local CA was added to the system trust store and recorded for targeted removal. Browsers with their own certificate store may still need the CA imported." : isWindowsRuntime() ? "The RDT local CA was added to the Windows current-user certificate trust store and recorded for targeted removal." : "The selected CA was added to the login Keychain and recorded for targeted removal.", "good");
   } catch (error) { showNotice(`Could not trust that CA: ${String(error)}`, "error"); }
   finally { await refreshLocalHttpsStatus(); }
 });
@@ -2295,7 +2331,11 @@ trustTlsButton.addEventListener("click", async () => {
 removeTlsTrustButton.addEventListener("click", async () => {
   const count = currentLocalHttps?.rdtAddedTrustCount || 0;
   if (!count) { showNotice("RDT Connect has no tracked CA trust entries to remove.", "info"); return; }
-  const confirmation = count === 1
+  const confirmation = isLinuxRuntime()
+    ? `Remove ${count} exact CA trust ${count === 1 ? "entry" : "entries"} that RDT Connect previously added to the system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`
+    : isWindowsRuntime()
+    ? `Remove ${count} exact CA trust ${count === 1 ? "entry" : "entries"} that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`
+    : count === 1
     ? `Remove ${count} exact CA trust entry that RDT Connect previously added to this Mac's login Keychain? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`
     : `Remove ${count} exact CA trust entries that RDT Connect previously added to this Mac's login Keychain? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`;
   const ok = window.confirm(confirmation);
@@ -3038,6 +3078,13 @@ if (brandHomeLink) brandHomeLink.addEventListener("click", async (event) => {
   event.preventDefault();
   try { await invoke("open_about_link", { kind: "website", locale: getActiveLocale() }); }
   catch (error) { showNotice(`Could not open the RDT Voice website: ${String(error)}`, "error"); }
+});
+aboutInstallationGuideButton.addEventListener("click", async () => {
+  try {
+    await invoke("open_windows_installation_guide");
+  } catch (error) {
+    showNotice(`Could not open the Windows installation guide: ${String(error)}`, "error");
+  }
 });
 aboutYoutubeButton.addEventListener("click", async () => {
   try {

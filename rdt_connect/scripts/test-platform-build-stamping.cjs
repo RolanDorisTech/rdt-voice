@@ -7,15 +7,15 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const script = path.join(__dirname, "stamp-platform-build.cjs");
-const originalVersion = "0.2.0-dev.10.0D.54";
-const stampedVersion = "0.2.0-dev.10.2A.1";
+const originalVersion = "0.2.0-dev.11.1D01";
+const stampedVersion = "0.2.0-dev.11.2A01";
 
 function fixtureRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "rdt-build-stamp-test-"));
   for (const relative of ["scripts", "src-tauri"]) fs.mkdirSync(path.join(root, relative), { recursive: true });
   fs.writeFileSync(path.join(root, "scripts/build-id-sequence-windows.txt"), "2A01\n");
-  fs.writeFileSync(path.join(root, "scripts/build-id-sequence-linux.txt"), "4A01\n");
-  fs.writeFileSync(path.join(root, "scripts/build-id-sequence.txt"), "0D54\n");
+  fs.writeFileSync(path.join(root, "scripts/build-id-sequence-linux.txt"), "4U01\n");
+  fs.writeFileSync(path.join(root, "scripts/build-id-sequence.txt"), "1D01\n");
   const packageJson = { name: "rdt-connect-desktop", version: originalVersion, dependencies: {}, devDependencies: {} };
   fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
   fs.writeFileSync(path.join(root, "package-lock.json"), `${JSON.stringify({ ...packageJson, lockfileVersion: 3, requires: true, packages: { "": { name: packageJson.name, version: originalVersion } } }, null, 2)}\n`);
@@ -44,7 +44,7 @@ const root = fixtureRoot();
 try {
   const good = run(root, "windows");
   assert.equal(good.status, 0, `Windows stamping should pass: ${good.stderr}\n${good.stdout}`);
-  assert.ok(good.stdout.includes("marker=2A01 version=0.2.0-dev.10.2A.1"));
+  assert.ok(good.stdout.includes("marker=2A01 version=0.2.0-dev.11.2A01"));
   assert.deepEqual(readVersions(root), Array(6).fill(stampedVersion), "all version manifests must stamp consistently");
 
   const beforeInvalidMarker = readVersions(root);

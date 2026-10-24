@@ -193,8 +193,10 @@ def native_transcription(worker: Path, model: Path, fixture: Path, model_id: str
         # a failed release candidate; inference still has its own bounded deadline.
         ready_timeout = {"tiny": 120, "base": 180, "small": 240, "large-v3-turbo": 420, "large-v3": 600}[model_id]
         ready = next_line(timeout=ready_timeout).split("\t")
-        if len(ready) != 3 or ready[0] != "READY" or ready[2] != "whisper.cpp/v1.9.5":
-            raise RuntimeError(f"worker_handshake_invalid: {ready[:3]}")
+        if len(ready) != 5 or ready[0] != "READY" or ready[2] != "whisper.cpp/v1.9.5":
+            raise RuntimeError(f"worker_handshake_invalid: {ready[:5]}")
+        if ready[3] != "CPU" or not ready[4].strip():
+            raise RuntimeError(f"cpu_worker_provider_invalid: {ready[3:5]}")
         arch = ready[1]
         machine = (os.environ.get("PROCESSOR_ARCHITECTURE", "") or platform.machine()).lower()
         if machine in {"arm64", "aarch64"}:

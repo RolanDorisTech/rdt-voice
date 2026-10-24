@@ -33,6 +33,12 @@ use tauri::menu::{PredefinedMenuItem, Submenu};
 use tauri_plugin_deep_link::DeepLinkExt;
 use sha2::{Digest, Sha256};
 
+#[cfg(target_os = "linux")]
+mod linux_tls;
+
+// Serializes certificate/trust changes now that they run on worker threads.
+static LOCAL_TLS_OPERATION: Mutex<()> = Mutex::new(());
+
 // Keep OS-specific file protections behind one helper. Unix uses POSIX modes;
 // Windows secures app-owned data with an explicit current-user ACL via icacls.
 #[cfg(unix)]
@@ -372,13 +378,17 @@ struct LocalTlsConfig {
     windows_certificate_sha256: Option<String>,
     windows_private_key_sha256: Option<String>,
     windows_ca_sha256: Option<String>,
+    // SHA-256 pins for RDT-generated Linux TLS files (same purpose as the Windows pins).
+    linux_certificate_sha256: Option<String>,
+    linux_private_key_sha256: Option<String>,
+    linux_ca_sha256: Option<String>,
     // Only fingerprints explicitly imported by RDT Connect may be removed by its UI.
     managed_trust_fingerprints: Vec<String>,
 }
 impl Default for LocalTlsConfig {
     fn default() -> Self {
         Self {
-            mode: if cfg!(any(target_os = "macos", target_os = "windows")) { "https" } else { "http" }.into(),
+            mode: if cfg!(any(target_os = "macos", target_os = "windows", target_os = "linux")) { "https" } else { "http" }.into(),
             certificate_path: None,
             private_key_path: None,
             ca_certificate_path: None,
@@ -386,6 +396,9 @@ impl Default for LocalTlsConfig {
             windows_certificate_sha256: None,
             windows_private_key_sha256: None,
             windows_ca_sha256: None,
+            linux_certificate_sha256: None,
+            linux_private_key_sha256: None,
+            linux_ca_sha256: None,
             managed_trust_fingerprints: Vec::new(),
         }
     }
@@ -742,6 +755,23 @@ fn windows_descendant_pids(root_pid: u32, snapshot: &[ProcessSnapshot]) -> std::
 }
 
 #[cfg(windows)]
+const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(windows)]
+fn windows_taskkill_command(pid: u32, is_tree: bool, force: bool) -> Command {
+    let mut command = Command::new("taskkill.exe");
+    command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
+    command.arg("/PID").arg(pid.to_string());
+    if is_tree {
+        command.arg("/T");
+    }
+    if force {
+        command.arg("/F");
+    }
+    command
+}
+
+#[cfg(windows)]
 fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
     let is_tree = target < 0;
     let pid = target.unsigned_abs();
@@ -788,15 +818,7 @@ fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
         "WINDOWS PROCESS TERMINATION REQUEST: PID={pid}; tree={is_tree}; force={}",
         signal == SIGNAL_KILL
     ));
-    let pid_text = pid.to_string();
-    let mut command = Command::new("taskkill.exe");
-    command.arg("/PID").arg(pid_text);
-    if is_tree {
-        command.arg("/T");
-    }
-    if signal == SIGNAL_KILL {
-        command.arg("/F");
-    }
+    let mut command = windows_taskkill_command(pid, is_tree, signal == SIGNAL_KILL);
     let output = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1971,7 +1993,11 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
         let _ = fs::remove_file(&temporary);
         format!("Could not save HTTPS settings: {e}")
     })?;
-    let _ = set_private_permissions(&state.tls_config_path, 0o600);
+    set_private_permissions(&state.tls_config_path, 0o600)
+        .map_err(|error| format!(
+            "HTTPS settings were written, but their permissions could not be secured at {}: {error}",
+            state.tls_config_path.display()
+        ))?;
     Ok(())
 }
 
@@ -2273,7 +2299,7 @@ fn openssl_output(args: &[&str], what: &str) -> Result<std::process::Output, Str
     let output = Command::new("/usr/bin/openssl")
         .args(args)
         .output()
-        .map_err(|e| format!("RDT Connect could not run macOS OpenSSL to {what}: {e}"))?;
+        .map_err(|e| format!("RDT Connect could not run OpenSSL to {what}: {e}"))?;
     if !output.status.success() {
         let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(format!(
@@ -2382,7 +2408,11 @@ fn validate_tls_material(config: &LocalTlsConfig) -> Result<(), String> {
     {
         return validate_windows_tls_material(config);
     }
-    #[cfg(all(not(target_os = "macos"), not(windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        return linux_tls::validate_config(config);
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = config;
         return Err("Trusted local HTTPS is not implemented on this platform. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
@@ -2526,7 +2556,8 @@ fn certificate_trusted(_cert: &Path) -> bool { false }
 
 fn configured_certificate_trusted(config: &LocalTlsConfig) -> bool {
     #[cfg(windows)] { return windows_certificate_trusted(config); }
-    #[cfg(not(windows))] {
+    #[cfg(target_os = "linux")] { return linux_tls::certificate_trusted(config); }
+    #[cfg(not(any(windows, target_os = "linux")))] {
         config.certificate_path.as_deref().map(Path::new).map(certificate_trusted).unwrap_or(false)
     }
 }
@@ -2658,7 +2689,20 @@ fn trust_ca_file(
     Ok(())
 }
 
-#[cfg(all(not(target_os = "macos"), not(windows)))]
+#[cfg(target_os = "linux")]
+fn trust_ca_file(
+    state: &BackendState,
+    config: &mut LocalTlsConfig,
+    ca: &Path,
+) -> Result<(), String> {
+    let configured = config.ca_certificate_path.as_deref().ok_or_else(|| "The Linux HTTPS config has no root CA path.".to_string())?;
+    if canonical_file(configured, "configured root CA certificate")? != canonical_file(&ca.display().to_string(), "root CA certificate")? {
+        return Err("Linux trusts only the RDT-generated root CA recorded in the HTTPS settings; a different CA file was refused.".into());
+    }
+    linux_tls::trust_ca(state, config)
+}
+
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 fn trust_ca_file(
     _state: &BackendState,
     _config: &mut LocalTlsConfig,
@@ -2666,6 +2710,15 @@ fn trust_ca_file(
 ) -> Result<(), String> {
     Err("Native local certificate trust is not implemented on this platform.".into())
 }
+
+#[cfg(target_os = "linux")]
+fn linux_untrusted_message(config: &LocalTlsConfig) -> String { linux_tls::untrusted_message(config) }
+#[cfg(not(target_os = "linux"))]
+fn linux_untrusted_message(_config: &LocalTlsConfig) -> String { String::new() }
+#[cfg(target_os = "linux")]
+fn linux_trusted_message(config: &LocalTlsConfig) -> String { linux_tls::trusted_message(config) }
+#[cfg(not(target_os = "linux"))]
+fn linux_trusted_message(_config: &LocalTlsConfig) -> String { String::new() }
 
 fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
     let configured = validate_tls_material(config).is_ok();
@@ -2677,16 +2730,26 @@ fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
             "A trusted HTTPS certificate and matching private key are required.".into()
         })
     } else if !trusted {
-        if cfg!(target_os = "windows") {
+        if cfg!(target_os = "linux") {
+            linux_untrusted_message(config)
+        } else if cfg!(target_os = "windows") {
             "The certificate is configured, but Windows has not verified it against the current user's trusted-root store. Trust the generated RDT root CA, then recheck.".to_string()
         } else {
+            {
             "The certificate and key match, but the operating system does not currently trust this certificate for 127.0.0.1. Trust the selected root CA, then recheck.".to_string()
         }
+        }
     } else {
-        if cfg!(target_os = "windows") {
+        if cfg!(target_os = "linux") {
+            linux_trusted_message(config)
+        } else if cfg!(target_os = "windows") {
             "HTTPS is configured: the certificate is valid for 127.0.0.1 and Windows current-user trust verification passed.".to_string()
         } else {
+            if cfg!(target_os = "macos") {
             "HTTPS is configured: the certificate is valid for 127.0.0.1 and macOS trust verification passed.".to_string()
+        } else {
+            "HTTPS is configured and operating-system certificate trust verification passed.".to_string()
+        }
         }
     };
     LocalHttpsStatus {
@@ -2707,12 +2770,17 @@ fn local_tls_client(config: &LocalTlsConfig, timeout: Duration) -> Result<Client
     if config.mode.eq_ignore_ascii_case("https") {
         // rustls-tls-native-roots loads the Mac's trusted certificates. If the user
         // linked a private/self-signed root, add that explicit root as well.
-        if let Some(trust_path) = config.ca_certificate_path.as_deref() {
-            let pem = fs::read(trust_path)
-                .map_err(|e| format!("Could not read the configured root CA certificate: {e}"))?;
-            let root = reqwest::Certificate::from_pem(&pem)
-                .map_err(|e| format!("Could not load the configured root CA certificate: {e}"))?;
-            builder = builder.add_root_certificate(root);
+        // Linux deliberately relies on the system trust store alone, so a healthy HTTPS
+        // response proves real OS trust instead of an explicitly injected root.
+        #[cfg(not(target_os = "linux"))]
+        {
+            if let Some(trust_path) = config.ca_certificate_path.as_deref() {
+                let pem = fs::read(trust_path)
+                    .map_err(|e| format!("Could not read the configured root CA certificate: {e}"))?;
+                let root = reqwest::Certificate::from_pem(&pem)
+                    .map_err(|e| format!("Could not load the configured root CA certificate: {e}"))?;
+                builder = builder.add_root_certificate(root);
+            }
         }
     }
     builder
@@ -2882,13 +2950,40 @@ fn setup_local_https_certificate_windows(state: &BackendState) -> Result<LocalHt
     Ok(status)
 }
 
+#[cfg(target_os = "linux")]
+fn setup_local_https_certificate_linux(state: &BackendState) -> Result<LocalHttpsStatus, String> {
+    if state.status().running {
+        return Err("Stop the server before changing TLS certificates.".into());
+    }
+    let config = linux_tls::setup(state)?;
+    let status = local_https_status_from_config(&config);
+    if !status.configured || !status.trusted || !status.mode.eq_ignore_ascii_case("https") {
+        return Err(format!("Linux local HTTPS setup did not pass its final verification: {}. No HTTP fallback was attempted.", status.message));
+    }
+    Ok(status)
+}
+
+// Certificate generation and administrator prompts can take a long time, so the Tauri
+// commands run the blocking work on a worker thread instead of the UI thread.
 #[tauri::command]
-fn setup_local_https_certificate(
-    state: State<'_, BackendState>,
+async fn setup_local_https_certificate(app: AppHandle) -> Result<LocalHttpsStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = LOCAL_TLS_OPERATION.lock().unwrap_or_else(|p| p.into_inner());
+        let state = app.state::<BackendState>();
+        setup_local_https_certificate_blocking(&state)
+    })
+    .await
+    .map_err(|error| format!("Local HTTPS setup worker failed: {error}"))?
+}
+
+fn setup_local_https_certificate_blocking(
+    state: &BackendState,
 ) -> Result<LocalHttpsStatus, String> {
     #[cfg(windows)]
     { return setup_local_https_certificate_windows(&state); }
-    #[cfg(all(not(target_os = "macos"), not(windows)))]
+    #[cfg(target_os = "linux")]
+    { return setup_local_https_certificate_linux(state); }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     { return Err("Trusted local HTTPS is not implemented on this platform. Use loopback-only HTTP for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into()); }
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
@@ -2964,7 +3059,7 @@ fn setup_local_https_certificate(
         let output = Command::new("/usr/bin/openssl")
             .args(args)
             .output()
-            .map_err(|e| format!("Could not run macOS OpenSSL to {what}: {e}"))?;
+            .map_err(|e| format!("Could not run OpenSSL to {what}: {e}"))?;
         if !output.status.success() {
             return Err(format!(
                 "Could not {what}: {}",
@@ -3067,7 +3162,10 @@ fn link_local_https_certificate(
     if cfg!(windows) {
         return Err("Windows currently supports RDT-generated trusted local HTTPS only. Select Set up trusted local HTTPS; external certificate linking is intentionally disabled until Windows custom-certificate verification is implemented.".into());
     }
-    if cfg!(all(not(target_os = "macos"), not(windows))) {
+    if cfg!(target_os = "linux") {
+        return Err("Linux supports RDT-generated trusted local HTTPS only. Select Set up trusted local HTTPS; linking an external certificate is intentionally disabled because its private key, chain and trust cannot be verified safely.".into());
+    }
+    if cfg!(not(any(target_os = "macos", windows, target_os = "linux"))) {
         return Err("Trusted local HTTPS is not implemented on this platform. Keep development HTTP loopback-only; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if state.status().running {
@@ -3094,11 +3192,24 @@ fn link_local_https_certificate(
 }
 
 #[tauri::command]
-fn trust_local_https_ca(
-    state: State<'_, BackendState>,
+async fn trust_local_https_ca(
+    app: AppHandle,
     ca_certificate_path: Option<String>,
 ) -> Result<LocalHttpsStatus, String> {
-    if cfg!(all(not(target_os = "macos"), not(windows))) {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = LOCAL_TLS_OPERATION.lock().unwrap_or_else(|p| p.into_inner());
+        let state = app.state::<BackendState>();
+        trust_local_https_ca_blocking(&state, ca_certificate_path)
+    })
+    .await
+    .map_err(|error| format!("Local HTTPS trust worker failed: {error}"))?
+}
+
+fn trust_local_https_ca_blocking(
+    state: &BackendState,
+    ca_certificate_path: Option<String>,
+) -> Result<LocalHttpsStatus, String> {
+    if cfg!(not(any(target_os = "macos", windows, target_os = "linux"))) {
         return Err("Native local CA trust management is not implemented on this platform. No system trust store was modified.".into());
     }
     if state.status().running {
@@ -3132,12 +3243,28 @@ fn trust_local_https_ca(
 }
 
 #[tauri::command]
-fn remove_rdt_https_trust(state: State<'_, BackendState>) -> Result<LocalHttpsStatus, String> {
-    if cfg!(all(not(target_os = "macos"), not(windows))) {
+async fn remove_rdt_https_trust(app: AppHandle) -> Result<LocalHttpsStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = LOCAL_TLS_OPERATION.lock().unwrap_or_else(|p| p.into_inner());
+        let state = app.state::<BackendState>();
+        remove_rdt_https_trust_blocking(&state)
+    })
+    .await
+    .map_err(|error| format!("Local HTTPS trust-removal worker failed: {error}"))?
+}
+
+fn remove_rdt_https_trust_blocking(state: &BackendState) -> Result<LocalHttpsStatus, String> {
+    if cfg!(not(any(target_os = "macos", windows, target_os = "linux"))) {
         return Err("Removing RDT-managed CA trust is not implemented on this platform. No system trust store was modified.".into());
     }
     if state.status().running {
         return Err("Stop the server before changing TLS trust.".into());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut config = load_local_tls_config(state)?;
+        linux_tls::remove_trust(state, &mut config)?;
+        return Ok(local_https_status_from_config(&config));
     }
     #[cfg(windows)]
     {
@@ -3202,7 +3329,7 @@ fn set_local_transport(
         return Err("Stop the local server before changing its transport.".into());
     }
     let normalized = mode.trim().to_ascii_lowercase();
-    if normalized == "https" && cfg!(all(not(target_os = "macos"), not(windows))) {
+    if normalized == "https" && cfg!(not(any(target_os = "macos", windows, target_os = "linux"))) {
         return Err("Trusted local HTTPS is not implemented on this platform. Use HTTP only on 127.0.0.1 for development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if normalized != "https" && normalized != "http" {
@@ -5194,7 +5321,7 @@ fn get_app_diagnostics(state: State<'_, BackendState>, preferred_port: u16) -> S
         {
             let tls =
                 local_https_status_from_config(&load_local_tls_config(&state).unwrap_or_default());
-            format!("Local transport: {}; certificate configured={}; macOS trust verified={}; RDT-added CA trust entries={}; {}", tls.mode.to_ascii_uppercase(), tls.configured, tls.trusted, tls.rdt_added_trust_count, tls.message)
+            format!("Local transport: {}; certificate configured={}; operating-system trust verified={}; RDT-added CA trust entries={}; {}", tls.mode.to_ascii_uppercase(), tls.configured, tls.trusted, tls.rdt_added_trust_count, tls.message)
         },
         format!(
             "Selected/running model: {}",
@@ -5838,7 +5965,7 @@ fn start_backend_blocking(
     }
     let tls_config = load_local_tls_config(&state)?;
     let use_https = !tls_config.mode.eq_ignore_ascii_case("http");
-    if use_https && cfg!(all(not(target_os = "macos"), not(windows))) {
+    if use_https && cfg!(not(any(target_os = "macos", windows, target_os = "linux"))) {
         return Err("Trusted local HTTPS is not implemented on this platform. Change Local transport to HTTP for loopback-only development; remote access must remain behind verified Tailscale HTTPS/pairing.".into());
     }
     if use_https {
@@ -7336,6 +7463,73 @@ fn open_about_link(kind: String, locale: Option<String>) -> Result<(), String> {
     }
 }
 
+
+#[tauri::command]
+fn open_windows_installation_guide(app: AppHandle) -> Result<(), String> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        Err("The Windows installation guide is only available in the Windows app.".into())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let resource_dir = app
+            .path()
+            .resource_dir()
+            .map_err(|error| format!("Could not locate the app resource directory: {error}"))?;
+        let guide = resource_dir
+            .join("windows_installation_guide")
+            .join("windows_installation_guide.html");
+
+        if !guide.is_file() {
+            return Err(format!(
+                "The packaged Windows installation guide is missing: {}. Repair or reinstall RDT Connect.",
+                guide.display()
+            ));
+        }
+
+        use std::ffi::c_void;
+
+        #[link(name = "shell32")]
+        extern "system" {
+            fn ShellExecuteW(
+                hwnd: *mut c_void,
+                operation: *const u16,
+                file: *const u16,
+                parameters: *const u16,
+                directory: *const u16,
+                show_command: i32,
+            ) -> isize;
+        }
+
+        let operation: Vec<u16> =
+            "open".encode_utf16().chain(std::iter::once(0)).collect();
+        let target: Vec<u16> = guide
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let result = unsafe {
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                operation.as_ptr(),
+                target.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                1,
+            )
+        };
+
+        if result <= 32 {
+            return Err(format!(
+                "Windows could not open the installation guide (ShellExecuteW={result})."
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn open_youtube_channel() -> Result<(), String> {
     const URL: &str = "https://youtube.com/@RolanDorisTech";
@@ -7521,10 +7715,22 @@ fn main() {
             });
 
             let menu = build_tray_menu(app.handle(), &state).map_err(std::io::Error::other)?;
-            // Black-and-clear template mask adapts to macOS appearance; the Dock icon stays full color.
+            // macOS: black-on-transparent template image so the menu bar tints it for
+            // light/dark appearance; the Dock icon stays full color. Other platforms keep
+            // the existing white icon unchanged.
+            #[cfg(target_os = "macos")]
+            let (tray_icon, tray_icon_is_template) = (
+                tauri::include_image!("icons/rdt-menu-bar-template.png"),
+                true,
+            );
+            #[cfg(not(target_os = "macos"))]
+            let (tray_icon, tray_icon_is_template) = (
+                tauri::include_image!("icons/rdt-menu-bar-icon.png"),
+                false,
+            );
             TrayIconBuilder::with_id("rdt-connect-menu-bar")
-                .icon(tauri::include_image!("icons/rdt-menu-bar-icon.png"))
-                .icon_as_template(false)
+                .icon(tray_icon)
+                .icon_as_template(tray_icon_is_template)
                 .menu(&menu)
                 .tooltip("RDT Connect")
                 .show_menu_on_left_click(true)
@@ -7619,7 +7825,7 @@ fn main() {
             get_local_https_status, pick_tls_file, setup_local_https_certificate, link_local_https_certificate, trust_local_https_ca, remove_rdt_https_trust, set_local_transport,
             get_tailscale_status, get_remote_access_diagnostics, enable_private_access, generate_pairing_qr,
             list_pair_requests, approve_pair_request, deny_pair_request,
-            list_paired_devices, revoke_paired_device, open_about_link, open_youtube_channel, get_server_token
+            list_paired_devices, revoke_paired_device, open_about_link, open_windows_installation_guide, open_youtube_channel, get_server_token
         ])
         .build(context)
         .expect("error while building RDT Connect");
@@ -7674,4 +7880,43 @@ fn main() {
         }
         _ => {}
     });
+}
+#[cfg(test)]
+mod windows_console_window_tests {
+    const SOURCE: &str = include_str!("main.rs");
+
+    fn function_body<'a>(source: &'a str, signature: &str) -> &'a str {
+        let start = source.find(signature)
+            .unwrap_or_else(|| panic!("{signature} not found in main.rs"));
+        let rest = &source[start..];
+        let end = rest.find("\n}\n").expect("end of function not found");
+        &rest[..end]
+    }
+
+    #[test]
+    fn taskkill_is_launched_only_through_the_hidden_helper() {
+        let needle = concat!("Command::new(\"", "taskkill.exe", "\")");
+        let helper = function_body(SOURCE, "fn windows_taskkill_command(");
+        assert_eq!(SOURCE.matches(needle).count(), 1);
+        assert!(helper.contains(needle));
+        assert!(helper.contains(".creation_flags(WINDOWS_CREATE_NO_WINDOW)"));
+        assert!(SOURCE.contains(
+            "const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;"
+        ));
+        let caller = function_body(
+            SOURCE,
+            "fn send_signal_checked(target: i32, signal: i32)"
+        );
+        assert!(caller.contains(
+            "windows_taskkill_command(pid, is_tree, signal == SIGNAL_KILL)"
+        ));
+    }
+
+    #[test]
+    fn windows_loopback_san_regex_is_correct() {
+        assert!(
+            SOURCE.contains(r#"IP\s*Address\s*[=:]\s*127\.0\.0\.1"#),
+            "Windows SAN validator must match the loopback IP correctly"
+        );
+    }
 }

@@ -65,24 +65,28 @@ function replaceCargoLockPackageVersion(text, version) {
   return text.replace(pattern, `$1${version}$2`);
 }
 function baseVersion(version) {
-  // Existing internal versions have the build marker in the final two
-  // prerelease identifiers: ...<family>.<numeric-counter>.
-  const match = /^(.*)\.([0-9][A-Z])\.(0|[1-9][0-9]*)$/.exec(version);
-  if (!match || !/^\d+\.\d+\.\d+-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)$/.test(match[1])) {
+  // Support legacy versions (... .2A.5) and whole-marker versions
+  // (... .2A05). The build marker remains one indivisible identifier.
+  const legacy = /^(.*)\.([0-9][A-Z])\.(0|[1-9][0-9]*)$/.exec(version);
+  const wholeMarker = /^(.*)\.([0-9][A-Z][0-9]{2})$/.exec(version);
+  const match = legacy || wholeMarker;
+  if (!match ||
+      !/^\d+\.\d+\.\d+-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)$/.test(match[1])) {
     throw new Error(`Cannot safely decode the existing build version: ${version}`);
   }
   return match[1];
 }
+
 function stampedVersion(base, marker) {
-  const count = String(Number(marker.slice(2)));
-  return `${base}.${marker.slice(0, 2)}.${count}`;
+  // Keep the complete marker, including its leading zero, together.
+  return `${base}.${marker}`;
 }
 
-function stamp(platform) {
+function stamp(platform, requestedMarker = null) {
   const policy = MARKERS[platform];
   if (!policy) throw new Error(`Unsupported platform '${platform}'; choose macos, windows, or linux`);
   const markerPath = path.join(ROOT, "scripts", policy.file);
-  const marker = fs.readFileSync(markerPath, "utf8").trim();
+  const marker = requestedMarker ?? fs.readFileSync(markerPath, "utf8").trim();
   if (!policy.allowed.test(marker)) {
     throw new Error(`${markerPath} contains '${marker}', which is outside the reserved ${platform} marker namespace`);
   }
@@ -134,8 +138,8 @@ function stamp(platform) {
 
 if (require.main === module) {
   try {
-    if (process.argv.length !== 3) throw new Error("Usage: node scripts/stamp-platform-build.cjs <macos|windows|linux>");
-    stamp(process.argv[2]);
+    if (process.argv.length < 3 || process.argv.length > 4) throw new Error("Usage: node scripts/stamp-platform-build.cjs <macos|windows|linux> [MARKER]");
+    stamp(process.argv[2], process.argv[3] ?? null);
   } catch (error) {
     die(error instanceof Error ? error.message : String(error));
   }

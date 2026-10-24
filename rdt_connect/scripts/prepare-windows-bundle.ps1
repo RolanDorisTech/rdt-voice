@@ -100,10 +100,10 @@ function Build-WorkerVariant {
     "-DRDT_ENABLE_CUDA=$Cuda" `
     "-DRDT_ENABLE_VULKAN=$Vulkan" `
     "-DRDT_ENABLE_ARM_DOTPROD=$ArmDotprod" `
-    -DCMAKE_BUILD_TYPE=Release 2>&1 | Tee-Object -FilePath $buildLog
+    -DCMAKE_BUILD_TYPE=Release 2>&1 | Tee-Object -FilePath $buildLog | Out-Host
   if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed for $Variant worker." }
 
-  cmake --build $dir --config Release --parallel 2 --verbose 2>&1 | Tee-Object -FilePath $buildLog -Append
+  cmake --build $dir --config Release --parallel 2 --verbose 2>&1 | Tee-Object -FilePath $buildLog -Append | Out-Host
   $buildExitCode = $LASTEXITCODE
   if ($buildExitCode -ne 0) {
     Write-Host "::group::Last 160 lines from $buildLog"
@@ -185,9 +185,12 @@ foreach ($file in @('windows_installation_guide.html','rdt_connect_guide_icon.pn
   }
   Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $guideStage $file) -Force
 }
+$serverStaged = Join-Path $stage 'server.py'
+& $pythonExe (Join-Path $RepoRoot 'rdt_connect/scripts/patch_desktop_backend.py') (Join-Path $RepoRoot 'backend/windows/server.py') $serverStaged
+if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the staged Windows backend.' }
 $env:PYTHONPATH = Join-Path $RepoRoot 'backend'
 $args = @('-m','PyInstaller','--noconfirm','--clean','--onedir','--name','rdt_voice_backend','--distpath',$dist,'--workpath',$work,'--specpath',$spec,'--paths',(Join-Path $RepoRoot 'backend'),'--hidden-import','model_registry','--hidden-import','engine','--hidden-import','whisper_cpp.model_registry','--hidden-import','whisper_cpp.engine','--hidden-import','qrcode.image.svg','--collect-all','qrcode')
-& $pythonExe @args (Join-Path $RepoRoot 'backend/windows/server.py')
+& $pythonExe @args $serverStaged
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller onedir backend build failed.' }
 $backendStage = Join-Path $dist 'rdt_voice_backend'
 if (-not (Test-Path (Join-Path $backendStage 'rdt_voice_backend.exe'))) { throw 'PyInstaller did not produce rdt_voice_backend.exe.' }

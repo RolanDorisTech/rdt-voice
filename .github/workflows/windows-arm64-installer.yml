@@ -137,7 +137,16 @@ jobs:
           & $glslc --version
           if ($LASTEXITCODE -ne 0) { throw 'Vulkan shader compiler verification failed.' }
 
+      - name: Set up pinned native Python 3.13.16 (ARM64)
+        id: setup-python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.13.16'
+          architecture: 'arm64'
+
       - name: Prepare native Windows backend and web resources
+        env:
+          RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -146,10 +155,9 @@ jobs:
             throw "Expected native ARM64 runner; got $arch."
           }
 
-          $pythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue
-          $python = if ($pythonCommand) { $pythonCommand.Source } else { $null }
+          $python = $env:RDT_PYTHON
           if (-not $python -or -not (Test-Path $python)) {
-            throw 'Native Python 3.13 executable not found.'
+            throw 'Pinned native ARM64 Python 3.13.16 executable not found.'
           }
 
           $info = (& $python -c 'import platform,sys; print("%d.%d.%d|%s" % (*sys.version_info[:3], platform.machine()))').Trim()

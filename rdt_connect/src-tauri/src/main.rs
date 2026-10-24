@@ -40,6 +40,9 @@ fn app_version_label() -> String {
     }
     format!("v{version}")
 }
+#[cfg(target_os = "linux")]
+mod linux_tls;
+
 const BUILD_ID: &str = env!("RDT_BUILD_ID");
 
 #[derive(Serialize)]
@@ -221,6 +224,33 @@ struct ModelCacheDeleteResult {
     message: String,
 }
 
+#[cfg(target_os = "linux")]
+fn set_private_permissions(path: &Path, mode: u32) -> Result<(), String> {
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+        .map_err(|e| format!("Could not set secure file permissions: {e}"))
+}
+
+#[cfg(target_os = "linux")]
+fn sha256_file_hex(path: &Path) -> Result<String, String> {
+    let output = Command::new("/usr/bin/openssl")
+        .args(["dgst", "-sha256"])
+        .arg(path)
+        .output()
+        .map_err(|e| format!("Could not calculate a TLS integrity hash: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Could not calculate a TLS integrity hash: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let value = String::from_utf8_lossy(&output.stdout);
+    let digest = value.split_whitespace().last().unwrap_or("");
+    if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("OpenSSL returned an invalid SHA-256 digest.".into());
+    }
+    Ok(digest.to_ascii_lowercase())
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default, rename_all = "camelCase")]
 struct LocalTlsConfig {
@@ -230,6 +260,10 @@ struct LocalTlsConfig {
     private_key_path: Option<String>,
     ca_certificate_path: Option<String>,
     generated: bool,
+    // Linux-only integrity pins for app-generated local HTTPS material.
+    linux_certificate_sha256: Option<String>,
+    linux_private_key_sha256: Option<String>,
+    linux_ca_sha256: Option<String>,
     // Only fingerprints explicitly imported by RDT Connect may be removed by its UI.
     managed_trust_fingerprints: Vec<String>,
 }
@@ -241,6 +275,9 @@ impl Default for LocalTlsConfig {
             private_key_path: None,
             ca_certificate_path: None,
             generated: false,
+            linux_certificate_sha256: None,
+            linux_private_key_sha256: None,
+            linux_ca_sha256: None,
             managed_trust_fingerprints: Vec::new(),
         }
     }
@@ -1720,6 +1757,37 @@ fn trust_ca_file(
 }
 
 fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
+    #[cfg(target_os = "linux")]
+    {
+        let configured = linux_tls::validate_config(config).is_ok();
+        let trusted = linux_tls::certificate_trusted(config);
+        let message = if config.mode.eq_ignore_ascii_case("http") {
+            "HTTP is selected for development only. HTTPS is the normal default; no automatic HTTP fallback is used.".to_string()
+        } else if !configured {
+            linux_tls::validate_config(config).err().unwrap_or_else(|| {
+                "A valid RDT-generated HTTPS certificate and matching private key are required.".into()
+            })
+        } else if !trusted {
+            linux_tls::untrusted_message(config)
+        } else {
+            linux_tls::trusted_message(config)
+        };
+        return LocalHttpsStatus {
+            mode: config.mode.clone(),
+            configured,
+            trusted,
+            generated: config.generated,
+            certificate_path: config.certificate_path.clone(),
+            private_key_path: config.private_key_path.clone(),
+            ca_certificate_path: config.ca_certificate_path.clone(),
+            rdt_added_trust_count: config.managed_trust_fingerprints.len(),
+            message,
+        };
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+
     let configured = validate_tls_material(config).is_ok();
     let trusted = config
         .certificate_path
@@ -1749,8 +1817,9 @@ fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
         rdt_added_trust_count: config.managed_trust_fingerprints.len(),
         message,
     }
-}
 
+    }
+}
 fn local_tls_client(config: &LocalTlsConfig, timeout: Duration) -> Result<Client, String> {
     let mut builder = Client::builder().timeout(timeout);
     if config.mode.eq_ignore_ascii_case("https") {
@@ -1874,6 +1943,16 @@ fn setup_local_https_certificate(
 ) -> Result<LocalHttpsStatus, String> {
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let config = linux_tls::setup(&state)?;
+        let status = local_https_status_from_config(&config);
+        if !status.configured || !status.trusted {
+            return Err(format!("Linux HTTPS setup could not be verified: {}", status.message));
+        }
+        return Ok(status);
     }
 
     // Reuse valid material when setup is repeated. This avoids generating and
@@ -2049,6 +2128,11 @@ fn link_local_https_certificate(
     if state.status().running {
         return Err("Stop the server before changing TLS certificates.".into());
     }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (&state, &certificate_path, &private_key_path, &ca_certificate_path);
+        return Err("Linux currently supports only RDT-generated, integrity-pinned local HTTPS certificates. Use Set up trusted local HTTPS; custom certificate linking is not supported yet.".into());
+    }
     let cert = canonical_file(&certificate_path, "server certificate")?;
     let key = canonical_file(&private_key_path, "private key")?;
     let ca = match ca_certificate_path
@@ -2078,6 +2162,21 @@ fn trust_local_https_ca(
         return Err("Stop the server before changing TLS trust.".into());
     }
     let mut config = load_local_tls_config(&state)?;
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(path) = ca_certificate_path.as_deref().filter(|s| !s.trim().is_empty()) {
+            let selected = canonical_file(path, "root CA certificate")?;
+            if config.ca_certificate_path.as_deref() != Some(selected.to_string_lossy().as_ref()) {
+                return Err("Linux trust can only install the CA belonging to the currently configured RDT-generated certificate.".into());
+            }
+        }
+        linux_tls::trust_ca(&state, &mut config)?;
+        let status = local_https_status_from_config(&config);
+        if !status.trusted {
+            return Err(format!("Linux system trust verification failed: {}", status.message));
+        }
+        return Ok(status);
+    }
     if let Some(path) = ca_certificate_path
         .as_deref()
         .filter(|s| !s.trim().is_empty())
@@ -2110,6 +2209,11 @@ fn remove_rdt_https_trust(state: State<'_, BackendState>) -> Result<LocalHttpsSt
         return Err("Stop the server before changing TLS trust.".into());
     }
     let mut config = load_local_tls_config(&state)?;
+    #[cfg(target_os = "linux")]
+    {
+        linux_tls::remove_trust(&state, &mut config)?;
+        return Ok(local_https_status_from_config(&config));
+    }
     if config.managed_trust_fingerprints.is_empty() {
         return Err("RDT Connect has no tracked CA trust entry to remove. It will not remove certificates installed independently by you or another app.".into());
     }
@@ -2156,15 +2260,25 @@ fn set_local_transport(
     }
     let mut config = load_local_tls_config(&state)?;
     if normalized == "https" {
-        validate_tls_material(&config)?;
-        if !config
-            .certificate_path
-            .as_deref()
-            .map(Path::new)
-            .map(certificate_trusted)
-            .unwrap_or(false)
+        #[cfg(target_os = "linux")]
         {
-            return Err("HTTPS is not yet trusted for 127.0.0.1. Set up trusted HTTPS or trust the selected root CA in Settings.".into());
+            linux_tls::validate_config(&config)?;
+            if !linux_tls::certificate_trusted(&config) {
+                return Err(linux_tls::untrusted_message(&config));
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            validate_tls_material(&config)?;
+            if !config
+                .certificate_path
+                .as_deref()
+                .map(Path::new)
+                .map(certificate_trusted)
+                .unwrap_or(false)
+            {
+                return Err("HTTPS is not yet trusted for 127.0.0.1. Set up trusted HTTPS or trust the selected root CA in Settings.".into());
+            }
         }
     }
     config.mode = normalized;
@@ -4637,10 +4751,23 @@ fn start_backend_blocking(
     let tls_config = load_local_tls_config(&state)?;
     let use_https = !tls_config.mode.eq_ignore_ascii_case("http");
     if use_https {
-        validate_tls_material(&tls_config)?;
-        let cert = Path::new(tls_config.certificate_path.as_deref().unwrap_or(""));
-        if !certificate_trusted(cert) {
-            return Err("HTTPS is selected, but macOS does not trust the local certificate for 127.0.0.1. Open Settings → Local HTTPS and trust the issuer CA. No HTTP fallback was attempted.".into());
+        #[cfg(target_os = "linux")]
+        {
+            linux_tls::validate_config(&tls_config)?;
+            if !linux_tls::certificate_trusted(&tls_config) {
+                return Err(format!(
+                    "HTTPS is selected, but Linux system trust verification failed: {} No HTTP fallback was attempted.",
+                    linux_tls::untrusted_message(&tls_config)
+                ));
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            validate_tls_material(&tls_config)?;
+            let cert = Path::new(tls_config.certificate_path.as_deref().unwrap_or(""));
+            if !certificate_trusted(cert) {
+                return Err("HTTPS is selected, but macOS does not trust the local certificate for 127.0.0.1. Open Settings → Local HTTPS and trust the issuer CA. No HTTP fallback was attempted.".into());
+            }
         }
     }
     // If the managed backend died unexpectedly, remove only a Serve route that

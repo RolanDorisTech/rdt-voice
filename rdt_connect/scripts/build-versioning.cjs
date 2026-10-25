@@ -14,42 +14,47 @@ function decodeBuildVersion(version) {
   const parsed = parseVersion(version);
   const ids = parsed.prerelease.map(String);
 
-  if (ids.length < 3) {
-    return { baseVersion: parsed.version, marker: null };
+  // Current format: the entire four-character marker is one identifier.
+  if (ids.length >= 2) {
+    const marker = ids.at(-1);
+    if (/^[0-9][A-Z][0-9]{2}$/.test(marker)) {
+      const baseIds = ids.slice(0, -1);
+      return {
+        baseVersion: `${parsed.major}.${parsed.minor}.${parsed.patch}-${baseIds.join(".")}`,
+        marker,
+      };
+    }
   }
 
-  const family = ids.at(-2);
-  const counter = ids.at(-1);
+  // Read-only compatibility for historical versions such as .2A.1.
+  if (ids.length >= 3) {
+    const family = ids.at(-2);
+    const counter = ids.at(-1);
 
-  if (!/^[0-9][A-Z]$/.test(family) ||
-      !/^(0|[1-9][0-9]*)$/.test(counter)) {
-    return { baseVersion: parsed.version, marker: null };
+    if (/^[0-9][A-Z]$/.test(family) &&
+        /^(0|[1-9][0-9]*)$/.test(counter)) {
+      const baseIds = ids.slice(0, -2);
+      if (baseIds.length) {
+        return {
+          baseVersion: `${parsed.major}.${parsed.minor}.${parsed.patch}-${baseIds.join(".")}`,
+          marker: family + counter.padStart(2, "0"),
+        };
+      }
+    }
   }
 
-  const baseIds = ids.slice(0, -2);
-  if (!baseIds.length) {
-    return { baseVersion: parsed.version, marker: null };
-  }
-
-  return {
-    baseVersion: `${parsed.major}.${parsed.minor}.${parsed.patch}-${baseIds.join(".")}`,
-    marker: family + counter.padStart(2, "0"),
-  };
+  return { baseVersion: parsed.version, marker: null };
 }
 
 function withBuildMarker(baseVersion, marker) {
-  const match = /^([0-9][A-Z])([0-9]{2,})$/.exec(marker);
-  if (!match) {
-    throw new Error(`Invalid build marker: ${marker}`);
+  if (!/^[0-9][A-Z][0-9]{2}$/.test(marker)) {
+    throw new Error(`Invalid build marker: ${marker}. Expected exactly four characters.`);
   }
 
   const parsedInput = parseVersion(baseVersion);
   const decoded = decodeBuildVersion(parsedInput.version);
   const base = semver.parse(decoded.marker ? decoded.baseVersion : parsedInput.version);
-  const family = match[1];
-  // SemVer numeric prerelease identifiers cannot have leading zeroes.
-  const counter = match[2].replace(/^0+(?=[0-9])/, "");
-  const ids = [...base.prerelease.map(String), family, counter];
+  const ids = [...base.prerelease.map(String), marker];
   const version = `${base.major}.${base.minor}.${base.patch}-${ids.join(".")}`;
 
   if (!semver.valid(version)) {

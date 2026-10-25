@@ -9,52 +9,106 @@ const {
   formatFriendlyUpdateVersion,
 } = require("./build-versioning.cjs");
 
-const base = "0.2.0-dev.10";
+const base = "0.2.0-dev.11";
 const build = marker => withBuildMarker(base, marker);
 
-const v51 = build("0D51");
-const v52 = build("0D52");
-const v53 = build("0D53");
+const v00 = build("0D00");
+const v51 = build("2A05");
+const v52 = build("2A06");
+const v53 = build("2A07");
+const v98 = build("0D98");
 const v99 = build("0D99");
-const v100 = build("0D100");
-const v1C = build("1C00");
 const v0E = build("0E00");
+const v1C = build("1C99");
 const v1D = build("1D00");
+
 const winA01 = build("2A01");
+const winA05 = build("2A05");
 const winA99 = build("2A99");
 const winB00 = build("2B00");
-const linuxA01 = build("4A01");
+const winX64 = build("3A01");
+const linuxARM64 = build("4U01");
+const linuxX64 = build("5U01");
 
-for (const version of [v51, v52, v99, v100, v1C, v0E, v1D]) {
+const currentVersions = [
+  v00, v51, v52, v53, v98, v99, v0E, v1C, v1D,
+  winA01, winA05, winA99, winB00, winX64, linuxARM64, linuxX64,
+];
+
+for (const version of currentVersions) {
   assert.ok(semver.valid(version), `Valid SemVer: ${version}`);
   assert.ok(semver.gt(version, base), `${version} > ${base}`);
 }
-for (const version of [winA01, winA99, winB00, linuxA01]) {
-  assert.ok(semver.valid(version), `Valid platform SemVer: ${version}`);
-  assert.ok(semver.gt(version, base), `${version} > ${base}`);
+
+assert.equal(v00, "0.2.0-dev.11.0D00");
+assert.equal(v51, "0.2.0-dev.11.2A05");
+assert.equal(v99, "0.2.0-dev.11.0D99");
+assert.equal(v0E, "0.2.0-dev.11.0E00");
+assert.equal(v1D, "0.2.0-dev.11.1D00");
+assert.equal(winA05, "0.2.0-dev.11.2A05");
+assert.equal(winX64, "0.2.0-dev.11.3A01");
+assert.equal(linuxARM64, "0.2.0-dev.11.4U01");
+assert.equal(linuxX64, "0.2.0-dev.11.5U01");
+
+assert.ok(semver.gt(v52, v51), "2A06 > 2A05");
+assert.ok(semver.gt(v53, v52), "2A07 > 2A06");
+assert.ok(semver.gt(v99, v98), "0D99 > 0D98");
+assert.ok(semver.gt(v0E, v99), "0E00 > 0D99");
+assert.ok(semver.gt(v1D, v1C), "1D00 > 1C99");
+
+for (const [version, marker] of [
+  [winA01, "2A01"],
+  [winA05, "2A05"],
+  [winA99, "2A99"],
+  [winB00, "2B00"],
+  [winX64, "3A01"],
+  [linuxARM64, "4U01"],
+  [linuxX64, "5U01"],
+]) {
+  assert.equal(decodeBuildVersion(version).marker, marker);
+  assert.ok(version.endsWith(`.${marker}`), `${marker} must remain contiguous`);
 }
 
-assert.equal(v51, "0.2.0-dev.10.0D.51");
-assert.equal(build("0D00"), "0.2.0-dev.10.0D.0");
-assert.ok(semver.gt(v52, v51), "0D52 > 0D51");
-assert.ok(semver.gt(v53, v52), "0D53 > 0D52");
-assert.ok(semver.gt(v100, v99), "0D100 > 0D99");
-assert.ok(semver.gt(v100, v52), "0D100 > 0D52");
-assert.ok(semver.gt(v1D, v1C), "1D00 > 1C00");
-assert.ok(semver.gt(v1D, v0E), "1D00 > 0E00");
+assert.throws(() => build("0D100"), /Invalid build marker/);
+assert.throws(() => build("2A.05"), /Invalid build marker/);
 
-assert.equal(winA01, "0.2.0-dev.10.2A.1");
-assert.equal(winA99, "0.2.0-dev.10.2A.99");
-assert.equal(winB00, "0.2.0-dev.10.2B.0");
-assert.equal(linuxA01, "0.2.0-dev.10.4A.1");
-assert.equal(decodeBuildVersion(winA01).marker, "2A01");
-assert.equal(decodeBuildVersion(linuxA01).marker, "4A01");
-assert.equal(formatProductVersionLabel(v51), "v0.2.0-dev.10");
-assert.equal(formatFriendlyUpdateVersion(v51), "v0.2.0-dev.10 Build 0D51");
-assert.equal(formatFriendlyUpdateVersion(v100), "v0.2.0-dev.10 Build 0D100");
-assert.equal(formatFriendlyUpdateVersion(v1D), "v0.2.0-dev.10 Build 1D00");
+// Historical versions remain readable, but newly generated versions use
+// the whole-marker format.
+const legacyWindows = "0.2.0-dev.10.2A.1";
+assert.equal(decodeBuildVersion(legacyWindows).marker, "2A01");
+assert.equal(
+  decodeBuildVersion(legacyWindows).baseVersion,
+  "0.2.0-dev.10"
+);
+assert.equal(
+  withBuildMarker(legacyWindows, "3A01"),
+  "0.2.0-dev.10.3A01"
+);
 
-console.log("PASS: valid SemVer, marker encoding, numeric counters and family ordering");
-console.log("PASS: 1D00 > 1C00 and 1D00 > 0E00");
-console.log("PASS: platform markers 2A01/2A99/2B00 and 4A01 encode to valid SemVer");
-console.log("PASS: friendly labels for 0D51, 0D100 and 1D00");
+const legacyCurrent = "0.2.0-dev.11.1D.1";
+assert.equal(decodeBuildVersion(legacyCurrent).marker, "1D01");
+assert.equal(
+  withBuildMarker(legacyCurrent, "1D01"),
+  "0.2.0-dev.11.1D01"
+);
+
+assert.equal(formatProductVersionLabel(v51), "v0.2.0-dev.11");
+assert.equal(
+  formatFriendlyUpdateVersion(v51),
+  "v0.2.0-dev.11 Build 2A05"
+);
+assert.equal(
+  formatFriendlyUpdateVersion(winA05),
+  "v0.2.0-dev.11 Build 2A05"
+);
+assert.equal(
+  formatFriendlyUpdateVersion(v1D),
+  "v0.2.0-dev.11 Build 1D00"
+);
+
+console.log("PASS: four-character build markers remain contiguous in SemVer");
+console.log("PASS: platform markers 1D01, 2A05, 3A01, 4U01 and 5U01");
+console.log("PASS: marker ordering and rollover");
+console.log("PASS: invalid marker formats are rejected");
+console.log("PASS: historical dotted versions remain readable");
+console.log("PASS: product labels and friendly update labels");

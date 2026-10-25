@@ -49,8 +49,7 @@ fn is_valid_build_id_for_target(value: &str, target_os: &str, target_arch: &str)
 fn verify_package_version_marker(marker: &str) {
     let version = env::var("CARGO_PKG_VERSION")
         .expect("Cargo sets CARGO_PKG_VERSION for this package build script");
-    let counter = marker[2..].parse::<u32>().expect("validated numeric build counter");
-    let suffix = format!(".{}.{}", &marker[..2], counter);
+    let suffix = format!(".{marker}");
     if !version.ends_with(&suffix) {
         panic!("RDT build marker {marker} does not match package version {version}. Run scripts/stamp-platform-build.cjs for the target platform before building.");
     }

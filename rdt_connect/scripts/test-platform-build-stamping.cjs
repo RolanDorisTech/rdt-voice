@@ -66,3 +66,35 @@ try {
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
+
+
+// Verify the actual Dev 11 Windows ARM64 marker remains intact.
+const markerRoot = fixtureRoot();
+try {
+  fs.writeFileSync(
+    path.join(markerRoot, "scripts/build-id-sequence-windows.txt"),
+    "2A05\n"
+  );
+
+  const result = run(markerRoot, "windows");
+  const expectedVersion = "0.2.0-dev.11.2A05";
+
+  assert.equal(
+    result.status,
+    0,
+    `Windows 2A05 stamping should pass: ${result.stderr}\n${result.stdout}`
+  );
+  assert.ok(
+    result.stdout.includes(`marker=2A05 version=${expectedVersion}`),
+    "stamping output must preserve the whole 2A05 marker"
+  );
+  assert.deepEqual(
+    readVersions(markerRoot),
+    Array(6).fill(expectedVersion),
+    "all manifests must use the intact 2A05 suffix"
+  );
+
+  console.log("PASS: Windows 2A05 remains intact across all version manifests");
+} finally {
+  fs.rmSync(markerRoot, { recursive: true, force: true });
+}

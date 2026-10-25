@@ -1,7 +1,7 @@
 {
   "name": "rdt-connect-desktop",
   "private": true,
-  "version": "0.2.0-dev.11.1D.1",
+  "version": "0.2.0-dev.11.1D01",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -10,7 +10,7 @@
     "prepare:desktop-resources": "bash scripts/prepare-macos-bundle.sh ..",
     "build:desktop:macos": "bash scripts/build-macos-with-marker.sh",
     "build:custom-dmg": "python3 scripts/build-custom-dmg.py",
-    "build:desktop:custom-dmg:macos": "RDT_BUILD_APP_ONLY=1 RDT_SKIP_UPDATER_ARTIFACTS=1 bash scripts/build-macos-with-marker.sh && python3 scripts/build-custom-dmg.py",
+    "build:desktop:custom-dmg:macos": "RDT_BUILD_APP_ONLY=1 bash scripts/build-macos-with-marker.sh && python3 scripts/build-custom-dmg.py",
     "test:versioning": "node scripts/test-build-versioning.cjs"
   },
   "dependencies": {

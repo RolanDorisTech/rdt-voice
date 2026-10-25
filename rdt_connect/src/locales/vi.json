@@ -631,7 +631,7 @@
     "msg.rdt_voice_license.39cd0e2f": "Giấy phép RDT Voice",
     "msg.rdt_voice_opened_in_browsername_the_local_se.0dba2a99": "RDT Voice đã mở trong {browserName}. Kiểm tra trước khi mở đối với máy chủ cục bộ và xác thực đã đạt.",
     "msg.rdt_voice_rdt_connect_third_party_libraries.607f9167": "RDT Voice, RDT Connect, thư viện bên thứ ba và tệp mô hình có thể có điều khoản khác nhau. Kho RDT Voice hiện tại xác định giấy phép mã nguồn là PolyForm Noncommercial 1.0.0; văn bản MIT trong lịch sử không tự xác lập giấy phép cho bản phát hành hiện tại. Luôn kiểm tra chính xác phiên bản và thẻ mô hình bạn sử dụng.",
-    "msg.rdt_voice_server.4b953ef2": "Máy chủ RDT Voice",
+    "msg.rdt_voice_server.4b953ef2": "RDT Voice Server",
     "msg.rdt_voice_was_not_opened_browserpreflightfai.5a720a4e": "RDT Voice chưa được mở. {browserPreflightFailure}",
     "msg.read_only_checks_for_the_local_backend_authe.de9ff1ed": "Các bước kiểm tra chỉ đọc đối với backend cục bộ, xác thực, Tailscale CLI và tuyến HTTPS riêng tư. Không gửi âm thanh và chẩn đoán không thay đổi cài đặt Tailscale.",
     "msg.read_only_unknown_tailscale_configuration_ch.a25b07eb": "Read-only: {readOnlyStatus}; Tailscale configuration changed: {configurationChangedStatus}",

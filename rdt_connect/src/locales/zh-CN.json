@@ -631,7 +631,7 @@
     "msg.rdt_voice_license.39cd0e2f": "RDT Voice 许可证",
     "msg.rdt_voice_opened_in_browsername_the_local_se.0dba2a99": "已在 {browserName} 中打开 RDT Voice。本地服务器和身份验证预检均已通过。",
     "msg.rdt_voice_rdt_connect_third_party_libraries.607f9167": "RDT Voice、RDT Connect、第三方库和模型文件可能适用不同的条款。当前 RDT Voice 仓库将其源代码许可证标为 PolyForm Noncommercial 1.0.0；历史上的 MIT 文本本身并不能确定当前版本使用的许可证。请始终检查你使用的确切版本及其模型卡。",
-    "msg.rdt_voice_server.4b953ef2": "RDT Voice 服务器",
+    "msg.rdt_voice_server.4b953ef2": "RDT Voice Server",
     "msg.rdt_voice_was_not_opened_browserpreflightfai.5a720a4e": "未打开 RDT Voice。{browserPreflightFailure}",
     "msg.read_only_checks_for_the_local_backend_authe.de9ff1ed": "对本地后端、身份验证、Tailscale CLI 和私密 HTTPS 路由进行只读检查。不会发送音频，也不会更改 Tailscale 设置。",
     "msg.read_only_unknown_tailscale_configuration_ch.a25b07eb": "Read-only: {readOnlyStatus}; Tailscale configuration changed: {configurationChangedStatus}",

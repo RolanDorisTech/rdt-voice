@@ -7,6 +7,7 @@ The user's repository server.py is never edited. Usage:
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 WARMUP_START = "# Warmup\n"
@@ -40,6 +41,39 @@ def main() -> int:
             print("ERROR: could not find the expected frontend asset marker in server.py; not patching an unknown layout.", file=sys.stderr)
             return 3
         text = text.replace(marker, ASSET_ROUTE + marker, 1)
+    # Patch only the staged backend: permit the official site or its exact
+    # same-origin loopback frontend. The loopback Host check remains mandatory.
+    route_pattern = re.compile(
+        r'(@app\.post\("/v1/browser-handoff/exchange"\)\s*'
+        r'def exchange_rdt_browser_handoff\(\s*'
+        r'payload: dict = None,\s*'
+        r'host: Optional\[str\] = Header\(None\),\s*'
+        r'origin: Optional\[str\] = Header\(None\),\s*\):)'
+    )
+    text, route_count = route_pattern.subn(
+        '@app.post("/v1/browser-handoff/exchange")\\n'
+        'def exchange_rdt_browser_handoff(\\n'
+        '    request: Request,\\n'
+        '    payload: dict = None,\\n'
+        '    host: Optional[str] = Header(None),\\n'
+        '    origin: Optional[str] = Header(None),\\n'
+        '):',
+        text,
+        count=1,
+    )
+    if route_count != 1:
+        print("ERROR: handoff route signature not recognized; refusing to patch.", file=sys.stderr)
+        return 3
+
+    guard = 'if origin != _RDT_OFFICIAL_BROWSER_ORIGIN:'
+    replacement = (
+        'if origin != _RDT_OFFICIAL_BROWSER_ORIGIN and origin != _request_origin(request):'
+    )
+    text, guard_count = re.subn(re.escape(guard), replacement, text, count=1)
+    if guard_count != 1:
+        print("ERROR: handoff origin guard not recognized; refusing to patch.", file=sys.stderr)
+        return 3
+
     patched = text
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(patched, encoding="utf-8")

@@ -11,7 +11,7 @@ if [[ ! -f "$MARKER_FILE" ]]; then
   exit 2
 fi
 MARKER="$(tr -d '[:space:]' < "$MARKER_FILE")"
-if [[ ! "$MARKER" =~ ^[0-9][A-Z][0-9]{2,}$ ]]; then
+if [[ ! "$MARKER" =~ ^[01][A-Z][0-9]{2}$ ]]; then
   echo "ERROR: invalid build marker: $MARKER" >&2
   exit 2
 fi
@@ -68,6 +68,19 @@ PY_VERSION_SOURCE
 )"
 IFS=$'\t' read -r PRODUCT VERSION <<< "$METADATA"
 node "$ROOT/scripts/build-versioning.cjs" validate "$VERSION" "$MARKER"
+
+UPDATER_DIR="$ROOT/src-tauri/target/release/bundle/macos"
+UPDATER_ARCHIVE="$UPDATER_DIR/${PRODUCT}.app.tar.gz"
+UPDATER_SIGNATURE="$UPDATER_ARCHIVE.sig"
+artifact_sha256() {
+  if [[ -f "$1" ]]; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    printf 'MISSING'
+  fi
+}
+BEFORE_ARCHIVE_SHA256="$(artifact_sha256 "$UPDATER_ARCHIVE")"
+BEFORE_SIGNATURE_SHA256="$(artifact_sha256 "$UPDATER_SIGNATURE")"
 
 DMG_DIR="$ROOT/src-tauri/target/release/bundle/dmg"
 RAW="$DMG_DIR/${PRODUCT}_${VERSION}_aarch64.dmg"
@@ -190,6 +203,27 @@ if [[ "$APP_ONLY" == "1" ]]; then
     exit 2
   fi
   echo "PASS: app bundle built for marker $RDT_BUILD_ID: $APP_BUNDLE"
+
+  if [[ "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" == "0" ]]; then
+    for artifact in "$UPDATER_ARCHIVE" "$UPDATER_SIGNATURE"; do
+      if [[ ! -s "$artifact" ]]; then
+        echo "ERROR: required updater artifact missing or empty: $artifact" >&2
+        exit 2
+      fi
+    done
+
+    AFTER_ARCHIVE_SHA256="$(artifact_sha256 "$UPDATER_ARCHIVE")"
+    AFTER_SIGNATURE_SHA256="$(artifact_sha256 "$UPDATER_SIGNATURE")"
+    if [[ "$AFTER_ARCHIVE_SHA256" == "$BEFORE_ARCHIVE_SHA256" ||
+          "$AFTER_SIGNATURE_SHA256" == "$BEFORE_SIGNATURE_SHA256" ]]; then
+      echo "ERROR: updater archive/signature were not both refreshed by this build." >&2
+      echo "Archive: $UPDATER_ARCHIVE" >&2
+      echo "Signature: $UPDATER_SIGNATURE" >&2
+      exit 2
+    fi
+    echo "PASS: updater archive and signature refreshed by this build."
+  fi
+
   echo "The next step is python3 scripts/build-custom-dmg.py; it will reject a stale app marker."
   exit 0
 fi

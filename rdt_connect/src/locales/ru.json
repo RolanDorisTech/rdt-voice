@@ -631,7 +631,7 @@
     "msg.rdt_voice_license.39cd0e2f": "Лицензия RDT Voice",
     "msg.rdt_voice_opened_in_browsername_the_local_se.0dba2a99": "RDT Voice открыт в браузере {browserName}. Предварительные проверки локального сервера и аутентификации пройдены.",
     "msg.rdt_voice_rdt_connect_third_party_libraries.607f9167": "У RDT Voice, RDT Connect, сторонних библиотек и файлов моделей могут быть разные условия лицензирования. В текущем репозитории RDT Voice исходная лицензия указана как PolyForm Noncommercial 1.0.0; исторический текст MIT сам по себе не определяет лицензию текущего выпуска. Всегда проверяйте точную версию и карточку модели, которую используете.",
-    "msg.rdt_voice_server.4b953ef2": "Сервер RDT Voice",
+    "msg.rdt_voice_server.4b953ef2": "RDT Voice Server",
     "msg.rdt_voice_was_not_opened_browserpreflightfai.5a720a4e": "RDT Voice не открыт. {browserPreflightFailure}",
     "msg.read_only_checks_for_the_local_backend_authe.de9ff1ed": "Проверки только для чтения локального серверного компонента, аутентификации, CLI Tailscale и частного маршрута HTTPS. Аудио не отправляется, диагностика не меняет настройки Tailscale.",
     "msg.read_only_unknown_tailscale_configuration_ch.a25b07eb": "Read-only: {readOnlyStatus}; Tailscale configuration changed: {configurationChangedStatus}",

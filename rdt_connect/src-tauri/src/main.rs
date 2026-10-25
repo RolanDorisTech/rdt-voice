@@ -17,7 +17,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
     Arc, Mutex, OnceLock,
 };
 use std::thread;
@@ -32,6 +32,8 @@ use tauri::{
 use tauri::menu::{PredefinedMenuItem, Submenu};
 use tauri_plugin_deep_link::DeepLinkExt;
 use sha2::{Digest, Sha256};
+
+mod updater_version_policy;
 
 #[cfg(target_os = "linux")]
 mod linux_tls;
@@ -6552,8 +6554,25 @@ fn open_voice_window(
         .append_pair("rdt_connect_handoff", code)
         .append_pair("rdt_connect_backend", &backend_url)
         .finish();
-    let mut launch_url = url::Url::parse("https://rolandoristech.github.io/rdt-voice/")
-        .map_err(|e| format!("Could not build the official RDT Voice browser URL: {e}"))?;
+    let online_available = Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .ok()
+        .and_then(|client| client.get("https://rolandoristech.github.io/rdt-voice/").send().ok())
+        .map(|response| response.status().is_success())
+        .unwrap_or(false);
+
+    let mut launch_url = if online_available {
+        url::Url::parse("https://rolandoristech.github.io/rdt-voice/")
+            .map_err(|e| format!("Could not build the official RDT Voice browser URL: {e}"))?
+    } else {
+        let mut local = url::Url::parse(&backend_url)
+            .map_err(|e| format!("The local RDT Voice endpoint is invalid: {e}"))?;
+        local.set_path("/");
+        local.set_query(None);
+        local.set_fragment(None);
+        local
+    };
     launch_url
         .query_pairs_mut()
         .append_pair("rdt_connect_lang", &active_locale);
@@ -7191,6 +7210,17 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
             None::<&str>,
         )?)
     };
+    let update_menu_item = if UPDATE_TRAY_STATE.load(Ordering::SeqCst) == 1 {
+        Some(MenuItem::with_id(app, "update-app", "Update App", true, None::<&str>)?)
+    } else {
+        None
+    };
+    let restart_update_item = if UPDATE_TRAY_STATE.load(Ordering::SeqCst) == 2 {
+        Some(MenuItem::with_id(app, "restart-to-update", "Restart to Update", true, None::<&str>)?)
+    } else {
+        None
+    };
+    let restart_item = MenuItem::with_id(app, "restart-app", "Restart App", true, None::<&str>)?;
     let quit = MenuItem::with_id(
         app,
         "quit-app",
@@ -7210,6 +7240,9 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
     if let Some(item) = action.as_ref() {
         items.push(item);
     }
+    if let Some(item) = update_menu_item.as_ref() { items.push(item); }
+    if let Some(item) = restart_update_item.as_ref() { items.push(item); }
+    items.push(&restart_item);
     items.push(&quit);
     Menu::with_items(app, &items)
 }
@@ -7582,6 +7615,40 @@ fn get_server_token(state: State<'_, BackendState>) -> Result<String, String> {
     Ok(token.to_string())
 }
 
+
+// 0 = no update, 1 = update available, 2 = restart required.
+static UPDATE_TRAY_STATE: AtomicU8 = AtomicU8::new(0);
+
+#[tauri::command]
+fn set_update_indicator(app: AppHandle, state: Option<String>) -> Result<(), String> {
+    let state_code = match state.as_deref() {
+        Some("available") => 1,
+        Some("restart") => 2,
+        _ => 0,
+    };
+    UPDATE_TRAY_STATE.store(state_code, Ordering::SeqCst);
+
+    // macOS uses template images so the system can tint them for light/dark mode.
+    // Keep the update indicator visible through both "available" and "restart required".
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") {
+            let image = if state_code != 0 {
+                tauri::include_image!("icons/rdt-menu-bar-template-update.png")
+            } else {
+                tauri::include_image!("icons/rdt-menu-bar-template.png")
+            };
+            tray.set_icon_with_as_template(Some(image), true)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    // Rebuild the menu on every supported platform, not just macOS.
+    // This keeps Update App / Restart to Update in sync with the updater state.
+    refresh_tray_menu(&app);
+    Ok(())
+}
+
 fn main() {
     let context = tauri::generate_context!();
 
@@ -7623,7 +7690,24 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .default_version_comparator(|current, remote| {
+                    // A version must be newer AND belong to this exact
+                    // platform/architecture namespace before it is offered.
+                    let is_newer = remote.version > current;
+                    if !is_newer {
+                        return false;
+                    }
+
+                    updater_version_policy::candidate_matches_installed_namespace(
+                        &current.to_string(),
+                        BUILD_ID,
+                        &remote.version.to_string(),
+                    )
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let resources = resolve_resource_dir(app.handle()).map_err(std::io::Error::other)?;
@@ -7800,6 +7884,20 @@ fn main() {
                             refresh_tray_menu(&start_app);
                         });
                     }
+                    "update-app" => {
+                        if let Err(error) = show_update_window(app) {
+                            eprintln!("[RDT Connect] Could not open updater: {error}");
+                        }
+                    }
+                    "restart-to-update" => {
+                        let _ = app.emit("rdt-connect-update-relaunch-request", ());
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "restart-app" => {
+                        let _ = app.emit("rdt-connect-app-restart-request", ());
+                    }
                     "quit-app" => app.exit(0),
                     _ => {}
                 })
@@ -7819,7 +7917,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_build_info, get_backend_status, get_platform_model_catalog, get_backend_connection_status, open_backend_log, get_recent_backend_log, get_app_diagnostics, get_orphaned_backends, stop_orphaned_backend,
-            get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, open_voice_window,
+            get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, set_update_indicator, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, open_voice_window,
             get_model_storage_status, set_model_storage_locations, pick_model_storage_directory,
             get_model_download_status, start_model_download, cancel_model_download, delete_rdt_model_caches, open_easywhisper_model_manager,
             get_local_https_status, pick_tls_file, setup_local_https_certificate, link_local_https_certificate, trust_local_https_ca, remove_rdt_https_trust, set_local_transport,

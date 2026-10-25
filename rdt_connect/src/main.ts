@@ -204,6 +204,7 @@ const localHttpsQuickSetupButton = $("local-https-quick-setup-button") as HTMLBu
 const localHttpsDetailsButton = $("local-https-details-button") as HTMLButtonElement;
 
 const visualSetupGuideToggle = $("visual-setup-guide-toggle") as HTMLInputElement;
+const autoCheckUpdatesToggle = $("auto-check-updates-toggle") as HTMLInputElement;
 
 const modelHelp = $("model-help");
 const remoteActionHelp = $("remote-action-help");
@@ -2822,6 +2823,7 @@ function publishUpdateWindowState(): void {
 }
 function setApplicationUpdateAction(action: UpdateUiAction): void {
   updateUiAction = action;
+  void invoke("set_update_indicator", { state: action === "install" ? "available" : action === "reopen" ? "restart" : null }).catch(() => undefined);
   const buttons = [applicationUpdateActionButton, headerUpdateActionButton].filter(
     (button): button is HTMLButtonElement => button !== null,
   );
@@ -2852,10 +2854,21 @@ function updateErrorDetail(error: unknown): string {
 }
 function getVersionDisplayParts(version: string): { base: string; build: string | null } {
   const normalized = version.trim().replace(/^v/i, "");
-  const match = normalized.match(/^(.*)\.([0-9][A-Z])\.(\d+)$/);
-  if (!match) return { base: normalized, build: null };
-  const counter = match[3].padStart(2, "0");
-  return { base: match[1], build: `${match[2]}${counter}` };
+
+  // Current whole-marker format: .2A05, never .2A.05.
+  const wholeMarker = normalized.match(/^(.*)\.([0-5][A-Z]\d{2})$/);
+  if (wholeMarker) {
+    return { base: wholeMarker[1], build: wholeMarker[2] };
+  }
+
+  // Preserve display compatibility with historical releases only.
+  const legacy = normalized.match(/^(.*)\.([0-9][A-Z])\.(\d+)$/);
+  if (!legacy) return { base: normalized, build: null };
+
+  return {
+    base: legacy[1],
+    build: `${legacy[2]}${legacy[3].padStart(2, "0")}`,
+  };
 }
 function formatProductVersionLabel(version: string): string {
   return `v${getVersionDisplayParts(version).base}`;
@@ -3052,8 +3065,26 @@ void listen("rdt-connect-update-install-request", () => {
 void listen("rdt-connect-update-relaunch-request", () => {
   void installAvailableApplicationUpdate();
 }).catch(() => undefined);
+void listen("rdt-connect-app-restart-request", async () => {
+  try { await relaunch(); } catch (error) {
+    console.error("[RDT Connect] Restart App failed:", error);
+  }
+}).catch(() => undefined);
 applicationUpdateActionButton.addEventListener("click", () => { void installAvailableApplicationUpdate(); });
 if (headerUpdateActionButton) headerUpdateActionButton.addEventListener("click", () => { void installAvailableApplicationUpdate(); });
+const AUTO_CHECK_UPDATES_KEY = "rdt-connect-auto-check-updates";
+try {
+  autoCheckUpdatesToggle.checked = localStorage.getItem(AUTO_CHECK_UPDATES_KEY) !== "false";
+} catch {
+  autoCheckUpdatesToggle.checked = true;
+}
+autoCheckUpdatesToggle.addEventListener("change", () => {
+  try { localStorage.setItem(AUTO_CHECK_UPDATES_KEY, String(autoCheckUpdatesToggle.checked)); } catch { /* preference remains session-local if storage is unavailable */ }
+  if (autoCheckUpdatesToggle.checked) void checkForApplicationUpdates();
+});
+window.setInterval(() => {
+  if (autoCheckUpdatesToggle.checked) void checkForApplicationUpdates();
+}, 30 * 60 * 1000);
 void refreshAppBuildInfo();
 
 const legalLinkRoutes: Array<[string, string]> = [

@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0-dev.11.1D02",
-  "notes": "Updating the updater interface.",
-  "pub_date": "2026-10-25T15:18:59.379429Z",
+  "version": "0.2.0-dev.11.1D03",
+  "notes": "RDT Connect Dev 11 macOS Apple Silicon update test — Build 1D03.",
+  "pub_date": "2026-10-27T02:32:18.195947Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3Fzd3l5Q2Z3NHBQdjNmZjNQR1dwM0htL2JyNmZ2aXRvZk5zV2hVbSs1MW5HN3NPZ0tmMWxTbzV5UC9iNUhZbzlDUkl5a2ZRNHp6a2tzMC9SeUh3bTlmWXdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyOTQwMTM0CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMS4xRDAyCldiTk5Cd1B3NWdXc3JWTmJMV3NoQnM2NGdXUG9wOWRwdlVmQlVRQUVvWDRHdnc4RkEzMmIzVEU2UEJpbWlZNkRkOUZjTnE3Q0dVN0tpYm05ZXV1bERRPT0K",
-      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d02/RDT.Connect.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3Fzd3ovRnExd212R3A5VW5Kc3VST1ZKYWp1azJESzFzOWdaMFdMUExxZzdMZjhuNVVXZVZJelZ4V21VZnc2MUh0dGNHTkVuWm9vVWcwY0Q1c2dqTmhpbVFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMDYxNjkwCWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMS4xRDAzClQ4YlZrTFpDZHFVQW91THhzakFwemxIbHN0VW52Mkl6SHg5K3lmYnB3U0ZqWS94dnFSYmtrVlZvL0M4L3NzU0Z5dUFmUGh3ejVXeFRsUGh4VzZZd0R3PT0K",
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d03/RDT.Connect.app.tar.gz"
     }
   }
 }

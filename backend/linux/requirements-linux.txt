@@ -9,3 +9,4 @@ PyInstaller==6.22.3
 python-multipart==0.0.32
 qrcode==8.2
 uvicorn==0.54.0
+backports.tarfile==1.2.0

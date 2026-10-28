@@ -1,0 +1,472 @@
+name: RDT Connect Windows x64 Test Installer
+
+on:
+  push:
+    branches:
+      - "windows-port-*"
+      - "windows-linux-dev11-parity-20261028"
+    paths:
+      - ".github/workflows/windows-x64-installer.yml"
+      - "rdt_connect/**"
+      - "backend/**"
+      - "index.html"
+      - "worker.js"
+      - "pcm-worklet.js"
+      - "models.manifest.json"
+      - "locales/**"
+      - "assets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  updater-contract:
+    name: Fast Windows updater artifact contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - name: Validate Tauri updater artifact contract
+        shell: bash
+        run: |
+          python3 - <<'PYCONTRACT'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path("rdt_connect/src-tauri/tauri.windows.conf.json").read_text())
+          workflow = Path(".github/workflows/windows-x64-installer.yml").read_text()
+          assert config.get("bundle", {}).get("createUpdaterArtifacts") is True, "Tauri updater artifacts must be enabled"
+          assert "*-setup.exe" in workflow, "Workflow must verify the actual NSIS setup executable"
+          assert '"$($installer.FullName).sig"' in workflow, "Workflow must verify the matching installer signature"
+          assert "$signature.sha256" in workflow, "Distribution must include the signature checksum"
+          print("PASS: Tauri v2 NSIS updater artifact contract")
+          PYCONTRACT
+
+  signing-preflight:
+    needs: updater-contract
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - name: Install dependencies for signing probe
+        working-directory: rdt_connect
+        shell: pwsh
+        run: npm ci
+      - name: Preflight updater signing secrets
+        working-directory: rdt_connect
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_SHA256: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_SHA256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw 'Updater signing preflight failed: private-key secret is empty or unavailable.'
+          }
+          $keyText = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $keyBytes = [System.Text.Encoding]::UTF8.GetBytes($keyText)
+            $actualFingerprint = [Convert]::ToHexString($sha.ComputeHash($keyBytes))
+          } finally {
+            $sha.Dispose()
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_SHA256) -or
+              $actualFingerprint -ine $env:TAURI_SIGNING_PRIVATE_KEY_SHA256.Trim()) {
+            throw 'Updater signing preflight failed: supplied private key does not match the approved fingerprint.'
+          }
+          Remove-Variable keyText,keyBytes,actualFingerprint -ErrorAction SilentlyContinue
+          $probe = Join-Path $env:RUNNER_TEMP 'rdt-updater-signing-preflight.txt'
+          $signature = "$probe.sig"
+          try {
+            Set-Content -LiteralPath $probe -Value 'RDT updater signing preflight' -NoNewline -Encoding ascii
+            npm run tauri -- signer sign $probe
+            if ($LASTEXITCODE -ne 0) { throw 'Tauri could not sign the preflight probe with the configured secrets.' }
+            if (!(Test-Path -LiteralPath $signature) -or (Get-Item -LiteralPath $signature).Length -eq 0) {
+              throw 'Signing preflight produced no non-empty signature.'
+            }
+            Write-Host 'Updater signing preflight: PASS'
+          } finally {
+            Remove-Item -LiteralPath $probe,$signature -Force -ErrorAction SilentlyContinue
+          }
+
+  package:
+    needs: signing-preflight
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+
+      - name: Prepare Windows x64 FFmpeg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-x64-lgpl.zip'
+          $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg-x64-extracted'
+          $destination = Join-Path $env:RUNNER_TEMP 'rdt-ffmpeg-x64'
+          # Pin an immutable release asset and verify its SHA-256 before extraction.
+          # Source: BtbN/FFmpeg-Builds release autobuild-2026-10-19-13-06,
+          # checksums.sha256; never consume the mutable /download/latest/ alias.
+          $uri = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-19-13-06/ffmpeg-N-127696-g8b3525e718-win64-lgpl.zip'
+          $expectedSha256 = 'f6cfd42be37761089215ec4015146d7f0f679183fa966ac1a8cdf95b62e446dd'
+
+          Invoke-WebRequest -Uri $uri -OutFile $archive
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+            throw "Pinned FFmpeg archive SHA-256 mismatch: expected $expectedSha256; actual $actualSha256."
+          }
+          Write-Host "FFMPEG_ARCHIVE_SHA256_VERIFIED=$actualSha256"
+
+          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+          $ffmpeg = Get-ChildItem $extract -Filter ffmpeg.exe -File -Recurse | Select-Object -First 1
+          $ffprobe = Get-ChildItem $extract -Filter ffprobe.exe -File -Recurse | Select-Object -First 1
+          $license = Get-ChildItem $extract -File -Recurse |
+            Where-Object { $_.Name -in @('LICENSE.txt', 'LICENSE') } |
+            Select-Object -First 1
+
+          if (-not $ffmpeg -or -not $ffprobe -or -not $license) {
+            throw 'FFmpeg executables or license notice missing from downloaded archive.'
+          }
+
+          New-Item -ItemType Directory -Force $destination | Out-Null
+          Copy-Item $ffmpeg.FullName (Join-Path $destination 'ffmpeg.exe')
+          Copy-Item $ffprobe.FullName (Join-Path $destination 'ffprobe.exe')
+          Copy-Item $license.FullName (Join-Path $destination 'LICENSE.txt')
+
+          $ffmpegVersion = & (Join-Path $destination 'ffmpeg.exe') -version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Prepared x64 ffmpeg.exe failed its version check with exit code $LASTEXITCODE."
+          }
+          $ffmpegVersion | Select-Object -First 1
+
+          $ffprobeVersion = & (Join-Path $destination 'ffprobe.exe') -version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Prepared x64 ffprobe.exe failed its version check with exit code $LASTEXITCODE."
+          }
+          $ffprobeVersion | Select-Object -First 1
+          "RDT_FFMPEG_DIR=$destination" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Set up native Rust x64 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install pinned Windows x64 Vulkan SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '1.4.363.0'
+          $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk-x64.exe'
+          $sdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK-$version"
+          $download = "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan_sdk.exe"
+          $checksumUri = "https://sdk.lunarg.com/sdk/sha/$version/windows/vulkan_sdk.exe.json"
+
+          $checksum = Invoke-RestMethod -Uri $checksumUri
+          $expectedFile = "vulkansdk-windows-X64-$version.exe"
+          if ($checksum.version -ne $version) {
+            throw "LunarG checksum version mismatch: expected $version; got '$($checksum.version)'."
+          }
+          if ($checksum.platform -ne 'windows') {
+            throw "LunarG checksum platform mismatch: expected windows; got '$($checksum.platform)'."
+          }
+          if ($checksum.file -ne $expectedFile) {
+            throw "LunarG checksum filename mismatch: expected '$expectedFile'; got '$($checksum.file)'."
+          }
+          $expected = ([string]$checksum.sha).ToLowerInvariant()
+          $pinnedSha256 = '94a82d378f7a5e3e54c9db7d2fb7016af136e14ac0a18dbf0f2f67a36352d141'
+          if ($expected -ne $pinnedSha256) {
+            throw "LunarG Vulkan SDK checksum differs from the approved x64 pin. Expected $pinnedSha256; got $expected."
+          }
+          if ($expected -notmatch '^[0-9a-f]{64}$') {
+            throw "LunarG returned an invalid SHA-256 for Vulkan SDK $version."
+          }
+
+          Invoke-WebRequest -Uri $download -OutFile $installer
+          $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Vulkan SDK SHA-256 mismatch. Expected $expected; got $actual."
+          }
+          Write-Host "VULKAN_SDK_VERSION=$version"
+          Write-Host "VULKAN_SDK_SHA256=$actual"
+
+          & $installer --root $sdkRoot --accept-licenses --default-answer --confirm-command install
+          if ($LASTEXITCODE -ne 0) {
+            throw "Vulkan SDK $version x64 installation failed with exit code $LASTEXITCODE."
+          }
+
+          $glslc = Join-Path $sdkRoot 'Bin/glslc.exe'
+          if (-not (Test-Path -LiteralPath $glslc -PathType Leaf)) {
+            throw "Vulkan SDK installed without expected shader compiler: $glslc"
+          }
+
+          $env:VULKAN_SDK = $sdkRoot
+          "VULKAN_SDK=$sdkRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          & $glslc --version
+          if ($LASTEXITCODE -ne 0) { throw 'Vulkan shader compiler verification failed.' }
+
+      - name: Set up pinned native Python 3.13.16 (x64)
+        id: setup-python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.13.16'
+          architecture: 'x64'
+
+      - name: Prepare native Windows backend and web resources
+        env:
+          RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+          if ($arch -ne 'X64') {
+            throw "Expected native x64 runner; got $arch."
+          }
+
+          $python = $env:RDT_PYTHON
+          if (-not $python -or -not (Test-Path $python)) {
+            throw 'Pinned native x64 Python 3.13.16 executable not found.'
+          }
+
+          $info = (& $python -c 'import platform,sys; print("%d.%d.%d|%s" % (*sys.version_info[:3], platform.machine()))').Trim()
+          Write-Host "Python verification: $info"
+          if ($info -notmatch '^3\.13\.16\|(?i:amd64|x86_64|x64)$') {
+            throw "Expected native x64 Python 3.13.16 (AMD64/x86_64); got $info."
+          }
+
+          & .\rdt_connect\scripts\prepare-windows-bundle.ps1 `
+            -TargetArch x64 `
+            -Python $python `
+            -FfmpegDir $env:RDT_FFMPEG_DIR `
+            -EnableVulkan `
+            -RequireGpuWorker
+
+      - name: Upload Windows x64 native worker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows-x64-native-worker-diagnostics
+          path: ${{ runner.temp }}/rdt-x64-worker-*.log
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Install frontend dependencies
+        working-directory: rdt_connect
+        shell: pwsh
+        run: npm ci
+      - name: Stamp isolated Windows build version (3A01 namespace)
+        working-directory: rdt_connect
+        shell: pwsh
+        run: |
+          node scripts/stamp-platform-build.cjs windows 3A01
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
+          node scripts/test-platform-build-stamping.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }
+
+      - name: Test build versioning
+        working-directory: rdt_connect
+        shell: pwsh
+        run: npm run test:versioning
+
+      - name: Build frontend
+        working-directory: rdt_connect
+        shell: pwsh
+        run: npm run build
+
+      - name: Build Windows x64 NSIS installer
+        working-directory: rdt_connect
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run tauri -- build --target x86_64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json
+          if ($LASTEXITCODE -ne 0) { throw 'Tauri Windows x64 installer build failed.' }
+
+      - name: Verify installer and generate checksum
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $installers = @(Get-ChildItem $bundle -Filter '*-setup.exe' -File -ErrorAction SilentlyContinue)
+
+          if ($installers.Count -lt 1) {
+            throw "No NSIS setup installer found in $bundle"
+          }
+
+          foreach ($installer in $installers) {
+            $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
+            "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
+            Write-Host "Installer: $($installer.Name)"
+            Write-Host "SHA-256: $hash"
+          }
+
+      - name: Verify signed Windows updater artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
+          if ($installers.Count -lt 1) {
+            throw "No NSIS setup installer found in $bundle"
+          }
+          foreach ($installer in $installers) {
+            $signature = "$($installer.FullName).sig"
+            if (-not (Test-Path -LiteralPath $signature -PathType Leaf)) {
+              throw "Updater signature missing: $signature"
+            }
+            foreach ($file in @($installer.FullName, $signature)) {
+              $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256" -Encoding ascii
+              Write-Host "Verified updater artifact: $(Split-Path $file -Leaf)"
+            }
+          }
+
+      - name: Package Windows pre-install guide
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $guide = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/windows-package/guide'
+          $stage = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-Installation-Guide'
+          $zip = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-Installation-Guide.zip'
+          $required = @(
+            'windows_installation_guide.html',
+            'rdt_connect_guide_icon.png',
+            'rdt_connect_guide.ico'
+          )
+
+          foreach ($name in $required) {
+            $file = Join-Path $guide $name
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Required installation guide asset is missing: $file"
+            }
+          }
+
+          if (Test-Path -LiteralPath $stage) {
+            Remove-Item -LiteralPath $stage -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          foreach ($name in $required) {
+            Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
+          }
+
+          if (Test-Path -LiteralPath $zip) {
+            Remove-Item -LiteralPath $zip -Force
+          }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
+          Write-Host "Guide ZIP: $zip"
+          Write-Host "SHA-256: $hash"
+
+      - name: Package combined Windows x64 distribution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $guide = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/windows-package/guide'
+          $stage = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-x64-DISTRIBUTION'
+          $zip = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-x64-DISTRIBUTION.zip'
+
+          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Windows setup installer; found $($installers.Count)."
+          }
+          $installer = $installers[0]
+          $installerHash = "$($installer.FullName).sha256"
+          if (-not (Test-Path -LiteralPath $installerHash -PathType Leaf)) {
+            throw "Installer checksum is missing: $installerHash"
+          }
+
+          $required = @(
+            'windows_installation_guide.html',
+            'rdt_connect_guide_icon.png',
+            'rdt_connect_guide.ico'
+          )
+          foreach ($name in $required) {
+            if (-not (Test-Path -LiteralPath (Join-Path $guide $name) -PathType Leaf)) {
+              throw "Required guide asset is missing: $name"
+            }
+          }
+
+          if (Test-Path -LiteralPath $stage) {
+            Remove-Item -LiteralPath $stage -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item -LiteralPath $installer.FullName -Destination $stage
+          Copy-Item -LiteralPath $installerHash -Destination $stage
+
+          $updaterInstallers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
+          if ($updaterInstallers.Count -lt 1) {
+            throw "No NSIS installer available to package from $bundle"
+          }
+          foreach ($installer in $updaterInstallers) {
+            $signature = "$($installer.FullName).sig"
+            foreach ($file in @($installer.FullName, $signature, "$($installer.FullName).sha256", "$signature.sha256")) {
+              if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+                throw "Required signed updater distribution file is missing: $file"
+              }
+              Copy-Item -LiteralPath $file -Destination $stage
+            }
+          }
+
+          foreach ($name in $required) {
+            Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
+          }
+
+          if (Test-Path -LiteralPath $zip) {
+            Remove-Item -LiteralPath $zip -Force
+          }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+          $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$zipHash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
+          Write-Host "Distribution ZIP: $zip"
+          Write-Host "SHA-256: $zipHash"
+
+      - name: Upload combined Windows x64 distribution
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: RDT-Connect-Windows-x64-DISTRIBUTION
+          path: |
+            ${{ runner.temp }}/RDT-Connect-Windows-x64-DISTRIBUTION.zip
+            ${{ runner.temp }}/RDT-Connect-Windows-x64-DISTRIBUTION.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows pre-install guide artifact
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: RDT-Connect-Windows-x64-INSTALLATION-GUIDE
+          path: |
+            ${{ runner.temp }}/RDT-Connect-Windows-Installation-Guide.zip
+            ${{ runner.temp }}/RDT-Connect-Windows-Installation-Guide.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test installer artifact
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: RDT-Connect-Windows-x64-TEST-INSTALLER
+          path: |
+            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sha256
+            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig
+            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig.sha256
+          if-no-files-found: error
+          retention-days: 14

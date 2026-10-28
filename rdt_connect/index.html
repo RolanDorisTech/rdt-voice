@@ -21,7 +21,7 @@
               <summary class="version"><span id="header-version-label">v0.2.0-dev.10</span></summary>
               <div class="version-popover">
                 <strong>Current build</strong>
-                <span id="header-build-id">0D53</span>
+                <span id="header-build-id">1D03</span>
                 <small>Check for signed RDT Connect development updates.</small>
                 <button id="header-check-updates-button" class="button update-check-button" type="button" aria-controls="header-update-message">Check for updates</button>
                 <small id="header-update-message" class="header-update-message" aria-live="polite"></small>
@@ -117,7 +117,7 @@
               <div class="local-server-details-body">
                 <div id="local-https-advanced-status" class="local-https-advanced-status hidden" role="status" aria-live="polite"></div>
                 <div class="address-row endpoint-row">
-                  <div class="endpoint-copy"><div class="address-label">Server URL</div><div id="local-address" class="address-value">Not running</div></div>
+                  <div class="endpoint-copy"><div class="address-label" data-l10n-key="msg.server_url.22f5ebc3">Server URL</div><div id="local-address" class="address-value" data-l10n-key="msg.not_running.9e3856ee">Not running</div></div>
                   <button id="copy-endpoint-button" class="button secondary compact-button" type="button" disabled>Copy URL</button>
                 </div>
                 <div class="address-row token-address-row">
@@ -125,7 +125,7 @@
                     <div class="address-label">Access token key</div>
                     <div class="credential-value-row token-value-row">
                       <input id="token-display" type="password" value="" readonly autocomplete="off" spellcheck="false" placeholder="Hidden until you choose Show" aria-label="RDT Connect access token key" />
-                      <button id="toggle-token-button" class="button secondary compact-button" type="button" title="Reveal the access token only on this screen">Show</button>
+                      <button id="toggle-token-button" class="button secondary compact-button" type="button" data-l10n-key="msg.show.0df6f1ca" title="Reveal the access token only on this screen">Show</button>
                       <button id="copy-token-button" class="button secondary compact-button" type="button" title="Copy the key for manual setup in RDT Voice">Copy key</button>
                     </div>
                     <p class="muted field-help token-help">For manual setup, copy the Server URL and Access token key into RDT Voice Settings. For a phone, use the Private HTTPS URL on Remote Access. A paired browser can use its secure session without pasting the key again.</p>
@@ -134,18 +134,20 @@
             <div id="local-port-tools" class="dev-local-port-tools hidden" aria-label="Developer local server settings">
               <div class="dev-port-inline-row">
                 <label class="field-label" for="preferred-port">Port for next server</label>
-                <div id="preferred-port-tooltip" class="rdt-fast-tooltip" data-tooltip="Stop the server first to change the next-start port.">
-                  <input id="preferred-port" type="number" min="1024" max="65535" step="1" value="8888" inputmode="numeric" aria-describedby="port-help" title="Stop the server first to change the next-start port." />
+                <div class="dev-port-controls">
+                  <div id="preferred-port-tooltip" class="rdt-fast-tooltip" data-tooltip="Stop the server first to change the next-start port.">
+                    <input id="preferred-port" type="number" min="1024" max="65535" step="1" value="8888" inputmode="numeric" aria-describedby="port-help" title="Stop the server first to change the next-start port." />
+                  </div>
+                  <span class="dev-port-active">Active: <code id="display-port">8888</code></span>
+                  <p id="port-help" class="muted field-help">Takes effect the next time the server starts. If busy, choose another; other apps are left running.</p>
                 </div>
-                <span class="dev-port-active">Active: <code id="display-port">8888</code></span>
               </div>
-              <p id="port-help" class="muted field-help">Takes effect the next time the server starts. If busy, choose another; other apps are left running.</p>
             </div>
               </div>
             </details>
             <div class="local-bottom-row">
               <div id="notice" class="notice info" role="status" aria-live="polite">Ready to connect?</div>
-              <p id="model-help" class="local-server-guidance muted field-help">Sizes are approximate model-download sizes, not memory requirements. Existing compatible local copies avoid a repeat download.</p>
+              <p id="model-help" class="local-server-guidance muted field-help">RDT Connect uses the fastest transcription hardware for your device.</p>
             </div>
           </article>
         </div>
@@ -165,7 +167,7 @@
             </div>
             <p class="muted field-help diagnostics-help">Run diagnostics, then copy the report. Review it before sharing. The report is intended for troubleshooting; check its contents for personal details.</p>
             <pre id="diagnostics-output" class="diagnostics-output" aria-live="polite">No report yet. Run diagnostics to check server readiness, authentication, and required local files.</pre>
-            <details class="advanced-copy-tools"><summary>Technical logs · copy individual sources</summary>
+            <details class="advanced-copy-tools"><summary data-l10n-key="msg.technical_logs_copy_individual_sources.1f7975a7">Technical logs · copy individual sources</summary>
               <p class="muted field-help">Use these when support asks for one source by itself. App activity shows recent actions; the backend log contains server-side details.</p>
               <div class="diagnostic-actions"><button id="copy-activity-log-button" class="button secondary" type="button" title="Copy recent app activity. Review before sharing.">Copy app activity</button></div>
               <div class="address-row log-row"><div class="log-copy"><div class="address-label">Backend log</div><div id="log-path" class="address-value">Log file is created when the server starts.</div></div><div class="log-actions"><button id="copy-log-button" class="button secondary log-open-button" type="button" title="Copy sanitized backend log lines. Review before sharing.">Copy backend log</button><button id="open-log-button" class="button secondary log-open-button" type="button" title="Open the complete local backend log in TextEdit.">Open full log</button></div></div>
@@ -200,11 +202,18 @@
             <div class="card-heading"><h2>Local transport</h2><span class="eyebrow">HTTPS recommended</span></div>
             <fieldset class="transport-choice">
               <legend class="field-label">Connection type</legend>
-              <label class="transport-option"><input id="transport-https" type="radio" name="local-transport" value="https" checked /> <span><strong>HTTPS · Recommended</strong><small>Encrypted. Requires a valid certificate and verified system trust.</small></span></label>
-              <label class="transport-option"><input id="transport-http" type="radio" name="local-transport" value="http" /> <span><strong>HTTP · Development only</strong><small>Unencrypted. Use only when you intentionally need plaintext local testing.</small></span></label>
+              <label class="transport-option"><input id="transport-https" type="radio" name="local-transport" value="https" checked /> <span><strong data-l10n-key="msg.https_recommended.615e0757">HTTPS · Recommended</strong><small data-l10n-key="msg.encrypted_requires_a_valid_certificate_and_v.8631e6f7">Encrypted. Requires a valid certificate and verified system trust.</small></span></label>
+              <label class="transport-option"><input id="transport-http" type="radio" name="local-transport" value="http" /> <span><strong data-l10n-key="msg.http_development_only.b5275f3a">HTTP · Development only</strong><small data-l10n-key="msg.unencrypted_use_only_when_you_intentionally.cc7ab9dc">Unencrypted. Use only when you intentionally need plaintext local testing.</small></span></label>
             </fieldset>
             <details class="developer-help-details"><summary>Do I need to change this?</summary><p class="muted">Most users should leave HTTPS selected. Set up trusted HTTPS from Local Server. Changing a URL to begin with HTTPS does not enable TLS by itself.</p></details>
           </article>
+          <article class="card developer-task-card tray-test-access-card" id="tray-test-access-card">
+            <label class="field-label" for="tray-test-phrase">Developer test</label>
+            <input id="tray-test-phrase" type="text" autocomplete="off" spellcheck="false"
+              placeholder="Command" aria-label="Developer test command" aria-describedby="tray-test-phrase-status" />
+            <p id="tray-test-phrase-status" class="muted field-help" role="status" aria-live="polite">Hidden</p>
+          </article>
+
         </div>
       </section>
 
@@ -293,7 +302,7 @@
           </article></section>
         </div>
         <details class="remote-diagnostics-tools advanced-copy-tools hidden" aria-hidden="true">
-          <summary>Advanced · Remote connection diagnostics</summary>
+          <summary data-l10n-key="msg.advanced_remote_connection_diagnostics.4fc40ab8">Advanced · Remote connection diagnostics</summary>
           <p class="muted field-help">Read-only checks for the local backend, authentication, Tailscale CLI, and private HTTPS route. No audio is sent, and diagnostics do not change Tailscale settings.</p>
           <div id="remote-diagnostics-summary" class="connection-summary" role="status" aria-live="polite">Remote diagnostics have not run yet. Start the server first for the full Tailscale route check.</div>
           <div class="diagnostic-actions">
@@ -314,26 +323,31 @@
               <article class="card settings-general-card" id="settings-general">
             <div class="card-heading"><h2>General</h2><span class="eyebrow">App preferences</span></div>
             <div class="settings-language-row">
-              <div class="settings-language-copy">
-                <label class="field-label" for="app-language">Interface language</label>
-                <p id="app-language-status" class="muted field-help" aria-live="polite"></p>
-              </div>
+              <p id="app-language-status" class="muted field-help" aria-live="polite"></p>
               <select id="app-language" data-l10n-ignore aria-label="Interface language">
                 <option value="en" selected>English</option>
               </select>
+
+
             </div>
 
             <label class="menu-bar-option recommended-option"><input id="keep-in-menu-bar" type="checkbox" checked /><span class="gold-checkbox-visual" aria-hidden="true"></span><span class="menu-bar-option-copy"><strong>Show in menu bar</strong><small>When on, closing the window keeps RDT Connect in the menu bar. When off, closing quits the app and stops its managed server.</small></span></label>
+              <article id="offline-only-mode-setting" class="card settings-general-card settings-offline-only-card" aria-label="Offline only mode">
+  <label class="visual-setup-guide-toggle" for="offline-only-mode-toggle">
+                  <span class="visual-setup-guide-toggle-copy"><strong data-l10n-key="msg.offline_only_mode.c8de590d">Offline only mode</strong></span>
+                  <input id="offline-only-mode-toggle" type="checkbox" />
+                  <span class="visual-setup-guide-switch" aria-hidden="true"></span>
+                </label>
+</article>
 
           </article>
-            </div>
-          </section>
-          <section id="settings-help-section" class="settings-group" aria-labelledby="settings-help-heading">
+
+<section id="settings-help-section" class="settings-group" aria-labelledby="settings-help-heading">
             <div class="settings-group-heading"><h2 id="settings-help-heading">Help</h2></div>
             <div class="settings-group-grid settings-help-grid">
               <article class="card settings-help-card" id="settings-help">
                 <label class="visual-setup-guide-toggle" for="visual-setup-guide-toggle">
-                  <span class="visual-setup-guide-toggle-copy"><strong>Visual setup guide</strong><small class="visual-setup-guide-description">Highlights the next setup step with a spotlight; turn it off here anytime.</small></span>
+                  <span class="visual-setup-guide-toggle-copy"><strong data-l10n-key="msg.visual_setup_guide.4b0d0e3d">Visual setup guide</strong><small class="visual-setup-guide-description" data-l10n-key="msg.highlights_the_next_setup_step_with_a_spotli.419ded88">Highlights the next setup step with a spotlight; turn it off here anytime.</small></span>
                   <span class="visual-setup-guide-image-frame">
                     <img
                   class="visual-setup-guide-example"
@@ -350,6 +364,7 @@
               </article>
             </div>
           </section>
+
           <section id="settings-models-section" class="settings-group" aria-labelledby="settings-models-heading">
             <div class="settings-group-heading"><h2 id="settings-models-heading">Models</h2><p class="muted">Choose model storage and manage cached models.</p></div>
             <div class="settings-group-grid settings-models-grid">
@@ -362,8 +377,8 @@
             <p class="muted field-help" data-l10n-rich="settings.modelStorage.cacheHomeHelp">Choose the Hugging Face cache home folder. Inside it, the <code data-l10n-slot="hub">hub</code> directory contains the <code data-l10n-slot="modelFolderPattern">models--…</code> folders. You can add up to 20 locations. Stop the server before saving. Reconnect an external drive before saving; RDT Connect will not create a missing folder on an unplugged drive.</p>
           </article>
               <article class="card model-cleanup-card">
-            <div class="card-heading"><h2>Model management</h2><span class="eyebrow">Separate storage</span></div>
-                        <p class="muted">Choose specific downloaded RDT Connect models on this device to remove. EasyWhisper browser data and other model repositories are never deleted here.</p>
+            <div class="card-heading"><h2 data-l10n-key="msg.model_management.fbae290f">Model management</h2><span class="eyebrow" data-l10n-key="msg.separate_storage.1af2faeb">Separate storage</span></div>
+                        <p class="muted" data-l10n-key="msg.choose_specific_downloaded_rdt_connect_model.49157c13">Choose specific downloaded RDT Connect models on this device to remove. EasyWhisper browser data and other model repositories are never deleted here.</p>
             <div id="model-cache-selection-list" class="model-cache-selection-list" role="group" aria-label="Downloaded RDT Connect models">Checking model cache availability…</div>
             <div class="model-cleanup-actions">
               <button id="delete-rdt-models-button" class="button danger" type="button" title="Delete only the downloaded RDT Connect MLX models you select below.">Delete RDT Connect models</button>
@@ -377,10 +392,10 @@
             <div class="settings-group-grid settings-security-grid">
               <article class="card local-https-card settings-security-card" id="settings-security">
             <div class="card-heading"><h2>HTTPS for this device</h2><span class="eyebrow">Secure local connection</span></div>
-            <p class="muted">HTTPS encrypts the connection between this device and its local browser. RDT Connect can configure trusted HTTPS for you; the private key stays on this Mac.</p>
+            <p class="muted" data-l10n-rich="msg.https_encrypts_the_connection_between_this_m.f3c18b38">HTTPS encrypts the connection between this device and its local browser. RDT Connect can configure trusted HTTPS for you; the private key stays on this device.</p>
             <div id="local-https-status" class="tls-status tls-needs-setup" role="status" aria-live="polite">Checking local HTTPS configuration…</div>
             <button id="setup-local-https-button" class="button primary full" type="button">Set up trusted HTTPS</button>
-            <details class="https-details"><summary>Manage existing certificates · advanced</summary>
+            <details class="https-details"><summary data-l10n-key="msg.manage_existing_certificates_advanced.24d94d56">Manage existing certificates · advanced</summary>
             <p class="muted field-help">RDT Connect creates a local certificate authority for localhost and 127.0.0.1, then offers to add that CA to your system trust store. Your CA private key remains on this Mac. Never share it.</p>
             <div class="tls-file-list">
               <div class="tls-file-row"><div><strong>Server certificate</strong><code id="tls-cert-path">Not selected</code></div><button id="choose-tls-cert-button" class="button secondary" type="button">Choose certificate…</button></div>
@@ -398,17 +413,17 @@
             <div class="settings-group-heading"><h2 id="settings-updates-heading">Updates &amp; About</h2><p class="muted">App updates, product details, and licences.</p></div>
             <div class="settings-group-grid settings-updates-grid">
               <article class="card about-card settings-about-card">
-            <div class="card-heading about-card-heading"><h2>About</h2><div class="about-heading-actions"><span id="about-version-label" class="eyebrow">RDT Connect · v0.2.0-dev.10 · Build 0D53</span><button id="about-check-updates-button" class="button update-check-button" type="button" aria-controls="application-update-panel" aria-expanded="false">Check for updates</button></div></div>
-            <p class="muted">RDT Connect helps you run your own private, local transcription server. You choose when to connect another device, and the app keeps the security details visible instead of hiding them.</p>
-            <div id="application-update-panel" class="application-update-panel" aria-hidden="true" inert><div class="card-heading"><h2>Application updates</h2></div><p id="application-update-message" class="muted" aria-live="polite"></p><div class="application-update-actions"><button id="application-update-action-button" class="button update-check-button" type="button" hidden disabled>Download and install update</button></div></div>
+            <div class="card-heading about-card-heading"><h2>About</h2><div class="about-heading-actions"><span id="about-version-label" class="eyebrow">RDT Connect</span><button id="about-check-updates-button" class="button update-check-button" type="button" aria-controls="application-update-panel" aria-expanded="false">Check for updates</button></div></div>
+            <p class="muted">RDT Connect turns your computer into a local transcription server. Your audio is processed locally, so you stay in control of all your data.</p>
             <label class="auto-check-updates-toggle" for="auto-check-updates-toggle">
               <span class="auto-check-updates-copy">
-                <strong>Auto-check for Updates</strong>
-                <small>Check when RDT Connect starts and every 30 minutes. Manual checks remain available when this is off.</small>
+                <strong data-l10n-key="msg.automatically_check_for_updates.409e6a1a">Automatically check for updates</strong>
               </span>
               <input id="auto-check-updates-toggle" type="checkbox" checked />
               <span class="auto-check-updates-switch" aria-hidden="true"></span>
             </label>
+            <div id="application-update-panel" class="application-update-panel" aria-hidden="true" inert><div class="card-heading"><h2>Application updates</h2></div><p id="application-update-message" class="muted" aria-live="polite"></p><div class="application-update-actions"><button id="application-update-action-button" class="button update-check-button" type="button" hidden disabled>Download and install update</button></div></div>
+
             <div class="about-channel-row">
               <div class="about-company-block"><a id="about-company-link" class="about-company-link" href="https://github.com/RolanDorisTech/rdt-voice" target="_blank" rel="noopener noreferrer"><strong>Built by Rolan &amp; Doris Tech ↗</strong></a><small>Local AI Made Easy · Private, on-device transcription</small><small class="about-business-contact">Business contact · <a id="about-business-contact-link" href="mailto:woknewsbusiness@gmail.com">woknewsbusiness@gmail.com</a></small></div>
               <div class="about-actions-row"><button id="about-youtube-button" class="button secondary" type="button" title="Open the Rolan & Doris Tech YouTube channel in your default browser">Support us on YouTube ↗</button><button id="about-installation-guide-button" class="button secondary" type="button" title="Open the Windows installation guide" hidden>Windows installation guide ↗</button></div></div>
@@ -446,7 +461,7 @@
       </div>
       <p class="https-setup-success-kicker">SECURE CONNECTION READY</p>
       <h2>You're all set!</h2>
-      <p class="https-setup-success-copy">Trusted HTTPS is ready on this device.</p>
+      <p class="https-setup-success-copy">✓ Trusted HTTPS is ready for this device.</p>
     </div>
   </div>
 

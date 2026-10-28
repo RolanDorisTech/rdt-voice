@@ -4,6 +4,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::blocking::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(windows)]
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -25,8 +26,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
     menu::{IsMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
-    webview::WebviewWindowBuilder,
-    AppHandle, Emitter, Manager, State, WebviewUrl,
+    AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder,
 };
 #[cfg(target_os = "macos")]
 use tauri::menu::{PredefinedMenuItem, Submenu};
@@ -136,14 +136,18 @@ fn application_log_dir(app_name: &str) -> Result<PathBuf, String> {
 
 fn app_version_label() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    if let Some((before_counter, counter)) = version.rsplit_once('.') {
-        if !counter.is_empty() && counter.bytes().all(|byte| byte.is_ascii_digit()) {
-            if let Some((base, family)) = before_counter.rsplit_once('.') {
-                let bytes = family.as_bytes();
-                if bytes.len() == 2 && bytes[0].is_ascii_digit() && bytes[1].is_ascii_uppercase() {
-                    return format!("v{base}");
-                }
-            }
+    if let Some((base, marker)) = version.rsplit_once('.') {
+        let bytes = marker.as_bytes();
+        let mac_or_windows_marker = bytes.len() == 4
+            && (b'1'..=b'3').contains(&bytes[0])
+            && bytes[1].is_ascii_uppercase()
+            && bytes[2..].iter().all(u8::is_ascii_digit);
+        let linux_marker = bytes.len() == 5
+            && (bytes[0] == b'4' || bytes[0] == b'5')
+            && bytes[1] == b'L'
+            && bytes[2..].iter().all(u8::is_ascii_digit);
+        if mac_or_windows_marker || linux_marker {
+            return format!("v{base}");
         }
     }
     format!("v{version}")
@@ -1473,7 +1477,7 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
         Some(ProcessSnapshot { pid, ppid, pgid: pid, stat: "R".into(), started, command })
     }).collect();
 
-    let parent_map: std::collections::HashMap<u32, (u32, bool)> = snapshot.iter()
+    let parent_map: HashMap<u32, (u32, bool)> = snapshot.iter()
         .map(|item| (item.pid, (item.ppid, is_windows_executable(&item.command, "rdt_voice_backend.exe")
             || is_windows_executable(&item.command, "rdt_voice_backend"))))
         .collect();
@@ -2003,6 +2007,7 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
     Ok(())
 }
 
+#[cfg(windows)]
 fn sha256_file_hex(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path)
         .map_err(|error| format!("Could not read a file for integrity verification: {error}"))?;
@@ -6467,30 +6472,7 @@ fn open_url_windows(url: &str, browser_id: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn open_url_external(url: &str, browser_id: Option<&str>) -> Result<(), String> {
-    let selected = browser_id.unwrap_or("default");
-    let mut command = Command::new("/usr/bin/open");
-    if selected != "default" {
-        let bundle_id = browser_bundle_id(selected).ok_or_else(|| "Choose a supported browser from the Local Server browser list.".to_string())?;
-        if !browser_app_is_installed(selected) {
-            return Err("The selected browser is no longer installed. Choose another browser and retry.".into());
-        }
-        command.arg("-b").arg(bundle_id);
-    }
-    command.arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
-        .map(|_| ()).map_err(|error| format!("Could not open the URL in the selected browser: {error}"))
-}
 
-#[cfg(all(unix, not(target_os = "macos")))]
-fn open_url_external(url: &str, _browser_id: Option<&str>) -> Result<(), String> {
-    let parsed = url::Url::parse(url).map_err(|error| format!("The external URL is invalid: {error}"))?;
-    if !matches!(parsed.scheme(), "https" | "mailto") {
-        return Err("RDT Connect refused to open an unsupported external URL.".into());
-    }
-    Command::new("xdg-open").arg(url).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
-        .map(|_| ()).map_err(|error| format!("Could not open the URL in the default browser: {error}"))
-}
 
 #[tauri::command]
 fn list_available_browsers() -> Vec<BrowserOption> {
@@ -6526,7 +6508,8 @@ fn open_voice_window(
     state: State<'_, BackendState>,
     browser_id: Option<String>,
     locale: Option<String>,
-) -> Result<(), String> {
+    offline_only_mode: Option<bool>,
+) -> Result<bool, String> {
     let status = state.status();
     let _port = status
         .port
@@ -6554,13 +6537,20 @@ fn open_voice_window(
         .append_pair("rdt_connect_handoff", code)
         .append_pair("rdt_connect_backend", &backend_url)
         .finish();
-    let online_available = Client::builder()
-        .timeout(Duration::from_secs(2))
+    let force_offline = offline_only_mode.unwrap_or(false);
+    let online_available = !force_offline && Client::builder()
+        .connect_timeout(Duration::from_millis(500))
+        .timeout(Duration::from_secs(1))
         .build()
         .ok()
         .and_then(|client| client.get("https://rolandoristech.github.io/rdt-voice/").send().ok())
-        .map(|response| response.status().is_success())
+        .map(|response| {
+            response.status().is_success()
+                && response.url().host_str() == Some("rolandoristech.github.io")
+                && response.url().path().starts_with("/rdt-voice/")
+        })
         .unwrap_or(false);
+    let using_offline_copy = !online_available;
 
     let mut launch_url = if online_available {
         url::Url::parse("https://rolandoristech.github.io/rdt-voice/")
@@ -6605,7 +6595,7 @@ fn open_voice_window(
         Command::new("xdg-open").arg(launch_url.as_str()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
             .map_err(|e| format!("Could not open RDT Voice in the default browser: {e}"))?;
     }
-    Ok(())
+    Ok(using_offline_copy)
 }
 
 fn request_builder(
@@ -7050,29 +7040,6 @@ fn tray_voice_preflight_passes(state: &BackendState, status: &BackendStatus) -> 
         .unwrap_or(false)
 }
 
-fn show_update_window(app: &AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("updates") {
-        window
-            .show()
-            .map_err(|error| format!("Could not show the update window: {error}"))?;
-        window
-            .set_focus()
-            .map_err(|error| format!("Could not focus the update window: {error}"))?;
-        let _ = app.emit("rdt-connect-update-check-request", ());
-        return Ok(());
-    }
-
-    WebviewWindowBuilder::new(app, "updates", WebviewUrl::App("update.html".into()))
-        .title("RDT Connect Updates")
-        .inner_size(468.0, 270.0)
-        .min_inner_size(420.0, 250.0)
-        .resizable(false)
-        .center()
-        .build()
-        .map(|_| ())
-        .map_err(|error| format!("Could not open the update window: {error}"))
-}
-
 fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<tauri::Wry>> {
     let status = state.status();
     let locale = read_app_language(state);
@@ -7210,17 +7177,56 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
             None::<&str>,
         )?)
     };
-    let update_menu_item = if UPDATE_TRAY_STATE.load(Ordering::SeqCst) == 1 {
-        Some(MenuItem::with_id(app, "update-app", "Update App", true, None::<&str>)?)
-    } else {
-        None
+    let update_state = UPDATE_TRAY_STATE.load(Ordering::SeqCst);
+    let (update_label_key, update_label_fallback) = match update_state {
+        UPDATE_TRAY_CHECKING => ("updater.checking", "Checking for Updates…"),
+        UPDATE_TRAY_AVAILABLE => ("updater.downloadInstall", "Download Update"),
+        UPDATE_TRAY_DOWNLOADING => ("updater.downloading", "Downloading Update…"),
+        UPDATE_TRAY_RESTART => ("updater.reopenApp", "Restart to Update"),
+        UPDATE_TRAY_UP_TO_DATE => ("updater.upToDate", "Up to Date"),
+        UPDATE_TRAY_ERROR => ("updater.checkFailed", "Update Check Failed"),
+        UPDATE_TRAY_OFFLINE => ("updater.offline", "No internet connection. Try again when online."),
+        _ => ("msg.check_for_updates.f26f3275", "Check for Updates"),
     };
-    let restart_update_item = if UPDATE_TRAY_STATE.load(Ordering::SeqCst) == 2 {
-        Some(MenuItem::with_id(app, "restart-to-update", "Restart to Update", true, None::<&str>)?)
-    } else {
-        None
-    };
-    let restart_item = MenuItem::with_id(app, "restart-app", "Restart App", true, None::<&str>)?;
+    // Keep the tray entry actionable after a check. Detailed results remain
+    // visible in the update window; they must not replace the manual-check action.
+    let (update_label_key, update_label_fallback) =
+        if matches!(update_state, UPDATE_TRAY_IDLE | UPDATE_TRAY_UP_TO_DATE | UPDATE_TRAY_ERROR | UPDATE_TRAY_OFFLINE) {
+            ("msg.check_for_updates.f26f3275", "Check for Updates")
+        } else {
+            (update_label_key, update_label_fallback)
+        };
+    let update_label = tray_text(&locale, update_label_key, update_label_fallback, &[]);
+    let update_enabled = !matches!(
+        update_state,
+        UPDATE_TRAY_CHECKING | UPDATE_TRAY_DOWNLOADING
+    );
+    let update_menu_item = MenuItem::with_id(
+        app,
+        "update-app",
+        update_label,
+        update_enabled,
+        None::<&str>,
+    )?;
+    if let Ok(mut item) = UPDATE_TRAY_MENU_ITEM
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+    {
+        *item = Some(update_menu_item.clone());
+    }
+    #[cfg(target_os = "macos")]
+    let about_item = PredefinedMenuItem::about(
+        app,
+        Some("About RDT Connect"),
+        Some(tauri::menu::AboutMetadata {
+            name: Some("RDT Connect".to_string()),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            copyright: Some("© 2026 Rolan & Doris Tech".to_string()),
+            icon: Some(tauri::include_image!("icons/icon.png")),
+            ..Default::default()
+        }),
+    )?;
+
     let quit = MenuItem::with_id(
         app,
         "quit-app",
@@ -7240,9 +7246,9 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
     if let Some(item) = action.as_ref() {
         items.push(item);
     }
-    if let Some(item) = update_menu_item.as_ref() { items.push(item); }
-    if let Some(item) = restart_update_item.as_ref() { items.push(item); }
-    items.push(&restart_item);
+    items.push(&update_menu_item);
+    #[cfg(target_os = "macos")]
+    items.push(&about_item);
     items.push(&quit);
     Menu::with_items(app, &items)
 }
@@ -7308,6 +7314,38 @@ fn is_rdt_connect_open_url(url: &url::Url) -> bool {
         && url.fragment().is_none()
 }
 
+
+fn show_update_window(app: &AppHandle, recheck: bool) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window("updates") {
+        window.show()?;
+        window.set_focus()?;
+        let event = if recheck {
+            "rdt-connect-update-check-request"
+        } else {
+            "rdt-connect-update-window-state-request"
+        };
+        let _ = app.emit(event, ());
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(
+        app,
+        "updates",
+        WebviewUrl::App("update.html".into()),
+    )
+    .title("RDT Connect Updates")
+    .inner_size(440.0, 230.0)
+    .min_inner_size(360.0, 190.0)
+    .resizable(false)
+    .center()
+    .build()?;
+
+    if recheck {
+        let _ = app.emit("rdt-connect-update-check-request", ());
+    }
+    Ok(())
+}
+
 fn show_main_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {
@@ -7332,20 +7370,33 @@ fn hide_main_window_to_menu_bar(app: &AppHandle) {
 }
 
 #[cfg(target_os = "macos")]
+fn single_instance_lock_path() -> Result<std::path::PathBuf, String> {
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| "HOME is unavailable; cannot locate the single-instance lock".to_string())?;
+    let support_name = if option_env!("RDT_CONNECT_LOCALE_TEST").is_some() {
+        "RDT Connect Locale Test"
+    } else {
+        "RDT Connect"
+    };
+    Ok(std::path::PathBuf::from(home)
+        .join("Library")
+        .join("Application Support")
+        .join(support_name)
+        .join("rdt-connect-single-instance.lock"))
+}
+
+#[cfg(target_os = "macos")]
 fn acquire_single_instance_lock() -> Result<Option<std::fs::File>, String> {
     use fs2::FileExt;
     use std::io::Write;
     use std::path::PathBuf;
 
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| "HOME is unavailable; cannot secure the single-instance lock".to_string())?;
-    let support_dir = PathBuf::from(home)
-        .join("Library")
-        .join("Application Support")
-        .join("RDT Connect");
-    std::fs::create_dir_all(&support_dir)
-        .map_err(|e| format!("cannot create the RDT Connect support directory: {e}"))?;
-    let lock_path = support_dir.join("rdt-connect-single-instance.lock");
+    let lock_path = single_instance_lock_path()?;
+    let support_dir = lock_path
+        .parent()
+        .ok_or_else(|| "single-instance lock path has no parent directory".to_string())?;
+    std::fs::create_dir_all(support_dir)
+        .map_err(|e| format!("cannot create the single-instance support directory: {e}"))?;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .read(true)
@@ -7371,14 +7422,7 @@ fn acquire_single_instance_lock() -> Result<Option<std::fs::File>, String> {
 #[cfg(target_os = "macos")]
 fn single_instance_diagnostics() -> String {
     let pid = std::process::id();
-    let path = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .map(|home| {
-            home.join("Library")
-                .join("Application Support")
-                .join("RDT Connect")
-                .join("rdt-connect-single-instance.lock")
-        });
+    let path = single_instance_lock_path().ok();
     let expected_pid = format!("pid={pid}");
     match path.and_then(|path| std::fs::read_to_string(path).ok()) {
         Some(contents) if contents.lines().any(|line| line.trim() == expected_pid.as_str()) =>
@@ -7616,36 +7660,127 @@ fn get_server_token(state: State<'_, BackendState>) -> Result<String, String> {
 }
 
 
-// 0 = no update, 1 = update available, 2 = restart required.
-static UPDATE_TRAY_STATE: AtomicU8 = AtomicU8::new(0);
+const UPDATE_TRAY_IDLE: u8 = 0;
+const UPDATE_TRAY_AVAILABLE: u8 = 1;
+const UPDATE_TRAY_RESTART: u8 = 2;
+const UPDATE_TRAY_CHECKING: u8 = 3;
+const UPDATE_TRAY_DOWNLOADING: u8 = 4;
+const UPDATE_TRAY_UP_TO_DATE: u8 = 5;
+const UPDATE_TRAY_ERROR: u8 = 6;
+const UPDATE_TRAY_OFFLINE: u8 = 7;
+
+static UPDATE_TRAY_STATE: AtomicU8 = AtomicU8::new(UPDATE_TRAY_IDLE);
+static UPDATE_TRAY_MESSAGE: OnceLock<Mutex<String>> = OnceLock::new();
+static UPDATE_TRAY_MENU_ITEM: OnceLock<Mutex<Option<MenuItem<tauri::Wry>>>> =
+    OnceLock::new();
+
+fn update_tray_menu_label(app: &AppHandle, text: String, enabled: bool) {
+    let item_cell = UPDATE_TRAY_MENU_ITEM
+        .get_or_init(|| Mutex::new(None));
+
+    let item = item_cell.lock().ok().and_then(|guard| guard.clone());
+    if let Some(item) = item {
+        let app = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Err(error) = item.set_text(&text) {
+                eprintln!("[RDT Connect] Could not update tray label: {error}");
+            }
+            if let Err(error) = item.set_enabled(enabled) {
+                eprintln!("[RDT Connect] Could not update tray action state: {error}");
+            }
+        });
+    }
+}
+
 
 #[tauri::command]
-fn set_update_indicator(app: AppHandle, state: Option<String>) -> Result<(), String> {
+fn set_update_indicator(
+    app: AppHandle,
+    state: Option<String>,
+    display_text: Option<String>,
+) -> Result<(), String> {
     let state_code = match state.as_deref() {
-        Some("available") => 1,
-        Some("restart") => 2,
-        _ => 0,
+        Some("available") => UPDATE_TRAY_AVAILABLE,
+        Some("restart") => UPDATE_TRAY_RESTART,
+        Some("checking") => UPDATE_TRAY_CHECKING,
+        Some("downloading") => UPDATE_TRAY_DOWNLOADING,
+        Some("up-to-date") => UPDATE_TRAY_UP_TO_DATE,
+        Some("error") => UPDATE_TRAY_ERROR,
+        Some("offline") => UPDATE_TRAY_OFFLINE,
+        _ => UPDATE_TRAY_IDLE,
     };
-    UPDATE_TRAY_STATE.store(state_code, Ordering::SeqCst);
 
-    // macOS uses template images so the system can tint them for light/dark mode.
-    // Keep the update indicator visible through both "available" and "restart required".
+    if let Some(text) = display_text {
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let text: String = text.chars().take(100).collect();
+        if let Ok(mut message) = UPDATE_TRAY_MESSAGE
+            .get_or_init(|| Mutex::new(String::new()))
+            .lock()
+        {
+            *message = text;
+        }
+    }
+
+    let previous = UPDATE_TRAY_STATE.swap(state_code, Ordering::SeqCst);
+    let message = UPDATE_TRAY_MESSAGE
+        .get()
+        .and_then(|value| value.lock().ok().map(|text| text.clone()))
+        .unwrap_or_default();
+    let enabled = !matches!(
+        state_code,
+        UPDATE_TRAY_CHECKING | UPDATE_TRAY_DOWNLOADING
+    );
+
+    if previous == state_code {
+        let fallback = match state_code {
+            UPDATE_TRAY_CHECKING => "Checking for Updates…",
+            UPDATE_TRAY_AVAILABLE => "Download Update",
+            UPDATE_TRAY_DOWNLOADING => "Downloading Update…",
+            UPDATE_TRAY_RESTART => "Restart to Update",
+            UPDATE_TRAY_UP_TO_DATE => "Up to Date",
+            UPDATE_TRAY_ERROR => "Update Check Failed",
+            UPDATE_TRAY_OFFLINE => "No internet connection. Try again when online.",
+            _ => "Check for Updates",
+        };
+        let label = if message.is_empty() { fallback.to_string() } else { message };
+        update_tray_menu_label(&app, label, enabled);
+    } else {
+        refresh_tray_menu(&app);
+    }
+
+    // Update arrow lifecycle:
+    // available = downward arrow; downloading/checking = normal icon;
+    // restart = upward arrow after the update has been installed.
     #[cfg(target_os = "macos")]
     {
         if let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") {
-            let image = if state_code != 0 {
-                tauri::include_image!("icons/rdt-menu-bar-template-update.png")
-            } else {
-                tauri::include_image!("icons/rdt-menu-bar-template.png")
+            let dark_appearance = std::process::Command::new("/usr/bin/defaults")
+                .args(["read", "-g", "AppleInterfaceStyle"])
+                .output()
+                .map(|output| {
+                    output.status.success()
+                        && String::from_utf8_lossy(&output.stdout)
+                            .trim()
+                            .eq_ignore_ascii_case("dark")
+                })
+                .unwrap_or(false);
+
+            let (image, is_template) = match state_code {
+                UPDATE_TRAY_AVAILABLE => (
+                    tauri::include_image!("icons/rdt-menu-bar-update-dark-down-arrow.png"),
+                    true,
+                ),
+                UPDATE_TRAY_RESTART => (
+                    tauri::include_image!("icons/rdt-menu-bar-update-dark-arrow-upward.png"),
+                    true,
+                ),
+                _ => (tauri::include_image!("icons/rdt-menu-bar-template.png"), true),
             };
-            tray.set_icon_with_as_template(Some(image), true)
+            tray.set_icon_with_as_template(Some(image), is_template)
                 .map_err(|error| error.to_string())?;
         }
     }
 
-    // Rebuild the menu on every supported platform, not just macOS.
-    // This keeps Update App / Restart to Update in sync with the updater state.
-    refresh_tray_menu(&app);
     Ok(())
 }
 
@@ -7737,17 +7872,39 @@ fn main() {
             let state = app.state::<BackendState>();
             #[cfg(target_os = "macos")]
             {
-                let app_about = PredefinedMenuItem::about(app, Some("About RDT Connect"), None)?;
+                let menu_locale = read_app_language(&state);
+                let app_updates_label = tray_text(
+                    &menu_locale, "msg.check_for_updates.f26f3275",
+                    "Check for updates", &[],
+                );
+                let app_quit_label = tray_text(
+                    &menu_locale, "msg.quit_rdt_connect.9dcc650d",
+                    "Quit RDT Connect", &[],
+                );
+                let close_label = tray_text(
+                    &menu_locale, "msg.close.7d9eb7ac", "Close", &[],
+                );
+
+                let app_about = PredefinedMenuItem::about(
+                    app,
+                    None,
+                    Some(tauri::menu::AboutMetadata {
+                        name: Some("RDT Connect".to_string()),
+                        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                        copyright: Some("© 2026 Rolan & Doris Tech".to_string()),
+                        ..Default::default()
+                    }),
+                )?;
                 let app_updates = MenuItem::with_id(
                     app,
                     "app-menu-check-updates",
-                    "Check for Updates",
+                    &app_updates_label,
                     true,
                     None::<&str>,
                 )?;
                 let app_separator = PredefinedMenuItem::separator(app)?;
                 let app_quit =
-                    PredefinedMenuItem::quit(app, Some("Quit RDT Connect"))?;
+                    PredefinedMenuItem::quit(app, Some(&app_quit_label))?;
                 let app_submenu = Submenu::with_items(
                     app,
                     "RDT Connect",
@@ -7756,7 +7913,7 @@ fn main() {
                 )?;
 
                 let file_close =
-                    PredefinedMenuItem::close_window(app, Some("Close Window"))?;
+                    PredefinedMenuItem::close_window(app, Some(&close_label))?;
                 let file_submenu =
                     Submenu::with_items(app, "File", true, &[&file_close])?;
 
@@ -7790,8 +7947,8 @@ fn main() {
             app.on_menu_event(|app, event| {
                 match event.id().as_ref() {
                     "app-menu-check-updates" => {
-                        if let Err(error) = show_update_window(app) {
-                            eprintln!("[RDT Connect] Could not open update status window: {error}");
+                        if let Err(error) = show_update_window(app, true) {
+                            eprintln!("[RDT Connect] Could not open updater window: {error}");
                         }
                     }
                     _ => {}
@@ -7834,7 +7991,7 @@ fn main() {
                     }
                     "open-voice" => {
                         if let Some(state) = app.try_state::<BackendState>() {
-                            if let Err(error) = open_voice_window(app.clone(), state, None, None) {
+                            if let Err(error) = open_voice_window(app.clone(), state, None, None, None) {
                                 eprintln!("[RDT Connect] Menu-bar Open RDT Voice failed: {error}");
                                 show_main_window(app);
                                 let _ = app.emit("rdt-tray-open-voice-failed", error);
@@ -7885,18 +8042,9 @@ fn main() {
                         });
                     }
                     "update-app" => {
-                        if let Err(error) = show_update_window(app) {
-                            eprintln!("[RDT Connect] Could not open updater: {error}");
+                        if let Err(error) = show_update_window(app, false) {
+                            eprintln!("[RDT Connect] Could not open updater window: {error}");
                         }
-                    }
-                    "restart-to-update" => {
-                        let _ = app.emit("rdt-connect-update-relaunch-request", ());
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "restart-app" => {
-                        let _ = app.emit("rdt-connect-app-restart-request", ());
                     }
                     "quit-app" => app.exit(0),
                     _ => {}

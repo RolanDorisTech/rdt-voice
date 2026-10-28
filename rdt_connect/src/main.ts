@@ -63,6 +63,11 @@ const viewTabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-
 const appViews = Array.from(document.querySelectorAll<HTMLElement>(".app-view"));
 const developerTab = document.querySelector<HTMLButtonElement>('[data-view-target="developer"]');
 const remoteTab = document.querySelector<HTMLButtonElement>('[data-view-target="remote"]');
+const offlineOnlyModeToggle = document.querySelector<HTMLInputElement>("#offline-only-mode-toggle");
+const OFFLINE_ONLY_MODE_KEY = "rdt_connect_offline_only_mode";
+let offlineOnlyModeEnabled = false;
+try { offlineOnlyModeEnabled = localStorage.getItem(OFFLINE_ONLY_MODE_KEY) === "true"; } catch { /* optional preference */ }
+if (offlineOnlyModeToggle) offlineOnlyModeToggle.checked = offlineOnlyModeEnabled;
 const remoteDiagnosticsPanel = document.querySelector<HTMLDetailsElement>("#view-remote details.remote-diagnostics-tools");
 const developerOptionsToggle = document.querySelector<HTMLInputElement>("#developer-options-toggle");
 const developerToggleButton = document.querySelector<HTMLButtonElement>("#developer-toggle-button");
@@ -86,7 +91,14 @@ function syncDeveloperVisibility() {
     developerTab.setAttribute("aria-hidden", String(hidden));
     developerTab.tabIndex = hidden ? -1 : 0;
   }
-  if (remoteTab) remoteTab.classList.remove("hidden");
+  if (remoteTab) {
+    remoteTab.classList.toggle("hidden", offlineOnlyModeEnabled);
+    remoteTab.setAttribute("aria-hidden", String(offlineOnlyModeEnabled));
+    remoteTab.tabIndex = offlineOnlyModeEnabled ? -1 : 0;
+  }
+  if (offlineOnlyModeEnabled && document.getElementById("view-remote")?.classList.contains("hidden") === false) {
+    setAppView("local", false);
+  }
   if (remoteDiagnosticsPanel) {
     remoteDiagnosticsPanel.classList.toggle("hidden", hidden);
     remoteDiagnosticsPanel.setAttribute("aria-hidden", String(hidden));
@@ -95,16 +107,49 @@ function syncDeveloperVisibility() {
 }
 if (developerOptionsToggle) developerOptionsToggle.checked = developerOptionsEnabled;
 syncDeveloperVisibility();
+
+let offlineOnlyPreviousView: string | null = null;
+
+offlineOnlyModeToggle?.addEventListener("change", () => {
+  const enablingOfflineOnly = offlineOnlyModeToggle.checked;
+  if (enablingOfflineOnly) {
+    offlineOnlyPreviousView =
+      document.querySelector<HTMLButtonElement>('[data-view-target].active')?.dataset.viewTarget || null;
+  }
+  offlineOnlyModeEnabled = enablingOfflineOnly;
+  try { localStorage.setItem(OFFLINE_ONLY_MODE_KEY, String(offlineOnlyModeEnabled)); } catch { /* optional preference */ }
+  syncDeveloperVisibility();
+  if (offlineOnlyModeEnabled) {
+    if (updateCheckInFlight && !updateCheckInFlightManual) {
+      updateCheckGeneration += 1;
+      updateCheckInFlight = null;
+      updateCheckInFlightManual = false;
+    }
+    showNotice("Offline only mode is enabled. Automatic update checks are paused.", "info");
+  } else {
+    const savedView = (() => {
+      try { return localStorage.getItem("rdt_connect_active_view") || "local"; }
+      catch { return "local"; }
+    })();
+    setAppView(offlineOnlyPreviousView || savedView, false);
+    offlineOnlyPreviousView = null;
+    showNotice("Offline only mode is disabled. RDT Voice will prefer the official website and fall back offline when unavailable.", "info");
+    if (autoCheckUpdatesToggle.checked) void checkForApplicationUpdates();
+  }
+});
+
 function syncDeveloperToggleButton() {
   if (!developerToggleButton) return;
-  developerToggleButton.textContent = developerOptionsEnabled ? "DEV ON" : "DEV";
+  developerToggleButton.textContent = developerOptionsEnabled ? translateKey("msg.dev_on.3074426d", {}, getActiveLocale()) : translateKey("msg.dev.4030fe15", {}, getActiveLocale());
   developerToggleButton.setAttribute("aria-pressed", String(developerOptionsEnabled));
   developerToggleButton.classList.toggle("enabled", developerOptionsEnabled);
-  developerToggleButton.title = developerOptionsEnabled ? "Developer tools enabled" : "Enable developer tools";
+  developerToggleButton.title = developerOptionsEnabled ? translateKey("msg.developer_tools_enabled.3fb8a401", {}, getActiveLocale()) : translateKey("msg.enable_developer_tools.2ec3eb03", {}, getActiveLocale());
 }
 syncDeveloperToggleButton();
 function setAppView(target: string, persist = true) {
-  const allowed = ["local", "settings", "remote"].includes(target) || (target === "developer" && developerOptionsEnabled);
+  const allowed = ["local", "settings"].includes(target)
+    || (target === "remote" && !offlineOnlyModeEnabled)
+    || (target === "developer" && developerOptionsEnabled);
   const safeTarget = allowed ? target : "local";
   for (const view of appViews) view.classList.toggle("hidden", view.id !== `view-${safeTarget}`);
   for (const tab of viewTabs) {
@@ -129,7 +174,7 @@ function setDeveloperOptions(enabled: boolean) {
 for (const tab of viewTabs) tab.addEventListener("click", () => {
   const target = tab.dataset.viewTarget || "local";
   if (target === "developer" && !developerOptionsEnabled) {
-    showNotice("Enable DEV to open Developer Options.", "info");
+    showNotice(translateKey("msg.enable_dev_to_open_developer_options.9f67a54e", {}, getActiveLocale()), "info");
     return;
   }
   setAppView(target);
@@ -137,12 +182,12 @@ for (const tab of viewTabs) tab.addEventListener("click", () => {
 });
 if (developerOptionsToggle) developerOptionsToggle.addEventListener("change", () => {
   setDeveloperOptions(developerOptionsToggle.checked);
-  if (developerOptionsToggle.checked) showNotice("Developer tools enabled.", "info");
-  else showNotice("Ready to connect?", "info");
+  if (developerOptionsToggle.checked) showNotice(translateKey("msg.developer_tools_enabled.dc8a294c", {}, getActiveLocale()), "info");
+  else showNotice(translateKey("msg.ready_to_connect.5802ac49", {}, getActiveLocale()), "info");
 });
 if (developerToggleButton) developerToggleButton.addEventListener("click", () => {
   setDeveloperOptions(!developerOptionsEnabled);
-  showNotice(developerOptionsEnabled ? "Developer tools enabled." : "Ready to connect?", "info");
+  showNotice(developerOptionsEnabled ? translateKey("msg.developer_tools_enabled.dc8a294c", {}, getActiveLocale()) : translateKey("msg.ready_to_connect.5802ac49", {}, getActiveLocale()), "info");
 });
 
 // Native language selection uses the same catalogs as automatic first-launch detection.
@@ -302,7 +347,7 @@ async function initializePlatformModelCatalog() {
     try { savedValue = localStorage.getItem("rdt_voice_desktop_model"); } catch { /* optional preference */ }
     modelSelect.value = catalog.some((item) => item.id === savedValue) ? savedValue! : (catalog.some((item) => item.id === previousValue) ? previousValue : catalog[0].id);
     const label = modelSelect.closest(".local-model-label")?.querySelector("label");
-    if (label) label.textContent = isNativeGgmlCatalog() ? "Choose a model — GGML (CPU baseline):" : "Choose a model — Apple MLX:";
+    if (label) label.textContent = isNativeGgmlCatalog() ? "Choose a model — GGML (CPU baseline):" : translateKey("msg.choose_a_model_apple_mlx.248ca57c", {}, getActiveLocale());
     modelIdDetail.textContent = modelSelect.value;
     modelSelectCurrentDetail.textContent = `${modelMenuInfo(modelSelect.options[modelSelect.selectedIndex]).size}${modelMenuInfo(modelSelect.options[modelSelect.selectedIndex]).recommended ? " · Recommended" : ""}`;
     renderModelSelectMenu();
@@ -338,7 +383,7 @@ function syncModelSelectPresentation() {
     modelSelectCurrentBadge.hidden = selected.dataset.cacheState !== "downloaded";
   }
   modelSelectTrigger.disabled = modelSelect.disabled;
-  modelSelectTrigger.title = modelSelect.title || "Choose a transcription model.";
+  modelSelectTrigger.title = modelSelect.title || translateKey("msg.choose_a_transcription_model.569c22c8", {}, getActiveLocale());
   for (const item of Array.from(modelSelectMenu.querySelectorAll<HTMLButtonElement>(".model-select-option"))) {
     item.disabled = modelSelect.disabled;
     const selected = item.dataset.modelValue === modelSelect.value;
@@ -348,17 +393,19 @@ function syncModelSelectPresentation() {
 }
 function syncModelSwitchControl() {
   const needsSwitch = backend.running && !!backend.model && modelSelect.value !== backend.model;
-  if (serverOperation === "starting") startButtonLabel.textContent = "Starting…";
-  else if (serverOperation === "stopping") startButtonLabel.textContent = "Stopping…";
-  else startButtonLabel.textContent = backend.running ? (needsSwitch ? "Switch Model" : "Stop Server") : "Start Server";
+  if (serverOperation === "starting") startButtonLabel.textContent = translateKey("msg.starting.bbe5fc3b", {}, getActiveLocale());
+  else if (serverOperation === "stopping") startButtonLabel.textContent = translateKey("msg.stopping.bbe85741", {}, getActiveLocale());
+  else startButtonLabel.textContent = backend.running ? (needsSwitch ? translateKey("msg.switch_model.7aa32f4a", {}, getActiveLocale()) : translateKey("msg.stop_server.cb7c1e8d", {}, getActiveLocale())) : translateKey("msg.start_server.f08a9813", {}, getActiveLocale());
   startButton.classList.toggle("is-model-switch", needsSwitch && serverOperation === null);
   startButton.setAttribute("aria-label", backend.running
-    ? (needsSwitch ? "Switch to the selected transcription model" : "Stop the local transcription server")
-    : "Start the local transcription server");
+    ? (needsSwitch
+      ? translateKey("msg.switch_to_the_selected_transcription_model.29347c97", {}, getActiveLocale())
+      : translateKey("msg.stop_the_local_transcription_server.4bb79a10", {}, getActiveLocale()))
+    : translateKey("msg.start_the_local_transcription_server.746c013b", {}, getActiveLocale()));
   if (needsSwitch) {
     startButton.title = (modelDownloadStatus.active || modelStorageBusy)
-      ? "Finish model downloads and storage changes before switching models."
-      : "Stop the active server and start the selected model only after the stop is verified.";
+      ? translateKey("msg.finish_model_downloads_and_storage_changes_before_switching_mode.addffeca", {}, getActiveLocale())
+      : translateKey("msg.stop_the_active_server_and_start_the_selected_model_only_after_t.5b77c9a4", {}, getActiveLocale());
   } else {
     startButton.removeAttribute("title");
   }
@@ -390,7 +437,7 @@ function renderModelCacheSelection() {
     const copy = document.createElement("span");
     copy.className = "model-cache-selection-copy";
     const name = document.createElement("strong");
-    name.textContent = `${info.name} · ${info.size}`;
+    name.textContent = translateKey("msg.label_message.e6a1feb4", { label: info.name, message: info.size }, getActiveLocale());
     const modelId = document.createElement("code");
     modelId.textContent = option.value;
     copy.append(name, modelId);
@@ -400,7 +447,7 @@ function renderModelCacheSelection() {
   if (unknown) {
     const note = document.createElement("p");
     note.className = "muted field-help";
-    note.textContent = "Some cache locations could not be verified; unknown entries are not offered for deletion.";
+    note.textContent = translateKey("msg.some_cache_locations_could_not_be_verified_unknown_entries_are_n.7e20e7be", {}, getActiveLocale());
     modelCacheSelectionList.appendChild(note);
   }
   syncModelCacheSelectionLocks();
@@ -423,7 +470,7 @@ function syncModelCacheSelectionLocks() {
     if (active && copy && !note) {
       note = document.createElement("small");
       note.className = "model-cache-active-note";
-      note.textContent = "In use — protected while the server runs";
+      note.textContent = translateKey("msg.in_use_protected_while_the_server_runs.f57b7714", {}, getActiveLocale());
       copy.appendChild(note);
     } else if (!active && note) {
       note.remove();
@@ -458,7 +505,7 @@ function renderModelSelectMenu() {
     if (info.recommended) {
       const recommend = document.createElement("span");
       recommend.className = "model-select-recommend";
-      recommend.textContent = "Recommended";
+      recommend.textContent = translateKey("msg.recommended.d70604e8", {}, getActiveLocale());
       title.appendChild(recommend);
     }
     const description = document.createElement("small");
@@ -474,7 +521,7 @@ function renderModelSelectMenu() {
     if (option.dataset.cacheState === "downloaded") {
       const downloaded = document.createElement("span");
       downloaded.className = "model-select-downloaded";
-      downloaded.textContent = "Downloaded";
+      downloaded.textContent = translateKey("msg.downloaded.f0b0738f", {}, getActiveLocale());
       meta.appendChild(downloaded);
     }
     item.append(copy, meta);
@@ -522,7 +569,7 @@ async function refreshModelCacheBadges() {
     const option = options.find((candidate) => candidate.value === result.value);
     const baseLabel = modelOptionBaseLabels.get(result.value) || result.value;
     if (!option) continue;
-    option.textContent = result.cached === true ? `${baseLabel} · Downloaded` : baseLabel;
+    option.textContent = result.cached === true ? translateKey("msg.baselabel_downloaded.bf85439f", { baseLabel: baseLabel }, getActiveLocale()) : baseLabel;
     if (result.cached === true) option.dataset.cacheState = "downloaded";
     else if (result.cached === false) option.dataset.cacheState = "not-downloaded";
     else option.dataset.cacheState = "unknown";
@@ -656,7 +703,7 @@ preferredPortInput.addEventListener("change", () => {
     displayPort.textContent = String(backend.port || port);
   } else {
     preferredPortInput.value = "8888";
-    showNotice("Choose a port from 1024 through 65535.", "warning");
+    showNotice(translateKey("msg.choose_a_port_from_1024_through_65535.807c4a34", {}, getActiveLocale()), "warning");
   }
 });
 
@@ -664,11 +711,11 @@ copyLogButton.addEventListener("click", async () => {
   copyLogButton.disabled = true;
   try {
     const text = await invoke<string>("get_recent_backend_log");
-    if (!text.trim()) { showNotice("The backend log is empty so far.", "warning"); return; }
+    if (!text.trim()) { showNotice(translateKey("msg.the_backend_log_is_empty_so_far.9915274c", {}, getActiveLocale()), "warning"); return; }
     await navigator.clipboard.writeText(text);
     showButtonFeedback(copyLogButton);
   } catch (error) {
-    showNotice(`Could not copy the backend log: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_copy_the_backend_log_error.78131054", { error: String(error) }, getActiveLocale()), "error");
   } finally { copyLogButton.disabled = false; }
 });
 
@@ -739,7 +786,7 @@ function formatRemoteAccessDiagnostic(value: RemoteAccessDiagnostic): { summary:
   return { summary, report };
 }
 async function loadDiagnostics(copyReport = false, source: "developer" | "remote" = "developer") {
-  if (!copyReport) showNotice("Running read-only diagnostics…", "info");
+  if (!copyReport) showNotice(translateKey("msg.running_read_only_diagnostics.03caa55d", {}, getActiveLocale()), "info");
   const diagnosticButtons = [runDiagnosticsButton, copyDiagnosticsButton, remoteRunDiagnosticsButton, remoteCopyDiagnosticsButton];
   const sourceCopyButton = source === "remote" ? remoteCopyDiagnosticsButton : copyDiagnosticsButton;
   diagnosticButtons.forEach((button) => { button.disabled = true; });
@@ -780,12 +827,12 @@ async function loadDiagnostics(copyReport = false, source: "developer" | "remote
       ].join("\n");
       await navigator.clipboard.writeText(bundle);
       showButtonFeedback(sourceCopyButton, "Report copied");
-      showNotice("Troubleshooting report copied. Review it for private information before sharing.", "good");
+      showNotice(translateKey("msg.troubleshooting_report_copied_review_it_for.5694f2b3", {}, getActiveLocale()), "good");
     } else {
-      showNotice("Diagnostics complete. No server was started or stopped, no Tailscale route was changed, and no audio was sent.", "good");
+      showNotice(translateKey("msg.diagnostics_complete_no_server_was_started_o.c96707fb", {}, getActiveLocale()), "good");
     }
   } catch (error) {
-    showNotice(`Diagnostics could not complete: ${String(error).replace(/\bBearer\s+[^\s,;]+/ig, "Bearer [REDACTED]")}`, "error");
+    showNotice(translateKey("msg.diagnostics_could_not_complete_redacted.14a83a85", { error: String(error).replace(/\bBearer\s+[^\s,;]+/ig, "Bearer [REDACTED]") }, getActiveLocale()), "error");
   } finally {
     diagnosticButtons.forEach((button) => { button.disabled = false; });
   }
@@ -798,7 +845,7 @@ copyActivityButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(sanitizedActivityText());
     showButtonFeedback(copyActivityButton);
-  } catch (error) { showNotice(`Could not copy activity: ${String(error)}`, "error"); }
+  } catch (error) { showNotice(translateKey("msg.could_not_copy_activity_error.9bc99bf3", { error: String(error) }, getActiveLocale()), "error"); }
 });
 
 copyEndpointButton.addEventListener("click", async () => {
@@ -806,16 +853,16 @@ copyEndpointButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(backend.localUrl);
     showButtonFeedback(copyEndpointButton);
-  } catch (error) { showNotice(`Could not copy address: ${String(error)}`, "error"); }
+  } catch (error) { showNotice(translateKey("msg.could_not_copy_address_error.5ef57c80", { error: String(error) }, getActiveLocale()), "error"); }
 });
 copyRemoteUrlButton.addEventListener("click", async () => {
   const url = remoteUrlValue.textContent?.trim() || "";
   if (!url || !/^https:\/\//i.test(url)) return;
   try {
     await navigator.clipboard.writeText(url);
-    showButtonFeedback(copyRemoteUrlButton, "Copied");
-    showNotice("Private HTTPS URL copied. It is only reachable by devices allowed on your private network.", "good");
-  } catch (error) { showNotice(`Could not copy the private HTTPS URL: ${String(error)}`, "error"); }
+    showButtonFeedback(copyRemoteUrlButton, translateKey("msg.copied.8d525e5f", {}, getActiveLocale()));
+    showNotice(translateKey("msg.private_https_url_copied_it_is_only_reachabl.56e52882", {}, getActiveLocale()), "good");
+  } catch (error) { showNotice(translateKey("msg.could_not_copy_the_private_https_url_error.7b31d0ea", { error: String(error) }, getActiveLocale()), "error"); }
 });
 
 async function readServerToken(): Promise<string> {
@@ -827,18 +874,18 @@ toggleTokenButton.addEventListener("click", async () => {
   if (tokenDisplay.type === "text") {
     tokenDisplay.value = backend.running ? "••••••••••••••" : "";
     tokenDisplay.type = "password";
-    toggleTokenButton.textContent = "Show";
-    toggleTokenButton.setAttribute("aria-label", "Reveal the access token");
+    toggleTokenButton.textContent = translateKey("msg.show.0df6f1ca", {}, getActiveLocale());
+    toggleTokenButton.setAttribute("aria-label", translateKey("msg.reveal_the_access_token.c51590dd", {}, getActiveLocale()));
     return;
   }
   toggleTokenButton.disabled = true;
   try {
     tokenDisplay.value = await readServerToken();
     tokenDisplay.type = "text";
-    toggleTokenButton.textContent = "Hide";
-    toggleTokenButton.setAttribute("aria-label", "Hide the access token");
+    toggleTokenButton.textContent = translateKey("msg.hide.ac20a57b", {}, getActiveLocale());
+    toggleTokenButton.setAttribute("aria-label", translateKey("msg.hide_the_access_token.9d4c7fa3", {}, getActiveLocale()));
   } catch (error) {
-    showNotice(`Could not reveal the access token: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_reveal_the_access_token_error.12941737", { error: String(error) }, getActiveLocale()), "error");
   } finally { toggleTokenButton.disabled = false; }
 });
 copyTokenButton.addEventListener("click", async () => {
@@ -846,10 +893,10 @@ copyTokenButton.addEventListener("click", async () => {
   try {
     const token = await readServerToken();
     await navigator.clipboard.writeText(token);
-    showButtonFeedback(copyTokenButton, "Copied");
-    showNotice("Access token copied. Paste it into RDT Voice Settings only if you are connecting manually.", "good");
+    showButtonFeedback(copyTokenButton, translateKey("msg.copied.8d525e5f", {}, getActiveLocale()));
+    showNotice(translateKey("msg.access_token_copied_paste_it_into_rdt_voice.3df18578", {}, getActiveLocale()), "good");
   } catch (error) {
-    showNotice(`Could not copy the access token: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_copy_the_access_token_error.9674c325", { error: String(error) }, getActiveLocale()), "error");
   } finally { copyTokenButton.disabled = false; }
 });
 
@@ -859,7 +906,7 @@ openLogButton.addEventListener("click", async () => {
     await invoke("open_backend_log");
     showButtonFeedback(openLogButton, "Opened");
   } catch (error) {
-    showNotice(`Couldn't open the backend log: ${String(error)}`, "error");
+    showNotice(translateKey("msg.couldn_t_open_the_backend_log_error.52d916e5", { error: String(error) }, getActiveLocale()), "error");
   } finally {
     openLogButton.disabled = false;
   }
@@ -903,7 +950,7 @@ async function loadAvailableBrowsers() {
     }
   } catch {
     // Keep the static System Default Browser option if native discovery is unavailable.
-    browserSelect.title = "Browser discovery is unavailable; the system default remains selectable.";
+    browserSelect.title = translateKey("msg.browser_discovery_is_unavailable_the_system.ca8d09f1", {}, getActiveLocale());
   }
 }
 void loadAvailableBrowsers();
@@ -981,7 +1028,7 @@ void listen<string>("rdt-backend-state-changed", (event) => {
     await refreshBackendStatus();
     await refreshOrphanedBackendStatus();
     if (event.payload === "stopped" && !backend.running) {
-      showNotice("Server stopped from the menu bar.", "good");
+      showNotice(translateKey("msg.server_stopped_from_the_menu_bar.058995fe", {}, getActiveLocale()), "good");
     }
     renderBackendStatus();
   })();
@@ -1010,7 +1057,7 @@ void listen<string>("rdt-tray-model-needs-download", (event) => {
 // Quiet success feedback for routine actions: change only the clicked button briefly.
 // Serious operations/errors continue to use the notice area and persistent status panel.
 const buttonFeedbackTimers = new WeakMap<HTMLButtonElement, number>();
-function showButtonFeedback(button: HTMLButtonElement, label = "Copied") {
+function showButtonFeedback(button: HTMLButtonElement, label = translateKey("msg.copied.8d525e5f", {}, getActiveLocale())) {
   const oldTimer = buttonFeedbackTimers.get(button);
   if (oldTimer !== undefined) window.clearTimeout(oldTimer);
   const originalHtml = button.dataset.feedbackOriginalHtml ?? button.innerHTML;
@@ -1110,7 +1157,7 @@ void listen<ModelDownloadStatus>("rdt-model-download-status", (event) => {
 void listen<string>("rdt-connect-stop-failed", (event) => {
   developerStopError.textContent = event.payload;
   developerStopError.classList.remove("hidden");
-  showNotice("RDT Connect stayed open because the server could not be stopped. Enable Developer Options for details.", "error");
+  showNotice(translateKey("msg.rdt_connect_stayed_open_because_the_server_c.9626dcfc", {}, getActiveLocale()), "error");
   void refreshBackendStatus();
   void refreshOrphanedBackendStatus(true);
 });
@@ -1128,7 +1175,7 @@ function setBusy(value: boolean) {
   busy = value;
   // A single primary control starts or stops the one managed local server.
   startButton.disabled = !startupReady || value || serverOperation !== null || (!backend.running && conflictingBackendPresent) || (!backend.running && modelDownloadStatus.active) || (backend.running && !!backend.model && modelSelect.value !== backend.model && (modelDownloadStatus.active || modelStorageBusy));
-  startButtonLabel.textContent = serverOperation === "starting" ? "Starting…" : serverOperation === "stopping" ? "Stopping…" : backend.running ? (backend.model && modelSelect.value !== backend.model ? "Switch Model" : "Stop Server") : "Start Server";
+  startButtonLabel.textContent = serverOperation === "starting" ? "Starting…" : serverOperation === "stopping" ? translateKey("msg.stopping.bbe85741", {}, getActiveLocale()) : backend.running ? (backend.model && modelSelect.value !== backend.model ? "Switch Model" : "Stop Server") : "Start Server";
   startButton.classList.toggle("is-starting", serverOperation === "starting");
   startButton.classList.toggle("is-stopping", serverOperation === "stopping");
   startButton.classList.toggle("server-running", backend.running);
@@ -1138,7 +1185,7 @@ function setBusy(value: boolean) {
     : "Choose a port from 1024–65535 for the next server.";
   portHelp.textContent = backend.running
     ? "Stop the server before changing this. Other apps are never stopped automatically."
-    : "Takes effect the next time the server starts. If busy, choose another; other apps are left running.";
+    : translateKey("msg.takes_effect_the_next_time_the_server_starts.10233561", {}, getActiveLocale());
   copyEndpointButton.disabled = value || !backend.running;
   copyRemoteUrlButton.disabled = value || !tailscale.ready || !String(tailscale.public_url || "").startsWith("https://");
   toggleTokenButton.disabled = value;
@@ -1154,7 +1201,7 @@ function setBusy(value: boolean) {
   syncModelSelectPresentation();
   modelHelp.textContent = isNativeGgmlCatalog()
     ? "GGML model files are shared across compatible Windows/Linux CPU architectures. GPU acceleration is not implied; the qualified baseline is CPU inference."
-    : "Available models use the inference backend supported by this device.";
+    : translateKey("msg.rdt_connect_uses_the_fastest_transcription_h.32d1234d", {}, getActiveLocale());
   renderBrowserChoiceRow();
   renderModelDownloadUI();
   preferredPortTooltip.setAttribute("data-tooltip", backend.running
@@ -1188,7 +1235,7 @@ function clearRecoveredStartupErrorIfRunning(): void {
   if (!backend.running || notice.dataset.state !== "error") return;
   const detail = document.getElementById("developer-latest-detail")?.textContent || "";
   const isStartupFailure = /backend exited during startup|backend did not become healthy within|could not launch the packaged whisper backend|could not monitor the backend process|could not check the selected model before starting/i.test(detail);
-  if (isStartupFailure) showNotice("Server started successfully.", "good");
+  if (isStartupFailure) showNotice(translateKey("msg.server_started_successfully.2c4a56fc", {}, getActiveLocale()), "good");
 }
 
 async function refreshBackendStatus(silent = true) {
@@ -1204,7 +1251,7 @@ async function refreshBackendStatus(silent = true) {
     if (backend.running && identityChanged) void refreshConnectionStatus();
     if (backend.running) clearRecoveredStartupErrorIfRunning();
     else renderConnectionStatus();
-    if (backend.running && !silent && changed) showNotice("The local Whisper backend is ready.", "good");
+    if (backend.running && !silent && changed) showNotice(translateKey("msg.the_local_whisper_backend_is_ready.da81efea", {}, getActiveLocale()), "good");
   } catch (e) {
     if (!silent) showNotice(String(e), "error");
   }
@@ -1212,16 +1259,16 @@ async function refreshBackendStatus(silent = true) {
 function renderConnectionStatus() {
   openButton.disabled = busy || !browserPreflightPassed();
   if (!backend.running) {
-    connectionStatus.textContent = "No server is running. Start it on the Local Server page to check the connection.";
+    connectionStatus.textContent = translateKey("msg.no_server_is_running_start_it_on_the_local_s.e3d5652a", {}, getActiveLocale());
     connectionStatus.className = "connection-status disconnected";
-    connectionSummary.textContent = "Start the server to check its connection.";
+    connectionSummary.textContent = translateKey("msg.start_the_server_to_check_its_connection.6691825b", {}, getActiveLocale());
     testConnectionButton.disabled = true;
     return;
   }
   if (!lastConnectionCheck || lastConnectionCheck.port !== backend.port || !lastConnectionCheck.running) {
-    connectionStatus.textContent = `Server process is active at ${backend.localUrl || "the local endpoint"}, but connection/authentication has not been checked in this session.`;
+    connectionStatus.textContent = `Server process is active at ${backend.localUrl || translateKey("msg.the_local_endpoint.2e5694ca", {}, getActiveLocale())}, but connection/authentication has not been checked in this session.`;
     connectionStatus.className = "connection-status pending";
-    connectionSummary.textContent = "Open RDT Voice is disabled until the server and authentication check passes.";
+    connectionSummary.textContent = translateKey("msg.open_rdt_voice_is_disabled_until_the_server.ed8f7664", {}, getActiveLocale());
   } else {
     const serverCheckStatus = lastConnectionCheck.healthOk ? "PASS" : "FAIL";
     const accessCheckStatus = lastConnectionCheck.authOk === true
@@ -1229,7 +1276,7 @@ function renderConnectionStatus() {
       : lastConnectionCheck.authOk === false
         ? `FAIL${lastConnectionCheck.authHttpStatus ? ` (HTTP ${lastConnectionCheck.authHttpStatus})` : ""}`
         : "NOT CHECKED";
-    connectionStatus.textContent = `Server check: ${serverCheckStatus} · Access check: ${accessCheckStatus} · ${lastConnectionCheck.message}`;
+    connectionStatus.textContent = translateKey("msg.fail_checked_message.c15aeec8", { serverCheckStatus: serverCheckStatus, accessCheckStatus: accessCheckStatus, message: lastConnectionCheck.message }, getActiveLocale());
     connectionStatus.className = `connection-status ${lastConnectionCheck.healthOk && lastConnectionCheck.authOk === true ? "connected" : "disconnected"}`;
     connectionSummary.textContent = browserPreflightPassed()
       ? "Server and authentication verified. RDT Voice is ready to open."
@@ -1243,17 +1290,17 @@ async function refreshConnectionStatus() {
   lastConnectionCheck = null;
   openButton.disabled = true;
   testConnectionButton.disabled = true;
-  connectionStatus.textContent = "Checking local /health and RDT Connect's authenticated API token. No audio or transcript is sent.";
+  connectionStatus.textContent = translateKey("msg.checking_local_health_and_rdt_connect_s_auth.f8e14e85", {}, getActiveLocale());
   connectionStatus.className = "connection-status pending";
-  connectionSummary.textContent = "Checking connection…";
+  connectionSummary.textContent = translateKey("msg.checking_connection.de9fc337", {}, getActiveLocale());
   try {
     lastConnectionCheck = await invoke<BackendConnectionCheck>("get_backend_connection_status");
     renderConnectionStatus();
   } catch (error) {
     lastConnectionCheck = null;
-    connectionStatus.textContent = `CONNECTION CHECK FAILED · ${String(error)}. This result remains visible until another connection check; copying logs will not overwrite it.`;
+    connectionStatus.textContent = translateKey("msg.connection_check_failed_error_this_result_re.43825799", { error: String(error) }, getActiveLocale());
     connectionStatus.className = "connection-status disconnected";
-    connectionSummary.textContent = "Connection needs attention. Enable Developer Options for details.";
+    connectionSummary.textContent = translateKey("msg.connection_needs_attention_enable_developer.1dd15333", {}, getActiveLocale());
   } finally {
      testConnectionButton.disabled = busy || !backend.running; openButton.disabled = busy || !browserPreflightPassed(); }
 }
@@ -1267,8 +1314,8 @@ let selectedTlsKey = "";
 let selectedTlsCa = "";
 
 function setTlsPath(el: HTMLElement, path: string | null | undefined) {
-  el.textContent = path || "Not selected";
-  el.setAttribute("title", path || "Not selected");
+  el.textContent = path || translateKey("msg.not_selected.df12aeba", {}, getActiveLocale());
+  el.setAttribute("title", path || translateKey("msg.not_selected.df12aeba", {}, getActiveLocale()));
 }
 
 function renderLocalHttpsStatus(status: LocalHttpsStatus) {
@@ -1281,14 +1328,14 @@ function renderLocalHttpsStatus(status: LocalHttpsStatus) {
 
   localHttpsQuickPrompt.classList.toggle("hidden", secureReady);
   localHttpsAdvancedStatusEl.textContent = secureReady
-    ? "✓ Trusted HTTPS is ready for this device."
+    ? translateKey("msg.trusted_https_is_ready_on_this_mac.a56d8792", {}, getActiveLocale())
     : "";
   localHttpsAdvancedStatusEl.className = secureReady
     ? "local-https-advanced-status tls-good"
     : "local-https-advanced-status hidden";
 
   const label = status.mode.toUpperCase();
-  localHttpsStatusEl.textContent = `${label} · ${status.message}`;
+  localHttpsStatusEl.textContent = translateKey("msg.label_message.e6a1feb4", { label: label, message: status.message }, getActiveLocale());
   localHttpsStatusEl.className = `tls-status ${
     secureReady ? "tls-good" : status.mode === "http" ? "tls-warning" : "tls-needs-setup"
   }`;
@@ -1299,7 +1346,7 @@ function renderLocalHttpsStatus(status: LocalHttpsStatus) {
     localHttpsQuickStatus.className = "local-https-quick-status hidden";
   } else {
     localHttpsQuickStatus.textContent =
-      `Trusted HTTPS setup is required: ${status.message || "The certificate and trust status are not ready."}`;
+      translateKey("msg.trusted_https_setup_is_required_arg1.dfacc79f", { arg1: status.message || "The certificate and trust status are not ready." }, getActiveLocale());
     localHttpsQuickStatus.dataset.userFeedback = "status-warning";
     localHttpsQuickStatus.className = "local-https-quick-status tls-warning";
   }
@@ -1332,7 +1379,7 @@ async function refreshLocalHttpsStatus(
 
   const requestId = ++localHttpsStatusRequestId;
   if (showChecking && !currentLocalHttps) {
-    localHttpsStatusEl.textContent = "Checking local HTTPS configuration…";
+    localHttpsStatusEl.textContent = translateKey("msg.checking_local_https_configuration.49441538", {}, getActiveLocale());
     localHttpsStatusEl.className = "tls-status tls-needs-setup";
   }
 
@@ -1354,7 +1401,7 @@ async function refreshLocalHttpsStatus(
 
     // A failed lookup means unknown, not "setup required" or "trusted".
     currentLocalHttps = null;
-    localHttpsStatusEl.textContent = `Could not verify local HTTPS status: ${String(error)}`;
+    localHttpsStatusEl.textContent = translateKey("msg.could_not_verify_local_https_status_error.a81f2529", { error: String(error) }, getActiveLocale());
     localHttpsStatusEl.className = "tls-status tls-error";
     localHttpsAdvancedStatusEl.textContent = "";
     localHttpsAdvancedStatusEl.className = "local-https-advanced-status hidden";
@@ -1368,7 +1415,7 @@ async function refreshLocalHttpsStatus(
     scheduleVisualSetupGuideUpdate();
 
 
-    if (showErrors) showNotice(`Could not read HTTPS settings: ${String(error)}`, "error");
+    if (showErrors) showNotice(translateKey("msg.could_not_read_https_settings_error.8e18eb97", { error: String(error) }, getActiveLocale()), "error");
     return null;
   }
 }
@@ -1376,7 +1423,7 @@ async function refreshLocalHttpsStatus(
 let storageLocationDraft: string[] = [];
 let savedStorageLocations: string[] = [];
 let modelStorageStatus: ModelStorageStatus | null = null;
-let modelDownloadStatus: ModelDownloadStatus = { active: false, model: null, destinationRoot: null, phase: "idle", message: "Choose a Whisper model to check its local availability.", progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
+let modelDownloadStatus: ModelDownloadStatus = { active: false, model: null, destinationRoot: null, phase: "idle", message: translateKey("msg.choose_a_whisper_model_to_check_its_local_av.fff38d44", {}, getActiveLocale()), progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
 let modelStorageBusy = false;
 
 const VISUAL_GUIDE_ENABLED_KEY = "rdt_connect_visual_setup_guide_enabled";
@@ -1607,8 +1654,8 @@ function updateSettingsLockHelp() {
       : "Delete only the supported RDT Connect MLX Whisper cache entries; other repositories are not touched.";
   transportHttpsInput.disabled = locked;
   transportHttpInput.disabled = locked;
-  transportHttpsInput.title = stopServerSettingTitle("Use HTTPS with a valid, trusted certificate.");
-  transportHttpInput.title = stopServerSettingTitle("HTTP is unencrypted and intended for local development only.");
+  transportHttpsInput.title = stopServerSettingTitle(translateKey("msg.use_https_with_a_valid_trusted_certificate.d876b6f6", {}, getActiveLocale()));
+  transportHttpInput.title = stopServerSettingTitle(translateKey("msg.http_is_unencrypted_and_intended_for_local_d.38719d9d", {}, getActiveLocale()));
 }
 
 function modelStorageDraftIsDirty(): boolean {
@@ -1625,40 +1672,40 @@ function renderModelStorageSettings() {
     const availability = document.createElement("small"); availability.className = "model-storage-availability";
     const savedIndex = modelStorageStatus?.locations.indexOf(path) ?? -1;
     if (savedIndex < 0 && modelStorageDraftIsDirty()) {
-      availability.textContent = "Pending save"; availability.classList.add("unsaved");
+      availability.textContent = translateKey("msg.pending_save.3bdd6c5f", {}, getActiveLocale()); availability.classList.add("unsaved");
     } else if (savedIndex >= 0 && modelStorageStatus?.locationsAvailability[savedIndex] === "available") {
-      availability.textContent = modelStorageStatus?.modelCached && modelStorageStatus.activeRoot === path ? "Available · selected model is cached here" : "Available";
+      availability.textContent = modelStorageStatus?.modelCached && modelStorageStatus.activeRoot === path ? translateKey("msg.available_selected_model_is_cached_here.a1ce60d7", {}, getActiveLocale()) : translateKey("msg.available.e6744473", {}, getActiveLocale());
     } else if (savedIndex >= 0 && modelStorageStatus?.locationsAvailability[savedIndex] === "not-checked") {
-      availability.textContent = "Not checked · model is already available earlier in the list";
+      availability.textContent = translateKey("msg.not_checked_model_is_already_available_earli.4fb9d856", {}, getActiveLocale());
       availability.classList.add("unsaved");
     } else {
-      availability.textContent = "Unavailable · reconnect the drive or remove this location";
+      availability.textContent = translateKey("msg.unavailable_reconnect_the_drive_or_remove_th.0f55c774", {}, getActiveLocale());
       availability.classList.add("unavailable");
     }
     pathWrap.append(pathText, availability);
     const actions = document.createElement("div"); actions.className = "model-storage-row-actions";
-    const up = document.createElement("button"); up.className = "mini-button"; up.type = "button"; up.textContent = "↑"; up.dataset.baseTitle = "Move this location earlier in priority."; up.title = stopServerSettingTitle(up.dataset.baseTitle); up.setAttribute("aria-label", `Move location ${index + 1} earlier`); up.disabled = index === 0 || backend.running || modelStorageBusy;
+    const up = document.createElement("button"); up.className = "mini-button"; up.type = "button"; up.textContent = "↑"; up.dataset.baseTitle = translateKey("msg.move_this_location_earlier_in_priority.aea044f6", {}, getActiveLocale()); up.title = stopServerSettingTitle(up.dataset.baseTitle); up.setAttribute("aria-label", translateKey("msg.move_location_index_earlier.63908921", { index: index + 1 }, getActiveLocale())); up.disabled = index === 0 || backend.running || modelStorageBusy;
     up.addEventListener("click", () => { [storageLocationDraft[index - 1], storageLocationDraft[index]] = [storageLocationDraft[index], storageLocationDraft[index - 1]]; renderModelStorageSettings(); });
-    const down = document.createElement("button"); down.className = "mini-button"; down.type = "button"; down.textContent = "↓"; down.dataset.baseTitle = "Move this location later in priority."; down.title = stopServerSettingTitle(down.dataset.baseTitle); down.setAttribute("aria-label", `Move location ${index + 1} later`); down.disabled = index === storageLocationDraft.length - 1 || backend.running || modelStorageBusy;
+    const down = document.createElement("button"); down.className = "mini-button"; down.type = "button"; down.textContent = "↓"; down.dataset.baseTitle = translateKey("msg.move_this_location_later_in_priority.7555aea5", {}, getActiveLocale()); down.title = stopServerSettingTitle(down.dataset.baseTitle); down.setAttribute("aria-label", translateKey("msg.move_location_index_later.a9e022f9", { index: index + 1 }, getActiveLocale())); down.disabled = index === storageLocationDraft.length - 1 || backend.running || modelStorageBusy;
     down.addEventListener("click", () => { [storageLocationDraft[index], storageLocationDraft[index + 1]] = [storageLocationDraft[index + 1], storageLocationDraft[index]]; renderModelStorageSettings(); });
-    const remove = document.createElement("button"); remove.className = "mini-button deny"; remove.type = "button"; remove.textContent = "Remove"; remove.dataset.baseTitle = "Remove this model-storage folder from the list."; remove.title = stopServerSettingTitle(remove.dataset.baseTitle); remove.disabled = storageLocationDraft.length <= 1 || backend.running || modelStorageBusy;
+    const remove = document.createElement("button"); remove.className = "mini-button deny"; remove.type = "button"; remove.textContent = translateKey("msg.remove.c3812fc4", {}, getActiveLocale()); remove.dataset.baseTitle = translateKey("msg.remove_this_model_storage_folder_from_the_li.c967032d", {}, getActiveLocale()); remove.title = stopServerSettingTitle(remove.dataset.baseTitle); remove.disabled = storageLocationDraft.length <= 1 || backend.running || modelStorageBusy;
     remove.addEventListener("click", () => { storageLocationDraft.splice(index, 1); renderModelStorageSettings(); });
     if (storageLocationDraft.length <= 1) { up.hidden = true; down.hidden = true; }
     actions.append(up, down, remove); row.append(priority, pathWrap, actions); modelStorageLocationsEl.appendChild(row);
   });
-  modelStorageAddButton.title = "Add a model-storage folder.";
-  modelStorageSaveButton.title = stopServerSettingTitle("Save the storage-folder priority for future downloads and model lookup.");
+  modelStorageAddButton.title = translateKey("msg.add_a_model_storage_folder.d01586c6", {}, getActiveLocale());
+  modelStorageSaveButton.title = stopServerSettingTitle(translateKey("msg.save_the_storage_folder_priority_for_future.31018b39", {}, getActiveLocale()));
   modelStorageAddButton.disabled = modelStorageBusy || storageLocationDraft.length >= 20;
   modelStorageSaveButton.disabled = backend.running || modelStorageBusy || !modelStorageDraftIsDirty() || storageLocationDraft.length < 1 || storageLocationDraft.length > 20;
-  modelStorageSaveButton.textContent = modelStorageBusy ? "Saving…" : "Save storage priority";
+  modelStorageSaveButton.textContent = modelStorageBusy ? translateKey("msg.saving.23e39291", {}, getActiveLocale()) : translateKey("msg.save_storage_priority.c84a39d5", {}, getActiveLocale());
 }
 
 function renderModelStorageSummary(status: ModelStorageStatus) {
   if (status.modelCached) {
-    modelStorageSummary.textContent = `Verified local model copy found. RDT Connect will use ${status.activeRoot} for ${status.model}.`;
+    modelStorageSummary.textContent = translateKey("msg.verified_local_model_copy_found_rdt_connect.af333d61", { activeRoot: status.activeRoot, model: status.model }, getActiveLocale());
     modelStorageSummary.className = "tls-status tls-good";
   } else {
-    modelStorageSummary.textContent = `No verified local snapshot found for ${status.model}. A new download will be stored in ${status.activeRoot}.`;
+    modelStorageSummary.textContent = translateKey("msg.no_verified_local_snapshot_found_for_model_a.ecf84dd0", { model: status.model, activeRoot: status.activeRoot }, getActiveLocale());
     modelStorageSummary.className = "tls-status tls-warning";
   }
   if (backend.running) modelStorageSummary.textContent += " Stop the server before editing storage locations.";
@@ -1678,9 +1725,9 @@ async function refreshModelStorageStatus(showErrors = false) {
     scheduleVisualSetupGuideUpdate();
     renderModelCleanupButtons();
   } catch (error) {
-    modelStorageSummary.textContent = `Could not read model-storage settings: ${String(error)}`;
+    modelStorageSummary.textContent = translateKey("msg.could_not_read_model_storage_settings_error.c837f48b", { error: String(error) }, getActiveLocale());
     modelStorageSummary.className = "tls-status tls-error";
-    if (showErrors) showNotice(`Could not read model-storage settings: ${String(error)}`, "error");
+    if (showErrors) showNotice(translateKey("msg.could_not_read_model_storage_settings_error.c837f48b", { error: String(error) }, getActiveLocale()), "error");
     renderModelStorageSettings();
     renderModelDownloadUI();
     scheduleVisualSetupGuideUpdate();
@@ -1821,62 +1868,62 @@ function renderModelDownloadUI() {
   modelDownloadPanel.dataset.downloadPhase = phase;
 
   if (cached && !readyFeedback) {
-    modelDownloadTitle.textContent = "Model ready to use";
+    modelDownloadTitle.textContent = translateKey("msg.model_ready_to_use.6839ae20", {}, getActiveLocale());
     modelDownloadDetail.textContent = developerDetails
-      ? `${friendlyModelName(selectedModel)} is available in ${destination}. ${settingsHint}`
-      : `${friendlyModelName(selectedModel)} · verified and available.`;
-    modelDownloadStatusEl.textContent = "No download needed. The server can use this local copy.";
+      ? translateKey("msg.selectedmodel_is_available_in_destination_se.71540306", { selectedModel: friendlyModelName(selectedModel), destination: destination, settingsHint: settingsHint }, getActiveLocale())
+      : translateKey("msg.selectedmodel_verified_and_available.c595e479", { selectedModel: friendlyModelName(selectedModel) }, getActiveLocale());
+    modelDownloadStatusEl.textContent = translateKey("msg.no_download_needed_the_server_can_use_this_l.ebbde0dc", {}, getActiveLocale());
   } else if (failed) {
-    modelDownloadTitle.textContent = active ? "Download needs attention" : "Download needs attention";
+    modelDownloadTitle.textContent = active ? translateKey("msg.download_needs_attention.7b00d3be", {}, getActiveLocale()) : translateKey("msg.download_needs_attention.7b00d3be", {}, getActiveLocale());
     modelDownloadDetail.textContent = developerDetails
-      ? `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · destination: ${destination}. ${settingsHint}`
-      : `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · retry available.`;
-    modelDownloadStatusEl.textContent = `${download?.message || "The download did not finish."}${active ? " The downloader may still be stopping; retry Cancel if needed." : " Completed files remain available for retry."}`;
+      ? translateKey("msg.selectedmodel_selectedmodel2_destination_des.56fb6dd4", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel), destination: destination, settingsHint: settingsHint }, getActiveLocale())
+      : translateKey("msg.selectedmodel_selectedmodel2_retry_available.ea36cc20", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel) }, getActiveLocale());
+    modelDownloadStatusEl.textContent = `${download?.message || translateKey("msg.the_download_did_not_finish.2450f84a", {}, getActiveLocale())}${active ? " The downloader may still be stopping; retry Cancel if needed." : " Completed files remain available for retry."}`;
   } else if (cancelled) {
-    modelDownloadTitle.textContent = "Download canceled";
+    modelDownloadTitle.textContent = translateKey("msg.download_canceled.1f39d555", {}, getActiveLocale());
     modelDownloadDetail.textContent = developerDetails
-      ? `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · destination: ${destination}. ${settingsHint}`
-      : `${friendlyModelName(selectedModel)} · partial files are kept for retry.`;
-    modelDownloadStatusEl.textContent = "Canceled. Completed files remain cached and can be reused on retry.";
+      ? translateKey("msg.selectedmodel_selectedmodel2_destination_des.56fb6dd4", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel), destination: destination, settingsHint: settingsHint }, getActiveLocale())
+      : translateKey("msg.selectedmodel_partial_files_are_kept_for_ret.49c52236", { selectedModel: friendlyModelName(selectedModel) }, getActiveLocale());
+    modelDownloadStatusEl.textContent = translateKey("msg.canceled_completed_files_remain_cached_and_c.cdc8c409", {}, getActiveLocale());
   } else if (active) {
     modelDownloadTitle.textContent = phase === "canceling"
-      ? "Stopping model download…"
-      : phase === "verifying" ? "Verifying model files…"
-      : phase === "checking" ? "Checking model availability…"
+      ? translateKey("msg.stopping_model_download.98830090", {}, getActiveLocale())
+      : phase === "verifying" ? translateKey("msg.verifying_model_files.992d6123", {}, getActiveLocale())
+      : phase === "checking" ? translateKey("msg.checking_model_availability.684cf2cd", {}, getActiveLocale())
       : `Downloading ${friendlyModelName(selectedModel)}`;
     modelDownloadDetail.textContent = developerDetails
-      ? `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · destination: ${destination}. ${settingsHint}`
-      : `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · download in progress.`;
-    modelDownloadStatusEl.textContent = download?.message || "Preparing the download…";
+      ? translateKey("msg.selectedmodel_selectedmodel2_destination_des.56fb6dd4", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel), destination: destination, settingsHint: settingsHint }, getActiveLocale())
+      : translateKey("msg.selectedmodel_selectedmodel2_download_in_pro.c2768505", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel) }, getActiveLocale());
+    modelDownloadStatusEl.textContent = download?.message || translateKey("msg.preparing_the_download.bb238b3c", {}, getActiveLocale());
   } else if (complete && download && cached) {
-    modelDownloadTitle.textContent = "Model ready to use";
+    modelDownloadTitle.textContent = translateKey("msg.model_ready_to_use.6839ae20", {}, getActiveLocale());
     modelDownloadDetail.textContent = developerDetails
-      ? `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · saved to ${destination}. ${settingsHint}`
-      : `${friendlyModelName(selectedModel)} · verified and ready.`;
+      ? translateKey("msg.selectedmodel_selectedmodel2_saved_to_destin.3ee2e3e7", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel), destination: destination, settingsHint: settingsHint }, getActiveLocale())
+      : translateKey("msg.selectedmodel_verified_and_ready.cb9993c0", { selectedModel: friendlyModelName(selectedModel) }, getActiveLocale());
     modelDownloadStatusEl.textContent = download.message;
   } else {
-    modelDownloadTitle.textContent = "Get this model ready";
+    modelDownloadTitle.textContent = translateKey("msg.get_this_model_ready.d07c0483", {}, getActiveLocale());
     modelDownloadDetail.textContent = developerDetails
-      ? `${friendlyModelName(selectedModel)} · ${approximateModelSizeLabel(selectedModel)} · destination: ${destination}. ${settingsHint}`
-      : `${friendlyModelName(selectedModel)} · approximately ${approximateModelSizeLabel(selectedModel)}.`;
+      ? translateKey("msg.selectedmodel_selectedmodel2_destination_des.56fb6dd4", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel), destination: destination, settingsHint: settingsHint }, getActiveLocale())
+      : translateKey("msg.selectedmodel_approximately_selectedmodel2.4c8f1705", { selectedModel: friendlyModelName(selectedModel), selectedModel2: approximateModelSizeLabel(selectedModel) }, getActiveLocale());
     modelDownloadStatusEl.textContent = modelStorageStatus?.model === selectedModel
-      ? (modelStorageStatus.modelCached ? "A verified local copy is ready." : "No verified local copy found. Download it here before starting the server.")
+      ? (modelStorageStatus.modelCached ? translateKey("msg.a_verified_local_copy_is_ready.f88e0e79", {}, getActiveLocale()) : translateKey("msg.no_verified_local_copy_found_download_it_her.e5290ad8", {}, getActiveLocale()))
       : "Checking whether a local copy is available…";
   }
   if (backend.running && !backend.model) {
-    modelDownloadStatusEl.textContent = "The running server's active model could not be verified; downloading is paused for safety.";
+    modelDownloadStatusEl.textContent = translateKey("msg.the_running_server_s_active_model_could_not_be_verified_download.cd60bf94", {}, getActiveLocale());
   } else if (backend.running && backend.model === selectedModel) {
-    modelDownloadStatusEl.textContent = "This model is running; select a different model to download another cache safely.";
+    modelDownloadStatusEl.textContent = translateKey("msg.this_model_is_running_select_a_different_model_to_download_anoth.812491f9", {}, getActiveLocale());
   }
   modelDownloadStatusEl.classList.toggle("error-text", failed);
   modelDownloadButton.hidden = Boolean(cached || active);
   modelDownloadButton.disabled = runningModelCacheProtected || active || modelDownloadStatus.phase === "canceling" || !modelStorageStatus;
-  modelDownloadButton.textContent = failed || cancelled ? "Retry download" : `Download model · ${approximateModelSizeLabel(selectedModel)}`;
+  modelDownloadButton.textContent = failed || cancelled ? translateKey("msg.retry_download.9e90b868", {}, getActiveLocale()) : `Download model · ${approximateModelSizeLabel(selectedModel)}`;
   // Keep Cancel visible during cancellation so the user can see that work is in progress.
   // If cancellation cannot be verified, the button becomes a retry action rather than disappearing.
   modelDownloadCancelButton.classList.toggle("hidden", !active);
   modelDownloadCancelButton.disabled = !active || phase === "canceling";
-  modelDownloadCancelButton.textContent = phase === "canceling" ? "Stopping…" : (failed && active ? "Try cancel again" : "Cancel");
+  modelDownloadCancelButton.textContent = phase === "canceling" ? translateKey("msg.stopping.bbe85741", {}, getActiveLocale()) : (failed && active ? "Try cancel again" : translateKey("msg.cancel.19766ed6", {}, getActiveLocale()));
   const hasProgress = Boolean(download && ((active && ["checking", "canceling", "verifying"].includes(phase)) || (download.totalBytes && download.totalBytes > 0 && ["downloading", "verifying", "failed", "cancelled"].includes(phase))));
   modelDownloadProgressWrap.classList.toggle("hidden", !hasProgress);
   if (hasProgress && download) {
@@ -1887,19 +1934,19 @@ function renderModelDownloadUI() {
     modelDownloadProgressBar.style.width = `${percent}%`;
     modelDownloadProgressTrack.setAttribute("aria-valuenow", String(percent));
     modelDownloadProgressPercent.textContent = `${percent}%`;
-    modelDownloadProgressPhase.textContent = phase === "checking" ? "Checking model size…" : phase === "canceling" ? "Stopping download workers…" : phase === "verifying" ? "Verifying model files…" : verifiedComplete ? "Model ready" : failed ? "Download stopped" : cancelled ? "Download canceled" : "Downloading model files…";
+    modelDownloadProgressPhase.textContent = phase === "checking" ? "Checking model size…" : phase === "canceling" ? "Stopping download workers…" : phase === "verifying" ? translateKey("msg.verifying_model_files.992d6123", {}, getActiveLocale()) : verifiedComplete ? "Model ready" : failed ? "Download stopped" : cancelled ? translateKey("msg.download_canceled.1f39d555", {}, getActiveLocale()) : "Downloading model files…";
     if (phase === "checking") {
-      modelDownloadProgressMeta.textContent = "Checking cached files and the total download size…";
+      modelDownloadProgressMeta.textContent = translateKey("msg.checking_cached_files_and_the_total_download.607927d1", {}, getActiveLocale());
     } else if (phase === "verifying") {
-      modelDownloadProgressMeta.textContent = "Files received. Waiting for the downloader to exit and final status to be confirmed…";
+      modelDownloadProgressMeta.textContent = translateKey("msg.files_received_waiting_for_the_downloader_to.e5ef3efc", {}, getActiveLocale());
     } else if (phase === "canceling") {
-      modelDownloadProgressMeta.textContent = "Stopping the app-owned download process and its helper workers…";
+      modelDownloadProgressMeta.textContent = translateKey("msg.stopping_the_app_owned_download_process_and.6550e5d7", {}, getActiveLocale());
     } else if (download.totalBytes && download.totalBytes > 0) {
       const estimateLead = download.sizeIsEstimate ? "about " : "";
       const fileCount = developerDetails && download.plannedFiles && download.plannedFiles > 0 ? ` · ${download.plannedFiles} files to download` : "";
-      modelDownloadProgressMeta.textContent = `${formatModelBytes(download.downloadedBytes)} of ${estimateLead}${formatModelBytes(download.totalBytes)}${fileCount}`;
+      modelDownloadProgressMeta.textContent = translateKey("msg.downloadedbytes_of_estimatelead_totalbytes_f.66da12f6", { downloadedBytes: formatModelBytes(download.downloadedBytes), estimateLead: estimateLead, totalBytes: formatModelBytes(download.totalBytes), fileCount: fileCount }, getActiveLocale());
     } else {
-      modelDownloadProgressMeta.textContent = "Checking the total download size…";
+      modelDownloadProgressMeta.textContent = translateKey("msg.checking_the_total_download_size.008bc2c8", {}, getActiveLocale());
     }
   }
   renderModelCleanupButtons();
@@ -1921,7 +1968,7 @@ async function refreshModelDownloadStatus() {
     modelDownloadStatus = current;
     renderModelDownloadUI();
   } catch (error) {
-    modelDownloadStatusEl.textContent = `Could not read download status: ${String(error)}`;
+    modelDownloadStatusEl.textContent = translateKey("msg.could_not_read_download_status_error.1ab50fe8", { error: String(error) }, getActiveLocale());
     modelDownloadStatusEl.classList.add("error-text");
   }
 }
@@ -1964,9 +2011,9 @@ modelDownloadButton.addEventListener("click", async () => {
       : "Cannot verify the running server's active model; download is paused for safety.", "warning");
     return;
   }
-  if (modelDownloadStatus.active) { showNotice("A model download is already running.", "warning"); return; }
+  if (modelDownloadStatus.active) { showNotice(translateKey("msg.a_model_download_is_already_running.22223145", {}, getActiveLocale()), "warning"); return; }
   modelDownloadButton.disabled = true;
-  modelDownloadStatus = { active: true, model, destinationRoot: modelStorageStatus?.activeRoot || null, phase: "checking", message: "Checking model availability and total size…", progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
+  modelDownloadStatus = { active: true, model, destinationRoot: modelStorageStatus?.activeRoot || null, phase: "checking", message: translateKey("msg.checking_model_availability_and_total_size.1aed63d9", {}, getActiveLocale()), progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
   renderModelDownloadUI();
   try {
     const status = await invoke<ModelDownloadStatus>("start_model_download", { model });
@@ -1977,12 +2024,12 @@ modelDownloadButton.addEventListener("click", async () => {
       await refreshModelStorageStatus();
       void refreshModelCacheBadges();
     } else {
-      showNotice(`Downloading ${friendlyModelName(model)}. You can cancel safely; completed files will be reusable.`, "info");
+      showNotice(translateKey("msg.downloading_model_you_can_cancel_safely_comp.5dc4fc38", { model: friendlyModelName(model) }, getActiveLocale()), "info");
     }
   } catch (error) {
     acceptModelDownloadStatus({ ...modelDownloadStatus, active: false, phase: "failed", message: String(error) });
     renderModelDownloadUI();
-    showNotice(`Could not download the model: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_download_the_model_error.a226b9d2", { error: String(error) }, getActiveLocale()), "error");
   }
   finally { renderModelDownloadUI(); }
 });
@@ -1994,7 +2041,7 @@ modelDownloadCancelButton.addEventListener("click", async () => {
     acceptModelDownloadStatus(status);
     renderModelDownloadUI();
     if (status.phase === "failed") showNotice(status.message, "error");
-    else showNotice(status.message || "Stopping the model download and its helper workers…", "warning");
+    else showNotice(status.message || translateKey("msg.stopping_the_model_download_and_its_helper_w.8e3a8aaf", {}, getActiveLocale()), "warning");
   } catch (error) {
     // Keep the action retryable instead of leaving the interface permanently in
     // a disabled canceling state when the native command reports a signal error.
@@ -2002,7 +2049,7 @@ modelDownloadCancelButton.addEventListener("click", async () => {
       ...modelDownloadStatus,
       active: true,
       phase: "failed",
-      message: `Cancel could not be confirmed: ${String(error)}. Select Try cancel again to retry; the app has not claimed the download stopped.`,
+      message: translateKey("msg.cancel_could_not_be_confirmed_error_select_t.e38eb04c", { error: String(error) }, getActiveLocale()),
     };
     renderModelDownloadUI();
     showNotice(modelDownloadStatus.message, "error");
@@ -2011,22 +2058,22 @@ modelDownloadCancelButton.addEventListener("click", async () => {
 deleteRdtModelsButton.addEventListener("click", async () => {
   const selectedModels = getSelectedModelCacheIds();
   if (modelDownloadStatus.active || modelStorageBusy) {
-    showNotice("Finish or cancel model downloads and storage changes before deleting caches.", "warning");
+    showNotice(translateKey("msg.finish_or_cancel_model_downloads_and_storage_changes_before_dele.3ef332b7", {}, getActiveLocale()), "warning");
     return;
   }
   if (backend.running && (!backend.model || selectedModels.includes(backend.model))) {
-    showNotice("The active model cache is protected while the server runs. Select only inactive caches.", "warning");
+    showNotice(translateKey("msg.the_active_model_cache_is_protected_while_the_server_runs_select.8dde9398", {}, getActiveLocale()), "warning");
     return;
   }
   if (selectedModels.length === 0) {
-    showNotice("Select one or more downloaded models first. Nothing is preselected.", "warning");
+    showNotice(translateKey("msg.select_one_or_more_downloaded_models_first_nothing_is_preselecte.005d9cde", {}, getActiveLocale()), "warning");
     return;
   }
   const selectedNames = selectedModels.map((model) => {
     const option = Array.from(modelSelect.options).find((candidate) => candidate.value === model);
     return option ? modelMenuInfo(option).name : model;
   });
-  const approved = window.confirm(`Permanently delete only these selected RDT Connect MLX model caches?\n\n${selectedNames.map((name) => `• ${name}`).join("\n")}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.`);
+  const approved = window.confirm(translateKey("msg.permanently_delete_only_these_selected_rdt_connect_mlx_model_caches_models_unselected_models_other_hugging_face_repositories_and_easywhisper_browser_data_will_remain_untouched.4235eebe", { models: selectedNames.map((name) => `• ${name}`).join("\n") }, getActiveLocale()));
   if (!approved) return;
   deleteRdtModelsButton.disabled = true;
   try {
@@ -2037,30 +2084,30 @@ deleteRdtModelsButton.addEventListener("click", async () => {
     await refreshModelDownloadStatus();
     await refreshModelCacheBadges();
   } catch (error) {
-    modelCleanupStatus.textContent = `Could not delete selected model caches: ${String(error)}`;
-    showNotice(`Could not delete selected model caches: ${String(error)}`, "error");
+    modelCleanupStatus.textContent = translateKey("msg.could_not_delete_selected_model_caches_arg1.7dfa9acc", { arg1: String(error) }, getActiveLocale());
+    showNotice(translateKey("msg.could_not_delete_selected_model_caches_arg1.7dfa9acc", { arg1: String(error) }, getActiveLocale()), "error");
   } finally {
     renderModelCleanupButtons();
   }
 });
 
 modelStorageAddButton.addEventListener("click", async () => {
-  if (backend.running) { showNotice("Stop the local server before changing model storage.", "warning"); return; }
-  if (storageLocationDraft.length >= 20) { showNotice("Up to 20 model-storage locations are supported.", "warning"); return; }
+  if (backend.running) { showNotice(translateKey("msg.stop_the_local_server_before_changing_model.1a36c7e8", {}, getActiveLocale()), "warning"); return; }
+  if (storageLocationDraft.length >= 20) { showNotice(translateKey("msg.up_to_20_model_storage_locations_are_support.20545645", {}, getActiveLocale()), "warning"); return; }
   modelStorageBusy = true; renderModelStorageSettings();
   try {
     const selected = await invoke<string | null>("pick_model_storage_directory");
     if (!selected) return;
-    if (storageLocationDraft.includes(selected)) { showNotice("That folder is already listed.", "info"); return; }
+    if (storageLocationDraft.includes(selected)) { showNotice(translateKey("msg.that_folder_is_already_listed.294a80f8", {}, getActiveLocale()), "info"); return; }
     storageLocationDraft.push(selected);
     renderModelStorageSettings();
-    showNotice("Folder added to the draft list. Save storage priority to apply it.", "info");
-  } catch (error) { showNotice(`Could not choose a model-storage folder: ${String(error)}`, "error"); }
+    showNotice(translateKey("msg.folder_added_to_the_draft_list_save_storage.c0819cab", {}, getActiveLocale()), "info");
+  } catch (error) { showNotice(translateKey("msg.could_not_choose_a_model_storage_folder_erro.0f408147", { error: String(error) }, getActiveLocale()), "error"); }
   finally { modelStorageBusy = false; renderModelStorageSettings(); }
 });
 
 modelStorageSaveButton.addEventListener("click", async () => {
-  if (backend.running) { showNotice("Stop the local server before saving model-storage changes.", "warning"); return; }
+  if (backend.running) { showNotice(translateKey("msg.stop_the_local_server_before_saving_model_st.1949e9c3", {}, getActiveLocale()), "warning"); return; }
   modelStorageBusy = true; renderModelStorageSettings();
   try {
     const status = await invoke<ModelStorageStatus>("set_model_storage_locations", { model: modelSelect.value, locations: storageLocationDraft });
@@ -2069,9 +2116,9 @@ modelStorageSaveButton.addEventListener("click", async () => {
     savedStorageLocations = [...status.locations];
     renderModelStorageSummary(status); renderModelStorageSettings();
     void refreshModelCacheBadges();
-    showNotice("Model-storage locations saved. The next server start will use the selected model’s best available cached copy.", "good");
+    showNotice(translateKey("msg.model_storage_locations_saved_the_next_serve.abe7ee05", {}, getActiveLocale()), "good");
   } catch (error) {
-    showNotice(`Could not save model-storage settings: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_save_model_storage_settings_error.3a4cc317", { error: String(error) }, getActiveLocale()), "error");
   } finally { modelStorageBusy = false; renderModelStorageSettings(); }
 });
 
@@ -2085,7 +2132,7 @@ async function chooseTlsFile(kind: "certificate" | "private-key" | "ca") {
     setTlsPath(kind === "certificate" ? localHttpsCertPathEl : kind === "private-key" ? localHttpsKeyPathEl : localHttpsCaPathEl, path);
     linkTlsButton.disabled = !(selectedTlsCertificate || currentLocalHttps?.certificatePath) || !(selectedTlsKey || currentLocalHttps?.privateKeyPath) || backend.running;
     trustTlsButton.disabled = !(selectedTlsCa || currentLocalHttps?.caCertificatePath) || !currentLocalHttps?.certificatePath || !currentLocalHttps?.privateKeyPath || backend.running;
-  } catch (error) { showNotice(`Could not choose that file: ${String(error)}`, "error"); }
+  } catch (error) { showNotice(translateKey("msg.could_not_choose_that_file_error.b4bb7e62", { error: String(error) }, getActiveLocale()), "error"); }
 }
 
 chooseTlsCertButton.addEventListener("click", () => void chooseTlsFile("certificate"));
@@ -2231,12 +2278,12 @@ async function performLocalHttpsSetup(triggerButton: HTMLButtonElement) {
   localHttpsQuickSetupButton.disabled = true;
   triggerButton.setAttribute("aria-busy", "true");
   localHttpsQuickPrompt.classList.remove("hidden");
-  localHttpsQuickStatus.textContent = "Setting up trusted HTTPS…";
+  localHttpsQuickStatus.textContent = translateKey("msg.setting_up_trusted_https.7faf4288", {}, getActiveLocale());
   localHttpsQuickStatus.dataset.userFeedback = "pending";
   localHttpsQuickStatus.className = "local-https-quick-status tls-needs-setup";
-  localHttpsStatusEl.textContent = "Setting up trusted HTTPS…";
+  localHttpsStatusEl.textContent = translateKey("msg.setting_up_trusted_https.7faf4288", {}, getActiveLocale());
   localHttpsStatusEl.className = "tls-status tls-needs-setup";
-  showNotice(isLinuxRuntime() ? "Setting up trusted HTTPS… your system will ask for administrator authorization to trust the local CA." : "Setting up trusted HTTPS…", "info");
+  showNotice(isLinuxRuntime() ? "Setting up trusted HTTPS… your system will ask for administrator authorization to trust the local CA." : translateKey("msg.setting_up_trusted_https.7faf4288", {}, getActiveLocale()), "info");
 
   let setupError: unknown = null;
 
@@ -2274,14 +2321,14 @@ async function performLocalHttpsSetup(triggerButton: HTMLButtonElement) {
     } else if (!verifiedStatus) {
       const detail = setupError ? ` Setup operation reported: ${String(setupError)}` : "";
       showNotice(
-        `HTTPS setup finished, but its current status could not be verified. The setup button remains available to retry.${detail}`,
+        translateKey("msg.https_setup_finished_but_its_current_status_could_not_be_verifie.91d45be7", { arg1: detail }, getActiveLocale()),
         "warning"
       );
     } else if (setupError) {
-      showNotice(`HTTPS setup failed: ${String(setupError)}`, "error");
+      showNotice(translateKey("msg.https_setup_failed_arg1.25103fd5", { arg1: String(setupError) }, getActiveLocale()), "error");
     } else {
       showNotice(
-        `HTTPS setup needs attention: ${verifiedStatus.message || "The certificate and trust status are not ready."}`,
+        translateKey("msg.https_setup_needs_attention_verified.37a476ec", { verified: verifiedStatus.message || translateKey("msg.the_certificate_and_trust_status_are_not_ready", {}, getActiveLocale()) }, getActiveLocale()),
         "warning"
       );
     }
@@ -2302,74 +2349,74 @@ linkTlsButton.addEventListener("click", async () => {
   const certificatePath = selectedTlsCertificate || currentLocalHttps?.certificatePath || "";
   const privateKeyPath = selectedTlsKey || currentLocalHttps?.privateKeyPath || "";
   const caCertificatePath = selectedTlsCa || currentLocalHttps?.caCertificatePath || null;
-  if (!certificatePath || !privateKeyPath) { showNotice("Choose both a server certificate and its matching private key.", "warning"); return; }
+  if (!certificatePath || !privateKeyPath) { showNotice(translateKey("msg.choose_both_a_server_certificate_and_its_mat.5e8014ff", {}, getActiveLocale()), "warning"); return; }
   linkTlsButton.disabled = true;
   try {
     const status = await invoke<LocalHttpsStatus>("link_local_https_certificate", { certificatePath, privateKeyPath, caCertificatePath });
     selectedTlsCertificate = status.certificatePath || ""; selectedTlsKey = status.privateKeyPath || ""; selectedTlsCa = status.caCertificatePath || "";
     renderLocalHttpsStatus(status);
     showNotice(status.trusted ? "Certificate and key linked and validated; operating-system trust verification passed." : "Certificate and key linked and validated, but trust is not confirmed yet. Check the operating-system certificate trust status.", status.trusted ? "good" : "warning");
-  } catch (error) { showNotice(`Could not link that certificate: ${String(error)}`, "error"); }
+  } catch (error) { showNotice(translateKey("msg.could_not_link_that_certificate_error.f99f0898", { error: String(error) }, getActiveLocale()), "error"); }
   finally { await refreshLocalHttpsStatus(); }
 });
 
 trustTlsButton.addEventListener("click", async () => {
   const ok = isLinuxRuntime()
-    ? window.confirm("Add the RDT Connect local root CA to this computer's system trust store? Your system will ask for administrator authorization. The CA is restricted to localhost, 127.0.0.1 and ::1, and RDT Connect records its exact fingerprint so it can remove only this entry later. Firefox and Chrome/Chromium may keep separate certificate stores and are not changed.")
+    ? window.confirm(translateKey("msg.add_the_rdt_connect_local_root_ca_to_this_computer_s_system_trust_store_your_system_will_ask_for_administrator_authorization_the_ca_is_restricted_to_localhost_127_0_0_1_and_1_and_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later_firefox_and_chrome_chromium_may_keep_separate_certificate_stores_and_are_not_changed.50cb7d5d", {}, getActiveLocale()))
     : isWindowsRuntime()
-    ? window.confirm("Add the RDT Connect local root CA to the Windows current-user certificate trust store? RDT Connect records its exact fingerprint so it can remove only this entry later.")
+    ? window.confirm(translateKey("msg.add_the_rdt_connect_local_root_ca_to_the_windows_current_user_certificate_trust_store_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later.15d3811e", {}, getActiveLocale()))
     : window.confirm("Add the selected issuer/root CA certificate to this Mac's login Keychain? This changes macOS trust decisions for certificates issued by that CA. Only continue if you control or explicitly trust this self-signed root CA. Intermediate CAs are not promoted to roots. RDT Connect will record the exact fingerprint so it can offer to remove this entry later.");
   if (!ok) return;
   trustTlsButton.disabled = true;
   try {
     const status = await invoke<LocalHttpsStatus>("trust_local_https_ca", { caCertificatePath: selectedTlsCa || currentLocalHttps?.caCertificatePath || null });
     renderLocalHttpsStatus(status);
-    showNotice(isLinuxRuntime() ? "The RDT local CA was added to the system trust store and recorded for targeted removal. Browsers with their own certificate store may still need the CA imported." : isWindowsRuntime() ? "The RDT local CA was added to the Windows current-user certificate trust store and recorded for targeted removal." : "The selected CA was added to the login Keychain and recorded for targeted removal.", "good");
-  } catch (error) { showNotice(`Could not trust that CA: ${String(error)}`, "error"); }
+    showNotice(isLinuxRuntime() ? "The RDT local CA was added to the system trust store and recorded for targeted removal. Browsers with their own certificate store may still need the CA imported." : isWindowsRuntime() ? "The RDT local CA was added to the Windows current-user certificate trust store and recorded for targeted removal." : translateKey("msg.the_selected_ca_was_added_to_the_login_keych.ea8b28ac", {}, getActiveLocale()), "good");
+  } catch (error) { showNotice(translateKey("msg.could_not_trust_that_ca_error.ea84346e", { error: String(error) }, getActiveLocale()), "error"); }
   finally { await refreshLocalHttpsStatus(); }
 });
 
 removeTlsTrustButton.addEventListener("click", async () => {
   const count = currentLocalHttps?.rdtAddedTrustCount || 0;
-  if (!count) { showNotice("RDT Connect has no tracked CA trust entries to remove.", "info"); return; }
+  if (!count) { showNotice(translateKey("msg.rdt_connect_has_no_tracked_ca_trust_entries.d66fa045", {}, getActiveLocale()), "info"); return; }
   const confirmation = isLinuxRuntime()
-    ? `Remove ${count} exact CA trust ${count === 1 ? "entry" : "entries"} that RDT Connect previously added to the system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`
+    ? translateKey(count === 1 ? "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.ed4f1479" : "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.48ac1519", { count }, getActiveLocale())
     : isWindowsRuntime()
-    ? `Remove ${count} exact CA trust ${count === 1 ? "entry" : "entries"} that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`
+    ? translateKey(count === 1 ? "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.52dd3e5b" : "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.6e6bda5a", { count }, getActiveLocale())
     : count === 1
-    ? `Remove ${count} exact CA trust entry that RDT Connect previously added to this Mac's login Keychain? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`
-    : `Remove ${count} exact CA trust entries that RDT Connect previously added to this Mac's login Keychain? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.`;
+    ? translateKey("msg.remove_count_exact_ca_trust_entry_that_rdt_c.0040e5de", { count }, getActiveLocale())
+    : translateKey("msg.remove_count_exact_ca_trust_entries_that_rdt.f808b428", { count }, getActiveLocale());
   const ok = window.confirm(confirmation);
   if (!ok) return;
   removeTlsTrustButton.disabled = true;
   try {
     const status = await invoke<LocalHttpsStatus>("remove_rdt_https_trust");
     renderLocalHttpsStatus(status);
-    showNotice("RDT Connect-added HTTPS trust entries were removed. Certificate files remain on disk.", "good");
-  } catch (error) { showNotice(`Could not remove every tracked trust entry: ${String(error)}`, "error"); }
+    showNotice(translateKey("msg.rdt_connect_added_https_trust_entries_were_r.0c572dad", {}, getActiveLocale()), "good");
+  } catch (error) { showNotice(translateKey("msg.could_not_remove_every_tracked_trust_entry_e.d78b5b48", { error: String(error) }, getActiveLocale()), "error"); }
   finally { await refreshLocalHttpsStatus(); }
 });
 
 async function changeLocalTransport(mode: "https" | "http") {
-  if (backend.running) { showNotice("Stop the server before changing its transport.", "warning"); await refreshLocalHttpsStatus(); return; }
+  if (backend.running) { showNotice(translateKey("msg.stop_the_server_before_changing_its_transpor.4ffb5262", {}, getActiveLocale()), "warning"); await refreshLocalHttpsStatus(); return; }
   if (mode === "http" && !window.confirm("Use unencrypted HTTP for local development only? Audio and API traffic on the loopback connection will not be protected by TLS. HTTPS remains the recommended default. This does not enable public access.")) {
     await refreshLocalHttpsStatus(); return;
   }
   try {
     const status = await invoke<LocalHttpsStatus>("set_local_transport", { mode });
     renderLocalHttpsStatus(status);
-    showNotice(mode === "https" ? "HTTPS selected. RDT Connect will require a valid, trusted certificate before starting." : "HTTP development mode selected explicitly.", mode === "https" ? "good" : "warning");
-  } catch (error) { showNotice(`Could not change local transport: ${String(error)}`, "error"); await refreshLocalHttpsStatus(); }
+    showNotice(mode === "https" ? translateKey("msg.https_selected_rdt_connect_will_require_a_va.c3c4e566", {}, getActiveLocale()) : translateKey("msg.http_development_mode_selected_explicitly.ed7ea39e", {}, getActiveLocale()), mode === "https" ? "good" : "warning");
+  } catch (error) { showNotice(translateKey("msg.could_not_change_local_transport_error.6c187215", { error: String(error) }, getActiveLocale()), "error"); await refreshLocalHttpsStatus(); }
 }
 transportHttpsInput.addEventListener("change", () => { if (transportHttpsInput.checked) void changeLocalTransport("https"); });
 transportHttpInput.addEventListener("change", () => { if (transportHttpInput.checked) void changeLocalTransport("http"); });
 
 function renderBackendStatus() {
   const operationLabel = serverOperation === "starting" ? "STARTING…" : serverOperation === "stopping" ? "STOPPING…" : null;
-  statusPill.textContent = operationLabel || (backend.running ? `RUNNING: ${backend.port || Number(preferredPortInput.value) || 8888}` : "STOPPED");
+  statusPill.textContent = operationLabel || (backend.running ? translateKey("msg.running_value.5f2c3539", { value: backend.port || Number(preferredPortInput.value) || 8888 }, getActiveLocale()) : translateKey("msg.stopped.133c4945", {}, getActiveLocale()));
   statusPill.className = `status-pill ${serverOperation ? "processing" : backend.running ? "running" : "stopped"}`;
-  statusDetail.textContent = serverOperation === "starting" ? "Starting the local transcription server and checking readiness…" : serverOperation === "stopping" ? "Stopping the local transcription server and verifying cleanup…" : backend.running ? "Local transcription server is running." : "Local transcription server is stopped.";
-  startButtonLabel.textContent = serverOperation === "starting" ? "Starting…" : serverOperation === "stopping" ? "Stopping…" : backend.running ? "Stop Server" : "Start Server";
+  statusDetail.textContent = serverOperation === "starting" ? translateKey("msg.starting_the_local_transcription_server_and.f4aff6a0", {}, getActiveLocale()) : serverOperation === "stopping" ? translateKey("msg.stopping_the_local_transcription_server_and.041ff878", {}, getActiveLocale()) : backend.running ? translateKey("msg.local_transcription_server_is_running.559685bc", {}, getActiveLocale()) : translateKey("msg.local_transcription_server_is_stopped.7ef01073", {}, getActiveLocale());
+  startButtonLabel.textContent = serverOperation === "starting" ? "Starting…" : serverOperation === "stopping" ? translateKey("msg.stopping.bbe85741", {}, getActiveLocale()) : backend.running ? "Stop Server" : "Start Server";
   startButton.classList.toggle("server-running", backend.running);
   startButton.classList.toggle("is-idle-start", startupReady && !busy && !backend.running && serverOperation === null && !conflictingBackendPresent);
   startButton.parentElement?.classList.toggle("is-running", backend.running);
@@ -2379,20 +2426,20 @@ function renderBackendStatus() {
   renderFooterServerStatusDot();
   openButton.setAttribute("aria-hidden", backend.running ? "false" : "true");
   openButton.tabIndex = backend.running ? 0 : -1;
-  startButton.setAttribute("aria-label", backend.running ? "Stop the local transcription server" : "Start the local transcription server");
+  startButton.setAttribute("aria-label", backend.running ? translateKey("msg.stop_the_local_transcription_server.4bb79a10", {}, getActiveLocale()) : translateKey("msg.start_the_local_transcription_server.746c013b", {}, getActiveLocale()));
   displayPort.textContent = String(backend.port || Number(preferredPortInput.value) || 8888);
   if (!backend.running) {
     tokenDisplay.value = "";
     tokenDisplay.type = "password";
-    toggleTokenButton.textContent = "Show";
-    toggleTokenButton.setAttribute("aria-label", "Reveal the access token");
+    toggleTokenButton.textContent = translateKey("msg.show.0df6f1ca", {}, getActiveLocale());
+    toggleTokenButton.setAttribute("aria-label", translateKey("msg.reveal_the_access_token.c51590dd", {}, getActiveLocale()));
   } else if (tokenDisplay.type === "password" && !tokenDisplay.value) {
     // Show that a token is present without putting the secret in the hidden field.
     tokenDisplay.value = "••••••••••••••";
   }
   renderConnectionStatus();
-  localAddress.textContent = backend.localUrl || "Not running";
-  logPath.textContent = backend.logPath || "Log file is created when the server starts.";
+  localAddress.textContent = backend.localUrl || translateKey("msg.not_running.9e3856ee", {}, getActiveLocale());
+  logPath.textContent = backend.logPath || translateKey("msg.log_file_is_created_when_the_server_starts.af4dd0a6", {}, getActiveLocale());
 
   setBusy(busy);
   syncModelCacheSelectionLocks();
@@ -2408,12 +2455,12 @@ async function refreshOrphanedBackendStatus(showErrors = false) {
       // Another live manager owns the lock; never kill its backend from this window.
       conflictingBackendPresent = true;
       orphanPanel.classList.add("hidden");
-      orphanDetail.textContent = "A live RDT Connect manager owns this session. Use that existing window.";
-      statusPill.textContent = "IN USE";
+      orphanDetail.textContent = translateKey("msg.a_live_rdt_connect_manager_owns_this_session.0a86c9d3", {}, getActiveLocale());
+      statusPill.textContent = translateKey("msg.in_use.17a97caa", {}, getActiveLocale());
       statusPill.className = "status-pill manager-elsewhere";
-      statusDetail.textContent = "RDT Connect is already running.";
-      connectionSummary.textContent = "Use the existing RDT Connect window.";
-      connectionStatus.textContent = "Another live RDT Connect manager owns the server; this window will not terminate it.";
+      statusDetail.textContent = translateKey("msg.rdt_connect_is_already_running.2376999c", {}, getActiveLocale());
+      connectionSummary.textContent = translateKey("msg.use_the_existing_rdt_connect_window.8c0b38b2", {}, getActiveLocale());
+      connectionStatus.textContent = translateKey("msg.another_live_rdt_connect_manager_owns_the_se.629294bf", {}, getActiveLocale());
       connectionStatus.className = "connection-status disconnected";
       setBusy(busy);
       return;
@@ -2424,7 +2471,7 @@ async function refreshOrphanedBackendStatus(showErrors = false) {
       // These entries were identified by the native process scanner as this app's
       // packaged backend. The native stop command repeats executable/tree checks.
       orphanPanel.classList.add("hidden");
-      orphanDetail.textContent = "Checking and stopping a leftover RDT Connect backend…";
+      orphanDetail.textContent = translateKey("msg.checking_and_stopping_a_leftover_rdt_connect.17e22da5", {}, getActiveLocale());
       let attemptedNow = false;
       for (const instance of instances) {
         if (autoCleanupAttemptedPids.has(instance.pid)) continue;
@@ -2433,7 +2480,7 @@ async function refreshOrphanedBackendStatus(showErrors = false) {
         try {
           await invoke("stop_orphaned_backend", { pid: instance.pid });
         } catch (error) {
-          orphanDetail.textContent = `Could not automatically stop verified process PID ${instance.pid}: ${String(error)}`;
+          orphanDetail.textContent = translateKey("msg.could_not_automatically_stop_verified_proces.4acc1f2f", { pid: instance.pid, error: String(error) }, getActiveLocale());
         }
       }
       const after = await invoke<OrphanScan>("get_orphaned_backends");
@@ -2441,26 +2488,26 @@ async function refreshOrphanedBackendStatus(showErrors = false) {
       if (!remaining.length) {
         conflictingBackendPresent = false;
         autoCleanupFailureAnnounced = false;
-        orphanDetail.textContent = attemptedNow ? "An earlier RDT Connect backend was stopped automatically." : "No previous backend detected.";
+        orphanDetail.textContent = attemptedNow ? translateKey("msg.an_earlier_rdt_connect_backend_was_stopped_a.b6f0fe7d", {}, getActiveLocale()) : translateKey("msg.no_previous_backend_detected.06b160ff", {}, getActiveLocale());
         if (!backend.running) {
-          statusPill.textContent = "STOPPED";
+          statusPill.textContent = translateKey("msg.stopped.133c4945", {}, getActiveLocale());
           statusPill.className = "status-pill stopped";
-          statusDetail.textContent = "Your server is stopped.";
-          connectionSummary.textContent = "Start the server to check the connection.";
+          statusDetail.textContent = translateKey("msg.your_server_is_stopped.927176a5", {}, getActiveLocale());
+          connectionSummary.textContent = translateKey("msg.start_the_server_to_check_the_connection.35c28f4d", {}, getActiveLocale());
         }
         setBusy(busy);
         return;
       }
       conflictingBackendPresent = true;
-      orphanDetail.textContent = remaining.map((item) => `PID ${item.pid} · port ${item.port ?? "unknown"} · ${item.description}`).join("\n");
-      statusPill.textContent = "RECOVERY NEEDED";
+      orphanDetail.textContent = remaining.map((item) => `PID ${item.pid} · port ${item.port ?? translateKey("msg.unknown.b23a6a84", {}, getActiveLocale())} · ${item.description}`).join("\n");
+      statusPill.textContent = translateKey("msg.recovery_needed.85e5d2f1", {}, getActiveLocale());
       statusPill.className = "status-pill attention";
-      statusDetail.textContent = "RDT Connect could not clean up an earlier backend automatically.";
-      connectionSummary.textContent = "Server recovery needs attention.";
-      connectionStatus.textContent = "Automatic cleanup did not complete. Open Developer Options and run diagnostics for the verified process details.";
+      statusDetail.textContent = translateKey("msg.rdt_connect_could_not_clean_up_an_earlier_ba.31f54524", {}, getActiveLocale());
+      connectionSummary.textContent = translateKey("msg.server_recovery_needs_attention.6f185817", {}, getActiveLocale());
+      connectionStatus.textContent = translateKey("msg.automatic_cleanup_did_not_complete_open_deve.4c41b73d", {}, getActiveLocale());
       connectionStatus.className = "connection-status disconnected";
       if (!autoCleanupFailureAnnounced || showErrors) {
-        showNotice("RDT Connect couldn't stop an earlier server automatically. Open Developer Options → Diagnostics for the next step.", "error");
+        showNotice(translateKey("msg.rdt_connect_couldn_t_stop_an_earlier_server.b98c9cd5", {}, getActiveLocale()), "error");
         autoCleanupFailureAnnounced = true;
       }
       setBusy(busy);
@@ -2469,22 +2516,22 @@ async function refreshOrphanedBackendStatus(showErrors = false) {
 
     conflictingBackendPresent = false;
     orphanPanel.classList.add("hidden");
-    orphanDetail.textContent = "No previous backend detected.";
+    orphanDetail.textContent = translateKey("msg.no_previous_backend_detected.06b160ff", {}, getActiveLocale());
     if (!backend.running) {
-      statusPill.textContent = "STOPPED";
+      statusPill.textContent = translateKey("msg.stopped.133c4945", {}, getActiveLocale());
       statusPill.className = "status-pill stopped";
-      statusDetail.textContent = "Your server is stopped.";
-      connectionSummary.textContent = "Start the server to check the connection.";
+      statusDetail.textContent = translateKey("msg.your_server_is_stopped.927176a5", {}, getActiveLocale());
+      connectionSummary.textContent = translateKey("msg.start_the_server_to_check_the_connection.35c28f4d", {}, getActiveLocale());
     }
     setBusy(busy);
   } catch (error) {
     // Do not claim cleanup succeeded when process inspection itself failed.
     // Keep the primary control locked and give the user one actionable explanation.
     if (!autoCleanupFailureAnnounced || showErrors) {
-      showNotice("RDT Connect couldn't verify that an earlier server is safe to reuse. Open Developer Options → Diagnostics for details.", "warning");
+      showNotice(translateKey("msg.rdt_connect_couldn_t_verify_that_an_earlier.f98562c3", {}, getActiveLocale()), "warning");
       autoCleanupFailureAnnounced = true;
     }
-    orphanDetail.textContent = `Could not verify local server state: ${String(error)}`;
+    orphanDetail.textContent = translateKey("msg.could_not_verify_local_server_state_error.19b913a5", { error: String(error) }, getActiveLocale());
     conflictingBackendPresent = true;
     orphanPanel.classList.add("hidden");
     startButton.disabled = true;
@@ -2513,7 +2560,7 @@ function renderRemoteStatus() {
     ? ""
     : (tailscale.message || (backend.running ? "Check Tailscale to configure private HTTPS access." : "Start the local server first."));
   remoteState.className = `remote-state ${privateUrlReady ? "hidden" : ""}`;
-  setupRemoteButton.textContent = tailscale.ready ? "Refresh private access" : "Set up remote access";
+  setupRemoteButton.textContent = tailscale.ready ? translateKey("msg.refresh_private_access.978c0605", {}, getActiveLocale()) : translateKey("msg.set_up_remote_access.aab18c87", {}, getActiveLocale());
   remoteActionHelp.textContent = !backend.running
     ? "Start the local server first. This does not enable public access."
     : !tailscale.ready
@@ -2555,22 +2602,22 @@ async function loadPairRequests() {
     for (const request of incoming) {
       const item = document.createElement("div"); item.className = "list-item";
       const copy = document.createElement("div"); copy.className = "list-copy";
-      const title = document.createElement("div"); title.className = "list-title"; title.textContent = request.device_label || "Unknown browser";
-      const details = document.createElement("div"); details.className = "list-details"; details.textContent = `${shortAgent(request.user_agent || "Browser")} · expires ${fmtTime(request.expires_at)}`;
+      const title = document.createElement("div"); title.className = "list-title"; title.textContent = request.device_label || translateKey("msg.unknown_browser.7bcdf756", {}, getActiveLocale());
+      const details = document.createElement("div"); details.className = "list-details"; details.textContent = translateKey("msg.browser_expires_expires_at.60f297eb", { browser: shortAgent(request.user_agent || translateKey("msg.browser.d31de1a5", {}, getActiveLocale())), expires_at: fmtTime(request.expires_at) }, getActiveLocale());
       copy.append(title, details);
       const actions = document.createElement("div"); actions.className = "list-actions";
-      const approve = document.createElement("button"); approve.className = "mini-button approve"; approve.textContent = "Approve";
+      const approve = document.createElement("button"); approve.className = "mini-button approve"; approve.textContent = translateKey("msg.approve.6007acbe", {}, getActiveLocale());
       approve.addEventListener("click", async () => runAction(async () => {
         await invoke("approve_pair_request", { requestId: request.id });
         markPairingQrUsed();
-        showNotice("Browser approved.", "good");
+        showNotice(translateKey("msg.browser_approved.18f698ae", {}, getActiveLocale()), "good");
         await refreshDeviceLists();
       }));
-      const deny = document.createElement("button"); deny.className = "mini-button deny"; deny.textContent = "Deny";
+      const deny = document.createElement("button"); deny.className = "mini-button deny"; deny.textContent = translateKey("msg.deny.05a2d733", {}, getActiveLocale());
       deny.addEventListener("click", async () => runAction(async () => {
         await invoke("deny_pair_request", { requestId: request.id });
         markPairingQrUsed();
-        showNotice("Pairing request denied.", "info");
+        showNotice(translateKey("msg.pairing_request_denied.4ba7cb73", {}, getActiveLocale()), "info");
         await refreshDeviceLists();
       }));
       actions.append(approve, deny); item.append(copy, actions); pendingList.appendChild(item);
@@ -2593,13 +2640,13 @@ async function loadDevices() {
     for (const device of result.devices) {
       const item = document.createElement("div"); item.className = "list-item";
       const copy = document.createElement("div"); copy.className = "list-copy";
-      const title = document.createElement("div"); title.className = "list-title"; title.textContent = device.device_label || "Browser";
-      const details = document.createElement("div"); details.className = "list-details"; details.textContent = `Last used ${fmtTime(device.last_seen)} · ${shortAgent(device.user_agent || "Browser")}`;
+      const title = document.createElement("div"); title.className = "list-title"; title.textContent = device.device_label || translateKey("msg.browser.d31de1a5", {}, getActiveLocale());
+      const details = document.createElement("div"); details.className = "list-details"; details.textContent = translateKey("msg.last_used_last_seen_browser.f1996490", { last_seen: fmtTime(device.last_seen), browser: shortAgent(device.user_agent || translateKey("msg.browser.d31de1a5", {}, getActiveLocale())) }, getActiveLocale());
       copy.append(title, details);
-      const revoke = document.createElement("button"); revoke.className = "mini-button deny"; revoke.textContent = "Revoke";
+      const revoke = document.createElement("button"); revoke.className = "mini-button deny"; revoke.textContent = translateKey("msg.revoke.87e6d00b", {}, getActiveLocale());
       revoke.addEventListener("click", async () => runAction(async () => {
         await invoke("revoke_paired_device", { sessionId: device.id });
-        showNotice("Browser access revoked.", "good"); await loadDevices();
+        showNotice(translateKey("msg.browser_access_revoked.bbf3f10e", {}, getActiveLocale()), "good"); await loadDevices();
       }));
       item.append(copy, revoke); deviceList.appendChild(item);
     }
@@ -2614,7 +2661,7 @@ async function runAction(action: () => Promise<unknown>, successMessage?: string
     const detail = String(e);
     if (/address already in use|eaddrinuse|os error 48|address in use|bind[^\n]*failed/i.test(detail)) {
       const port = Number(preferredPortInput.value) || 8888;
-      showNotice(`Port ${port} is busy. Enable Developer Options, choose another port, then retry. RDT Connect did not stop any other service.`, "warning");
+      showNotice(translateKey("msg.port_port_is_busy_enable_developer_options_c.ceeaeb77", { port: port }, getActiveLocale()), "warning");
     } else {
       showNotice(detail, "error");
     }
@@ -2654,9 +2701,9 @@ async function startSelectedBackendModel(preverifiedCache?: ModelStorageStatus) 
     renderBackendStatus();
     await refreshConnectionStatus();
     if (browserPreflightPassed()) {
-      showNotice(`RDT Connect started on ${backend.localUrl}. Server and authentication are verified; RDT Voice is ready to open.`, "good");
+      showNotice(translateKey("msg.rdt_connect_started_on_localurl_server_and_a.e4c94cb9", { localUrl: backend.localUrl ?? "" }, getActiveLocale()), "good");
     } else {
-      showNotice(`The server started, but Open RDT Voice is disabled: ${browserPreflightFailure()}`, "warning");
+      showNotice(translateKey("msg.the_server_started_but_open_rdt_voice_is_dis.086dfa50", { browserPreflightFailure: browserPreflightFailure() }, getActiveLocale()), "warning");
     }
     await refreshRemoteStatus();
   });
@@ -2713,7 +2760,7 @@ startButton.addEventListener("click", async () => {
   const wantsSwitch = wasRunning && !!backend.model && requestedModel !== backend.model;
   if (wantsSwitch) {
     if (modelDownloadStatus.active || modelStorageBusy) {
-      showNotice("Finish or cancel model downloads and storage changes before switching models.", "warning");
+      showNotice(translateKey("msg.finish_or_cancel_model_downloads_and_storage_changes_before_swit.77238833", {}, getActiveLocale()), "warning");
       return;
     }
     setBusy(true);
@@ -2727,7 +2774,7 @@ startButton.addEventListener("click", async () => {
         return;
       }
     } catch (error) {
-      showNotice(`Could not verify the selected model cache; the current server was left running. ${String(error)}`, "error");
+      showNotice(translateKey("msg.could_not_verify_the_selected_model_cache_the_current_server_was.4456b302", { arg1: String(error) }, getActiveLocale()), "error");
       setBusy(false);
       return;
     }
@@ -2739,11 +2786,11 @@ startButton.addEventListener("click", async () => {
   startButton.setAttribute("aria-busy", "true");
   startProgress.classList.remove("hidden");
   startProgress.setAttribute("aria-busy", "true");
-  startProgressText.textContent = wasRunning ? (wantsSwitch ? "Stopping before switching models…" : "Stopping your local server…") : "Starting your local server…";
+  startProgressText.textContent = wasRunning ? (wantsSwitch ? translateKey("msg.stopping_before_switching_models.fb0c9aa6", {}, getActiveLocale()) : translateKey("msg.stopping_your_local_server.dfa3b390", {}, getActiveLocale())) : translateKey("msg.starting_your_local_server.f6149329", {}, getActiveLocale());
   startProgressDescription.textContent = wasRunning
     ? "Closing the managed process and checking that its port is released."
     : "Starting the backend and checking that the local endpoint responds.";
-  showNotice(wasRunning ? (wantsSwitch ? "Stopping the current server before switching models…" : "Closing the local server safely…") : "Preparing your local server…", "info");
+  showNotice(wasRunning ? (wantsSwitch ? translateKey("msg.stopping_the_current_server_before_switching_models.c41d642a", {}, getActiveLocale()) : translateKey("msg.closing_the_local_server_safely.ebce561c", {}, getActiveLocale())) : translateKey("msg.preparing_your_local_server.b0fafab7", {}, getActiveLocale()), "info");
   renderBackendStatus();
   renderBrowserChoiceRow();
   await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -2754,17 +2801,17 @@ startButton.addEventListener("click", async () => {
         pairingQr = null; qrImage.classList.add("hidden"); qrPlaceholder.classList.remove("hidden");
         qrCountdown.textContent = "";
         await refreshRemoteStatus();
-        showNotice("Local server stopped. Its managed process cleanup was verified; unrelated services were left alone.", "warning");
+        showNotice(translateKey("msg.local_server_stopped_its_managed_process_cle.2a3421b6", {}, getActiveLocale()), "warning");
       });
       if (modelSwitchTargetAfterStop !== null) {
         const targetModel = modelSwitchTargetAfterStop;
         modelSwitchTargetAfterStop = null;
         if (backend.running) {
-          showNotice("The current server could not be confirmed stopped. The replacement model was not started.", "error");
+          showNotice(translateKey("msg.the_current_server_could_not_be_confirmed_stopped_the_replacemen.c93371b4", {}, getActiveLocale()), "error");
           return;
         }
         if (conflictingBackendPresent || modelDownloadStatus.active || modelStorageBusy) {
-          showNotice("The server stopped, but another backend conflict or active model operation prevents switching. The replacement model was not started.", "warning");
+          showNotice(translateKey("msg.the_server_stopped_but_another_backend_conflict_or_active_model.0db27a3f", {}, getActiveLocale()), "warning");
           return;
         }
         modelSelect.value = targetModel;
@@ -2772,9 +2819,9 @@ startButton.addEventListener("click", async () => {
         serverOperation = "starting";
         startButton.classList.remove("is-stopping");
         startButton.classList.add("is-starting");
-        startProgressText.textContent = "Starting the selected model…";
-        startProgressDescription.textContent = "The previous server is confirmed stopped. Starting the replacement model now.";
-        showNotice("The previous server is stopped. Starting the selected model…", "info");
+        startProgressText.textContent = translateKey("msg.starting_the_selected_model.4d384f5a", {}, getActiveLocale());
+        startProgressDescription.textContent = translateKey("msg.the_previous_server_is_confirmed_stopped_starting_the_replacemen.a40640b4", {}, getActiveLocale());
+        showNotice(translateKey("msg.the_previous_server_is_stopped_starting_the_selected_model.b3fd7cda", {}, getActiveLocale()), "info");
         renderBackendStatus();
         await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         await startSelectedBackendModel(precheckedStartupCache ?? undefined);
@@ -2799,7 +2846,7 @@ async function refreshAppBuildInfo() {
       const displayVersion = formatProductVersionLabel(info.version);
       headerVersionLabel.textContent = displayVersion;
       headerBuildId.textContent = info.buildId;
-      aboutVersionLabel.textContent = translateKey("msg.rdt_connect_app_version_label_build_build_id.62522b9b", { APP_VERSION_LABEL: displayVersion, BUILD_ID: info.buildId }, getActiveLocale());
+      aboutVersionLabel.textContent = `RDT Connect · ${displayVersion} · Build ${info.buildId}`;
     }
   } catch {
     // Keep the source-provided version/build fallback visible if the native metadata call fails.
@@ -2809,32 +2856,98 @@ let updateCheckInFlight: Promise<void> | null = null;
 let pendingTauriUpdate: TauriUpdate | null = null;
 let updateInstallInProgress = false;
 
-type UpdateUiAction = "install" | "installing" | "reopen" | null;
+type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "up-to-date"
+  | "offline"
+  | "available"
+  | "downloading"
+  | "installing"
+  | "restart-required"
+  | "error";
+
+type UpdateAction = "check" | "install" | "restart" | null;
+type UpdateWindowAction = "install" | "installing" | "reopen" | null;
+
+let updateStatus: UpdateStatus = "idle";
 let updateUiMessageKey = "updater.checking";
 let updateUiMessageParams: Record<string, string> = {};
-let updateUiAction: UpdateUiAction = null;
 let updateInstalledAwaitingRelaunch = false;
-function publishUpdateWindowState(): void {
-  void emit("rdt-connect-update-status", {
-    key: updateUiMessageKey,
-    params: updateUiMessageParams,
-    action: updateUiAction,
-  }).catch(() => undefined);
+
+function getUpdateAction(status: UpdateStatus): UpdateAction {
+  switch (status) {
+    case "idle":
+    case "up-to-date":
+    case "offline":
+    case "error":
+      return "check";
+    case "available":
+      return "install";
+    case "restart-required":
+      return "restart";
+    default:
+      return null;
+  }
 }
-function setApplicationUpdateAction(action: UpdateUiAction): void {
-  updateUiAction = action;
-  void invoke("set_update_indicator", { state: action === "install" ? "available" : action === "reopen" ? "restart" : null }).catch(() => undefined);
+
+function getUpdateWindowAction(status: UpdateStatus): UpdateWindowAction {
+  if (status === "available") return "install";
+  if (status === "downloading" || status === "installing") return "installing";
+  if (status === "restart-required") return "reopen";
+  return null;
+}
+
+function setApplicationUpdateStatus(status: UpdateStatus): void {
+  updateStatus = status;
+
+  const nativeState =
+    status === "available" ? "available" :
+    status === "checking" ? "checking" :
+    status === "downloading" || status === "installing" ? "downloading" :
+    status === "restart-required" ? "restart" :
+    status === "up-to-date" ? "up-to-date" :
+    status === "offline" ? "offline" :
+    status === "error" ? "error" : null;
+
+  void invoke("set_update_indicator", {
+    state: nativeState,
+    displayText: updateMessage(updateUiMessageKey, updateUiMessageParams),
+  }).catch(() => undefined);
+
+  const windowAction = getUpdateWindowAction(status);
   const buttons = [applicationUpdateActionButton, headerUpdateActionButton].filter(
     (button): button is HTMLButtonElement => button !== null,
   );
   for (const button of buttons) {
-    button.hidden = action === null;
-    button.disabled = action === "installing";
-    if (action === "install") button.textContent = updateMessage("updater.downloadInstall");
-    else if (action === "installing") button.textContent = updateMessage("updater.downloading");
-    else if (action === "reopen") button.textContent = updateMessage("updater.reopenApp");
+    button.hidden = windowAction === null;
+    button.disabled = status === "downloading" || status === "installing";
+    if (windowAction === "install") button.textContent = updateMessage("updater.downloadInstall");
+    else if (windowAction === "installing") button.textContent = updateMessage("updater.downloading");
+    else if (windowAction === "reopen") button.textContent = updateMessage("updater.reopenApp");
   }
+
   publishUpdateWindowState();
+}
+function publishUpdateWindowState(): void {
+  void emit("rdt-connect-update-status", {
+    key: updateUiMessageKey,
+    params: updateUiMessageParams,
+    action: getUpdateWindowAction(updateStatus),
+  }).catch(() => undefined);
+}
+function setApplicationUpdateAction(
+  action: "install" | "installing" | "reopen" | null,
+): void {
+  const status: UpdateStatus =
+    action === "install"
+      ? "available"
+      : action === "installing"
+        ? "downloading"
+        : action === "reopen"
+          ? "restart-required"
+          : "idle";
+  setApplicationUpdateStatus(status);
 }
 
 function updateMessage(key: string, params: Record<string, string> = {}): string {
@@ -2846,6 +2959,21 @@ function setApplicationUpdateMessage(key: string, params: Record<string, string>
   applicationUpdateMessage.textContent = updateMessage(key, params);
   applicationUpdateMessage.classList.toggle("is-up-to-date", key === "updater.upToDate");
   applicationUpdateMessage.classList.toggle("is-update-installed", key === "updater.installedReopen");
+
+  const nativeState =
+    updateStatus === "up-to-date" ? "up-to-date" :
+    updateStatus === "offline" ? "offline" :
+    updateStatus === "error" ? "error" :
+    updateStatus === "available" ? "available" :
+    updateStatus === "checking" ? "checking" :
+    updateStatus === "downloading" || updateStatus === "installing" ? "downloading" :
+    updateStatus === "restart-required" ? "restart" : null;
+
+  void invoke("set_update_indicator", {
+    state: nativeState,
+    displayText: updateMessage(key, params),
+  }).catch(() => undefined);
+
   publishUpdateWindowState();
 }
 function updateErrorDetail(error: unknown): string {
@@ -2887,38 +3015,84 @@ function formatUpdateBytes(value: number): string {
   return `${new Intl.NumberFormat(getActiveLocale(), { maximumFractionDigits: 1 }).format(amount)} ${units[index]}`;
 }
 function isMissingDevelopmentFeed(errorText: string): boolean {
-  return /\b404\b|not found|no such file/i.test(errorText);
+  return /development update feed|development release feed|dev(?:elopment)?[-_ ]feed.*(?:404|not found)|(?:404|not found).*dev(?:elopment)?[-_ ]feed/i.test(errorText);
 }
 
-function checkForApplicationUpdates(): Promise<void> {
+let updateCheckGeneration = 0;
+let updateCheckInFlightManual = false;
+
+function canRunAutomaticUpdateCheck(): boolean {
+  return autoCheckUpdatesToggle.checked &&
+    !offlineOnlyModeEnabled &&
+    !(typeof navigator !== "undefined" && navigator.onLine === false) &&
+    !updateCheckInFlight &&
+    !pendingTauriUpdate &&
+    !updateInstallInProgress &&
+    !updateInstalledAwaitingRelaunch;
+}
+
+function checkForApplicationUpdates(manual = false): Promise<void> {
   if (updateInstallInProgress || updateInstalledAwaitingRelaunch) return Promise.resolve();
-  if (updateCheckInFlight) return updateCheckInFlight;
+  if (!manual && offlineOnlyModeEnabled) return Promise.resolve();
+  if (!manual && pendingTauriUpdate) return Promise.resolve();
+  // Keep an available update alive; periodic automatic checks must not close it.
+  if (!manual && pendingTauriUpdate) return Promise.resolve();
+  if (!manual && typeof navigator !== "undefined" && navigator.onLine === false) {
+    setApplicationUpdateStatus("offline");
+    setApplicationUpdateMessage("updater.offline");
+    return Promise.resolve();
+  }
+  if (updateCheckInFlight) {
+    if (!manual || updateCheckInFlightManual) return updateCheckInFlight;
+    updateCheckGeneration += 1;
+    updateCheckInFlight = null;
+    updateCheckInFlightManual = false;
+  }
+  const generation = updateCheckGeneration;
+  updateCheckInFlightManual = manual;
   updateCheckInFlight = (async () => {
-    setApplicationUpdateAction(null);
     if (pendingTauriUpdate) {
       const previous = pendingTauriUpdate;
       pendingTauriUpdate = null;
       try { await previous.close(); } catch { /* closing a superseded check is best-effort */ }
+      if (generation !== updateCheckGeneration) return;
     }
+    if (generation !== updateCheckGeneration) return;
+    setApplicationUpdateStatus("checking");
     setApplicationUpdateMessage("updater.checking");
     try {
       const update = await checkForTauriUpdate({
-          timeout: 30000,
+          timeout: manual ? 30000 : 5000,
           headers: {
             "Cache-Control": "no-cache, no-store, max-age=0",
             "Pragma": "no-cache",
           },
         });
+      if (generation !== updateCheckGeneration) {
+        if (update) { try { await update.close(); } catch { /* stale result cleanup */ } }
+        return;
+      }
       if (!update) {
+        setApplicationUpdateStatus("up-to-date");
         setApplicationUpdateMessage("updater.upToDate");
         return;
       }
       pendingTauriUpdate = update;
+      setApplicationUpdateStatus("available");
       setApplicationUpdateMessage("updater.available", { VERSION: formatFriendlyUpdateVersion(update.version) });
-      setApplicationUpdateAction("install");
     } catch (error) {
+      if (generation !== updateCheckGeneration) return;
       const detail = updateErrorDetail(error);
-      if (isMissingDevelopmentFeed(detail)) {
+      const offline =
+        (typeof navigator !== "undefined" && navigator.onLine === false) ||
+        /failed to fetch|networkerror|network request failed|internet connection|offline|timed?\s*out|timeout|connection (?:refused|reset|closed|aborted)|could not resolve|dns|name resolution|network is unreachable|no route to host|temporarily unavailable/i.test(detail);
+      setApplicationUpdateStatus(offline ? "offline" : "error");
+      if (offline && !manual) {
+        setApplicationUpdateMessage("updater.offline");
+        setApplicationUpdatePanelOpen(false);
+      } else if (offline) {
+        setApplicationUpdateMessage("updater.offline");
+      } else if (isMissingDevelopmentFeed(detail)) {
         setApplicationUpdateMessage("updater.feedMissing");
       } else if (/could not fetch a valid release json/i.test(detail)) {
         setApplicationUpdateMessage("updater.checkFailed", { ERROR: "GitHub did not return a valid update manifest. This installed build has not changed." });
@@ -2926,10 +3100,12 @@ function checkForApplicationUpdates(): Promise<void> {
         setApplicationUpdateMessage("updater.checkFailed", { ERROR: detail });
       }
     } finally {
-      if (updateInstalledAwaitingRelaunch) setApplicationUpdateAction("reopen");
-      else if (pendingTauriUpdate) setApplicationUpdateAction("install");
-      else setApplicationUpdateAction(null);
-      updateCheckInFlight = null;
+      if (generation === updateCheckGeneration) {
+        if (updateInstalledAwaitingRelaunch) setApplicationUpdateStatus("restart-required");
+        else if (pendingTauriUpdate) setApplicationUpdateStatus("available");
+        updateCheckInFlight = null;
+        updateCheckInFlightManual = false;
+      }
     }
   })();
   return updateCheckInFlight;
@@ -2941,16 +3117,20 @@ async function installAvailableApplicationUpdate(): Promise<void> {
       await relaunch();
     } catch {
       setApplicationUpdateMessage("updater.restartFailed");
-      setApplicationUpdateAction("reopen");
+      setApplicationUpdateStatus("restart-required");
     }
     return;
   }
   if (updateInstallInProgress || !pendingTauriUpdate) return;
+  // Prevent an outstanding check from publishing stale status during installation.
+  updateCheckGeneration += 1;
+  updateCheckInFlight = null;
+  updateCheckInFlightManual = false;
   const update = pendingTauriUpdate;
   updateInstallInProgress = true;
   aboutCheckUpdatesButton.disabled = true;
   headerCheckUpdatesButton.disabled = true;
-  setApplicationUpdateAction("installing");
+  setApplicationUpdateStatus("downloading");
   let downloadedBytes = 0;
   let totalBytes: number | null = null;
   setApplicationUpdateMessage("updater.downloading");
@@ -2969,26 +3149,35 @@ async function installAvailableApplicationUpdate(): Promise<void> {
         }
       }
     });
+    setApplicationUpdateStatus("installing");
     setApplicationUpdateMessage("updater.downloading");
     await update.install({ restartAfterInstall: false });
     pendingTauriUpdate = null;
     updateInstalledAwaitingRelaunch = true;
+    setApplicationUpdateStatus("restart-required");
     setApplicationUpdateMessage("updater.installedReopen");
-    setApplicationUpdateAction("reopen");
   } catch (error) {
-    setApplicationUpdateMessage("updater.installFailed", { ERROR: updateErrorDetail(error) });
+    if (updateInstalledAwaitingRelaunch) {
+      setApplicationUpdateStatus("restart-required");
+      setApplicationUpdateMessage("updater.installedReopen");
+    } else {
+      setApplicationUpdateStatus("error");
+      setApplicationUpdateMessage("updater.installFailed", { ERROR: updateErrorDetail(error) });
+    }
     if (pendingTauriUpdate === update) {
       pendingTauriUpdate = null;
       try { await update.close(); } catch { /* installation failure cleanup is best-effort */ }
     }
-    setApplicationUpdateAction(null);
   } finally {
     updateInstallInProgress = false;
     aboutCheckUpdatesButton.disabled = false;
     headerCheckUpdatesButton.disabled = false;
-    if (updateInstalledAwaitingRelaunch) setApplicationUpdateAction("reopen");
-    else if (pendingTauriUpdate) setApplicationUpdateAction("install");
-    else setApplicationUpdateAction(null);
+    if (updateInstalledAwaitingRelaunch) {
+      setApplicationUpdateStatus("restart-required");
+      setApplicationUpdateMessage("updater.installedReopen");
+    } else if (pendingTauriUpdate) {
+      setApplicationUpdateStatus("available");
+    }
   }
 }
 
@@ -3008,7 +3197,7 @@ function showApplicationUpdates(navigateToSettings: boolean) {
     else setAppView("settings");
   }
   setApplicationUpdatePanelOpen(true);
-  void checkForApplicationUpdates();
+  void checkForApplicationUpdates(true);
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const destination = navigateToSettings
     ? applicationUpdatePanel.closest<HTMLElement>(".about-card")
@@ -3050,20 +3239,34 @@ void listen("rdt-connect-open-about", () => {
 }).catch(() => undefined);
 
 void listen("rdt-connect-check-updates", () => {
-  void checkForApplicationUpdates();
+  void checkForApplicationUpdates(true);
 }).catch(() => undefined);
 void listen("rdt-connect-update-window-ready", () => {
   publishUpdateWindowState();
-  void checkForApplicationUpdates();
+  if (
+    canRunAutomaticUpdateCheck() &&
+    (
+      updateStatus === "idle" ||
+      updateStatus === "up-to-date" ||
+      updateStatus === "error" ||
+      updateStatus === "offline"
+    )
+  ) {
+    void checkForApplicationUpdates();
+  }
+}).catch(() => undefined);
+
+void listen("rdt-connect-update-window-state-request", () => {
+  publishUpdateWindowState();
 }).catch(() => undefined);
 void listen("rdt-connect-update-check-request", () => {
-  void checkForApplicationUpdates();
+  void checkForApplicationUpdates(true);
 }).catch(() => undefined);
 void listen("rdt-connect-update-install-request", () => {
   void installAvailableApplicationUpdate();
 }).catch(() => undefined);
 void listen("rdt-connect-update-relaunch-request", () => {
-  void installAvailableApplicationUpdate();
+  if (updateInstalledAwaitingRelaunch) void installAvailableApplicationUpdate();
 }).catch(() => undefined);
 void listen("rdt-connect-app-restart-request", async () => {
   try { await relaunch(); } catch (error) {
@@ -3080,11 +3283,20 @@ try {
 }
 autoCheckUpdatesToggle.addEventListener("change", () => {
   try { localStorage.setItem(AUTO_CHECK_UPDATES_KEY, String(autoCheckUpdatesToggle.checked)); } catch { /* preference remains session-local if storage is unavailable */ }
-  if (autoCheckUpdatesToggle.checked) void checkForApplicationUpdates();
+  if (!autoCheckUpdatesToggle.checked && updateCheckInFlight && !updateCheckInFlightManual) {
+    updateCheckGeneration += 1;
+    updateCheckInFlight = null;
+    updateCheckInFlightManual = false;
+  }
+  if (canRunAutomaticUpdateCheck()) void checkForApplicationUpdates();
 });
+if (canRunAutomaticUpdateCheck()) void checkForApplicationUpdates();
 window.setInterval(() => {
-  if (autoCheckUpdatesToggle.checked) void checkForApplicationUpdates();
+  if (canRunAutomaticUpdateCheck()) void checkForApplicationUpdates();
 }, 30 * 60 * 1000);
+window.addEventListener("online", () => {
+  if (canRunAutomaticUpdateCheck()) void checkForApplicationUpdates();
+});
 void refreshAppBuildInfo();
 
 const legalLinkRoutes: Array<[string, string]> = [
@@ -3105,10 +3317,32 @@ for (const [id, kind] of legalLinkRoutes) {
   });
 }
 
+async function launchRdtVoice() {
+  showNotice(translateKey("msg.checking_the_local_server_and_authentication.0c0d87a2", {}, getActiveLocale()), "info");
+  await refreshConnectionStatus();
+  if (!browserPreflightPassed()) throw new Error(`RDT Voice was not opened. ${browserPreflightFailure()}`);
+
+  const browserId = browserSelect.value || "default";
+  const browserName = browserSelect.selectedOptions[0]?.textContent?.trim() || "System Default Browser";
+  showNotice(translateKey("msg.local_server_and_authentication_passed_openi.9683dd3b", { browserName: browserName }, getActiveLocale()), "info");
+
+  const usingOfflineCopy = await invoke<boolean>("open_voice_window", {
+    browserId,
+    locale: getActiveLocale(),
+    offlineOnlyMode: offlineOnlyModeEnabled,
+  });
+
+  if (usingOfflineCopy) {
+    showNotice("Using offline RDT Voice.", "good");
+  } else {
+    showNotice(translateKey("msg.rdt_voice_opened_in_browsername_the_local_se.0dba2a99", { browserName: browserName }, getActiveLocale()), "good");
+  }
+}
+
 if (brandHomeLink) brandHomeLink.addEventListener("click", async (event) => {
   event.preventDefault();
-  try { await invoke("open_about_link", { kind: "website", locale: getActiveLocale() }); }
-  catch (error) { showNotice(`Could not open the RDT Voice website: ${String(error)}`, "error"); }
+  try { await runAction(launchRdtVoice); }
+  catch (error) { showNotice(`Could not open RDT Voice: ${String(error)}`, "error"); }
 });
 aboutInstallationGuideButton.addEventListener("click", async () => {
   try {
@@ -3121,29 +3355,20 @@ aboutYoutubeButton.addEventListener("click", async () => {
   try {
     await invoke("open_youtube_channel");
   } catch (error) {
-    showNotice(`Could not open the YouTube channel: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_open_the_youtube_channel_error.df324c0a", { error: String(error) }, getActiveLocale()), "error");
   }
 });
 aboutCompanyLink.addEventListener("click", async (event) => {
   event.preventDefault();
   try { await invoke("open_about_link", { kind: "github", locale: getActiveLocale() }); }
-  catch (error) { showNotice(`Could not open the company GitHub page: ${String(error)}`, "error"); }
+  catch (error) { showNotice(translateKey("msg.could_not_open_the_company_github_page_error.fa492006", { error: String(error) }, getActiveLocale()), "error"); }
 });
 aboutBusinessContactLink.addEventListener("click", async (event) => {
   event.preventDefault();
   try { await invoke("open_about_link", { kind: "email", locale: getActiveLocale() }); }
-  catch (error) { showNotice(`Could not open the business contact email: ${String(error)}`, "error"); }
+  catch (error) { showNotice(translateKey("msg.could_not_open_the_business_contact_email_er.7af3d7e8", { error: String(error) }, getActiveLocale()), "error"); }
 });
-openButton.addEventListener("click", async () => runAction(async () => {
-  showNotice("Checking the local server and authentication before opening RDT Voice…", "info");
-  await refreshConnectionStatus();
-  if (!browserPreflightPassed()) throw new Error(`RDT Voice was not opened. ${browserPreflightFailure()}`);
-  const browserId = browserSelect.value || "default";
-  const browserName = browserSelect.selectedOptions[0]?.textContent?.trim() || "System Default Browser";
-  showNotice(`Local server and authentication passed. Opening RDT Voice in ${browserName}…`, "info");
-  await invoke("open_voice_window", { browserId, locale: getActiveLocale() });
-  showNotice(`RDT Voice opened in ${browserName}. The local server and authentication preflight passed.`, "good");
-}));
+openButton.addEventListener("click", async () => runAction(launchRdtVoice));
 refreshRemoteButton.addEventListener("click", async () => runAction(async () => {
   await refreshRemoteStatus(true); await refreshDeviceLists();
 }));
@@ -3151,7 +3376,7 @@ setupRemoteButton.addEventListener("click", async () => runAction(async () => {
   tailscale = await invoke<TailscaleStatus>("enable_private_access");
   renderRemoteStatus();
   await refreshDeviceLists();
-  showNotice(tailscale.message || "Private access checked.", tailscale.ready ? "good" : "info");
+  showNotice(tailscale.message || translateKey("msg.private_access_checked.37fb07fe", {}, getActiveLocale()), tailscale.ready ? "good" : "info");
 }));
 generateQrButton.addEventListener("click", async () => runAction(async () => {
   // Seed the request-ID baseline before generating a fresh single-use QR.
@@ -3161,15 +3386,15 @@ generateQrButton.addEventListener("click", async () => runAction(async () => {
   qrImage.src = pairingQr.qrDataUrl; qrImage.classList.remove("hidden", "expired"); qrPlaceholder.classList.add("hidden");
   qrExpandedImage.classList.remove("expired");
   copyLinkButton.disabled = !pairingQr.pairingUrl;
-  qrStatus.textContent = "Scan with the browser you want to authorize. Scanning alone grants no access; approve the request below.";
+  qrStatus.textContent = translateKey("msg.scan_with_the_browser_you_want_to_authorize.2592ea26", {}, getActiveLocale());
   qrStatus.classList.remove("hidden");
   updateQrCountdown(); await refreshDeviceLists(); startRemotePolling();
-  showNotice("Single-use QR created. It expires in 60 seconds.", "good");
+  showNotice(translateKey("msg.single_use_qr_created_it_expires_in_60_secon.4e18379a", {}, getActiveLocale()), "good");
 }));
 copyLinkButton.addEventListener("click", async () => {
   if (!pairingQr?.pairingUrl || !pairingQrUsable()) return;
   try { await navigator.clipboard.writeText(pairingQr.pairingUrl); showButtonFeedback(copyLinkButton); }
-  catch { showNotice("Clipboard access was unavailable. Scan the QR instead.", "error"); }
+  catch { showNotice(translateKey("msg.clipboard_access_was_unavailable_scan_the_qr.ee918950", {}, getActiveLocale()), "error"); }
 });
 
 function markPairingQrUsed() {
@@ -3177,7 +3402,7 @@ function markPairingQrUsed() {
   pairingQrConsumed = true;
   qrImage.classList.add("expired");
   qrExpandedImage.classList.add("expired");
-  qrCountdown.textContent = "QR expired\nGenerate a new one below.";
+  qrCountdown.textContent = translateKey("msg.qr_expired_generate_a_new_one_below.f21385bd", {}, getActiveLocale());
   qrExpandedCountdown.textContent = qrCountdown.textContent;
   qrStatus.textContent = "";
   qrStatus.classList.add("hidden");
@@ -3188,7 +3413,7 @@ function updateQrCountdown() {
   if (!pairingQr) { qrCountdown.textContent = ""; qrExpandedCountdown.textContent = ""; return; }
   if (pairingQrConsumed) { markPairingQrUsed(); return; }
   const remaining = Math.max(0, Math.ceil(pairingQr.expiresAt - Date.now() / 1000));
-  qrCountdown.textContent = remaining ? `Expires in ${remaining}s` : "QR expired\nGenerate a new one below.";
+  qrCountdown.textContent = remaining ? translateKey("msg.expires_in_remaining_s.75000b68", { remaining: remaining }, getActiveLocale()) : "QR expired\nGenerate a new one below.";
   qrExpandedCountdown.textContent = qrCountdown.textContent;
   if (remaining === 0) {
     qrImage.classList.add("expired"); qrExpandedImage.classList.add("expired");
@@ -3205,7 +3430,7 @@ function updateQrCountdown() {
 }
 function openExpandedQr() {
   if (!pairingQr?.qrDataUrl || !pairingQrUsable()) {
-    showNotice("Generate a fresh QR after private access is ready.", "warning");
+    showNotice(translateKey("msg.generate_a_fresh_qr_after_private_access_is.914d36e5", {}, getActiveLocale()), "warning");
     return;
   }
   qrExpandedImage.src = pairingQr.qrDataUrl;
@@ -3219,10 +3444,10 @@ function closeExpandedQr() {
 }
 expandQrButton.addEventListener("click", openExpandedQr);
 qrImage.addEventListener("click", openExpandedQr);
-qrImage.setAttribute("title", "Click to expand this QR code");
+qrImage.setAttribute("title", translateKey("msg.click_to_expand_this_qr_code.d2efe14c", {}, getActiveLocale()));
 qrImage.setAttribute("role", "button");
 qrImage.setAttribute("tabindex", "0");
-qrImage.setAttribute("aria-label", "Expand the pairing QR code");
+qrImage.setAttribute("aria-label", translateKey("msg.expand_the_pairing_qr_code.e1ce2439", {}, getActiveLocale()));
 qrImage.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openExpandedQr(); }
 });
@@ -3250,7 +3475,7 @@ keepInMenuBarInput.addEventListener("change", async () => {
       ? "The RDT Connect menu-bar icon is now visible. Closing the window hides it there."
       : "The menu-bar icon is hidden. Closing the window will quit RDT Connect and stop its managed server.", "info");
   } catch (error) {
-    showNotice(`Could not save the menu-bar preference: ${String(error)}`, "error");
+    showNotice(translateKey("msg.could_not_save_the_menu_bar_preference_error.cf3a5e22", { error: String(error) }, getActiveLocale()), "error");
     keepInMenuBarInput.checked = !keepInMenuBarInput.checked;
   } finally { keepInMenuBarInput.disabled = false; }
 });
@@ -3284,3 +3509,110 @@ setInterval(() => {
     void refreshLocalHttpsStatus();
   }
 }, 15_000);
+
+/* RDT_LANGUAGE_REFRESH_FOR_DYNAMIC_UI_BEGIN */
+window.addEventListener("rdt-connect-language-changed", () => {
+  // Re-render stateful labels from stable catalog keys after the full DOM locale pass.
+  renderBackendStatus();
+
+  const tokenIsVisible = tokenDisplay.type === "text";
+  toggleTokenButton.textContent = translateKey(
+    tokenIsVisible ? "msg.hide.ac20a57b" : "msg.show.0df6f1ca",
+    {},
+    getActiveLocale(),
+  );
+  toggleTokenButton.setAttribute(
+    "aria-label",
+    translateKey(
+      tokenIsVisible
+        ? "msg.hide_the_access_token.9d4c7fa3"
+        : "msg.reveal_the_access_token.c51590dd",
+      {},
+      getActiveLocale(),
+    ),
+  );
+
+  renderRemoteStatus();
+  if (currentLocalHttps) renderLocalHttpsStatus(currentLocalHttps);
+  syncDeveloperToggleButton();
+  updateAppLanguageStatus();
+  updateRdtVoiceHomeLinkLocale();
+
+  // The notice is dynamically written as translated text, so refresh only
+  // known status messages; do not rewrite arbitrary diagnostic/error messages.
+  const noticeKeys = [
+    "msg.developer_tools_enabled.dc8a294c",
+    "msg.ready_to_connect.5802ac49",
+  ];
+  const localeChoices = getLocaleChoices();
+  const matchesKey = (text: string, key: string) =>
+    localeChoices.some((choice) =>
+      translateKey(key, {}, choice.code) === text
+    );
+
+  const currentNotice = notice.textContent ?? "";
+  const matchedNoticeKey = noticeKeys.find((key) =>
+    matchesKey(currentNotice, key)
+  );
+
+  if (matchedNoticeKey) {
+    notice.textContent = translateKey(matchedNoticeKey, {}, getActiveLocale());
+  }
+
+  const detail = document.getElementById("developer-latest-detail");
+  if (detail) {
+    const currentDetail = detail.textContent ?? "";
+    const matchedDetailKey = noticeKeys.find((key) =>
+      matchesKey(currentDetail, key)
+    );
+    if (matchedDetailKey) {
+      detail.textContent = translateKey(matchedDetailKey, {}, getActiveLocale());
+    }
+  }
+});
+/* RDT_LANGUAGE_REFRESH_FOR_DYNAMIC_UI_END */
+
+/* RDT_LOCAL_TRAY_ICON_TEST_BEGIN — hidden manual toggle from Developer Options */
+
+const panel = document.createElement("div");
+  panel.id = "rdt-local-tray-icon-test";
+  panel.style.cssText =
+    "position:fixed;z-index:999999;right:16px;top:16px;padding:14px;" +
+    "background:#101820;color:#f8fafc;border:3px solid #f0c75e;border-radius:12px;" +
+    "box-shadow:0 8px 30px rgba(0,0,0,.65);display:none;gap:8px;flex-wrap:wrap;" +
+    "max-width:360px;font:600 13px system-ui,sans-serif";
+  panel.innerHTML = "<strong style='width:100%;font-size:14px;color:#f0c75e'>LOCAL TRAY ICON TEST — DEV ONLY</strong>";
+
+  const addButton = (label: string, status: UpdateStatus) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.style.cssText = "padding:8px 10px;border:2px solid #64748b;border-radius:7px;background:#f8fafc;color:#111827;font-weight:800;cursor:pointer";
+    button.onclick = () => setApplicationUpdateStatus(status);
+    panel.appendChild(button);
+  };
+
+  addButton("Update available ↓", "available");
+  addButton("Restart required ↑", "restart-required");
+  addButton("Normal icon", "idle");
+  document.body.appendChild(panel);
+
+  const phraseInput = document.querySelector<HTMLInputElement>("#tray-test-phrase");
+  const phraseStatus = document.querySelector<HTMLElement>("#tray-test-phrase-status");
+
+  phraseInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+
+    if (phraseInput.value.trim().toLowerCase() !== "tray test") {
+      if (phraseStatus) phraseStatus.textContent = "Not recognized";
+      return;
+    }
+
+    const showing = panel.style.display !== "none";
+    panel.style.display = showing ? "none" : "flex";
+    phraseInput.value = "";
+    if (phraseStatus) phraseStatus.textContent = showing ? "Hidden" : "Shown";
+  });
+
+/* RDT_LOCAL_TRAY_ICON_TEST_END */

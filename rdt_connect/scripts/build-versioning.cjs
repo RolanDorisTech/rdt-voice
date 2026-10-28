@@ -14,10 +14,10 @@ function decodeBuildVersion(version) {
   const parsed = parseVersion(version);
   const ids = parsed.prerelease.map(String);
 
-  // Current format: the entire four-character marker is one identifier.
+  // Current format: the entire platform marker is one contiguous identifier.
   if (ids.length >= 2) {
     const marker = ids.at(-1);
-    if (/^[0-9][A-Z][0-9]{2}$/.test(marker)) {
+    if (/^(?:[1-3][A-Z][0-9]{2}|[45]L[0-9]{3})$/.test(marker)) {
       const baseIds = ids.slice(0, -1);
       return {
         baseVersion: `${parsed.major}.${parsed.minor}.${parsed.patch}-${baseIds.join(".")}`,
@@ -47,8 +47,8 @@ function decodeBuildVersion(version) {
 }
 
 function withBuildMarker(baseVersion, marker) {
-  if (!/^[0-9][A-Z][0-9]{2}$/.test(marker)) {
-    throw new Error(`Invalid build marker: ${marker}. Expected exactly four characters.`);
+  if (!/^(?:[1-3][A-Z][0-9]{2}|[45]L[0-9]{3})$/.test(marker)) {
+    throw new Error(`Invalid build marker: ${marker}. Expected a valid platform-specific marker format.`);
   }
 
   const parsedInput = parseVersion(baseVersion);

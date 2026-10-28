@@ -97,7 +97,7 @@ def main():
     for k,expected_class in expected_classes.items():
         if bykey.get(k,{}).get('classification')!=expected_class: print(f'FAIL: classification mismatch {k}; expected {expected_class}'); errors+=1
     if args.english_only:
-        expected={'TRANSLATE':759,'KEEP_ENGLISH':122}
+        expected={'TRANSLATE':868,'KEEP_ENGLISH':122}
         actual={}
         for row in rows: actual[row['classification']]=actual.get(row['classification'],0)+1
         if actual!=expected: print(f'FAIL: classification totals {actual}; expected {expected}'); errors+=1

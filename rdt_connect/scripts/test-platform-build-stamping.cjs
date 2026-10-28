@@ -14,7 +14,7 @@ function fixtureRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "rdt-build-stamp-test-"));
   for (const relative of ["scripts", "src-tauri"]) fs.mkdirSync(path.join(root, relative), { recursive: true });
   fs.writeFileSync(path.join(root, "scripts/build-id-sequence-windows.txt"), "2A01\n");
-  fs.writeFileSync(path.join(root, "scripts/build-id-sequence-linux.txt"), "4U01\n");
+  fs.writeFileSync(path.join(root, "scripts/build-id-sequence-linux.txt"), "4L001\n");
   fs.writeFileSync(path.join(root, "scripts/build-id-sequence.txt"), "1D01\n");
   const packageJson = { name: "rdt-connect-desktop", version: originalVersion, dependencies: {}, devDependencies: {} };
   fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);

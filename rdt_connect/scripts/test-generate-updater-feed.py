@@ -15,8 +15,8 @@ class FeedValidationTests(unittest.TestCase):
             ("0.2.0-dev.11.1D01", "darwin-aarch64"),
             ("0.2.0-dev.11.2A05", "windows-aarch64"),
             ("0.2.0-dev.11.3A01", "windows-x86_64"),
-            ("0.2.0-dev.11.4U01", "linux-aarch64"),
-            ("0.2.0-dev.11.5U01", "linux-x86_64"),
+            ("0.2.0-dev.11.4L001", "linux-aarch64"),
+            ("0.2.0-dev.11.5L001", "linux-x86_64"),
         ]
         for version, target in cases:
             with self.subTest(version=version, target=target):
@@ -29,8 +29,8 @@ class FeedValidationTests(unittest.TestCase):
         cases = [
             ("0.2.0-dev.11.2A05", "darwin-aarch64"),
             ("0.2.0-dev.11.3A01", "windows-aarch64"),
-            ("0.2.0-dev.11.4U01", "windows-x86_64"),
-            ("0.2.0-dev.11.5U01", "linux-aarch64"),
+            ("0.2.0-dev.11.4L001", "windows-x86_64"),
+            ("0.2.0-dev.11.5L001", "linux-aarch64"),
         ]
         for version, target in cases:
             with self.subTest(version=version, target=target):

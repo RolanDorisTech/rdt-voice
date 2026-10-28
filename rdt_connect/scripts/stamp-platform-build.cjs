@@ -7,9 +7,9 @@ const path = require("node:path");
 
 const ROOT = path.resolve(process.env.RDT_STAMP_ROOT || path.resolve(__dirname, ".."));
 const MARKERS = {
-  macos: { file: "build-id-sequence.txt", allowed: /^[01][A-Z]\d{2}$/ },
+  macos: { file: "build-id-sequence.txt", allowed: /^1[A-Z]\d{2}$/ },
   windows: { file: "build-id-sequence-windows.txt", allowed: /^[23][A-Z]\d{2}$/ },
-  linux: { file: "build-id-sequence-linux.txt", allowed: /^[45][A-Z]\d{2}$/ },
+  linux: { file: "build-id-sequence-linux.txt", allowed: /^[45]L\d{3}$/ },
 };
 
 function die(message) {
@@ -68,7 +68,7 @@ function baseVersion(version) {
   // Support legacy versions (... .2A.5) and whole-marker versions
   // (... .2A05). The build marker remains one indivisible identifier.
   const legacy = /^(.*)\.([0-9][A-Z])\.(0|[1-9][0-9]*)$/.exec(version);
-  const wholeMarker = /^(.*)\.([0-9][A-Z][0-9]{2})$/.exec(version);
+  const wholeMarker = /^(.*)\.((?:[1-3][A-Z][0-9]{2}|[45]L[0-9]{3}))$/.exec(version);
   const match = legacy || wholeMarker;
   if (!match ||
       !/^\d+\.\d+\.\d+-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)$/.test(match[1])) {

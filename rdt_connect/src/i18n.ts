@@ -98,14 +98,19 @@ function translatedFromMatch(match: Match, targetLocale: string): string | null 
   const target = catalogs.get(targetLocale)?.messages[match.key];
   return typeof target === "string" ? interpolate(target, match.params) : null;
 }
-function translateRaw(value: string, targetLocale: string, sourceHint?: string): string {
+function translateRaw(
+  value: string,
+  targetLocale: string,
+  sourceHint?: string,
+  knownEnglishMatch?: Match | null,
+): string {
   if (!value) return value;
-  const englishMatch = findMatch("en", sourceHint ?? value);
+  const englishMatch = knownEnglishMatch === undefined
+    ? findMatch("en", sourceHint ?? value)
+    : knownEnglishMatch;
   if (englishMatch) return translatedFromMatch(englishMatch, targetLocale) ?? (sourceHint ?? value);
-  // Existing translated DOM nodes can be remapped from the locale that rendered them.
-  // The original-node weak maps are preferred, avoiding ambiguous reverse lookups.
-  const previousMatch = activeLocale !== "en" ? findMatch(activeLocale, value) : null;
-  if (previousMatch) return translatedFromMatch(previousMatch, targetLocale) ?? value;
+  // Never infer source text by reverse-matching a previous translation.
+  // Translated nodes are restored through their saved English originals.
   return value;
 }
 function shouldIgnoreElement(element: Element | null): boolean {
@@ -126,22 +131,39 @@ function localizeTextNode(node: Text, targetLocale: string): void {
   const parts = splitWhitespace(raw);
   if (!parts.core) return;
   const priorOriginal = originalText.get(node);
-  const currentIsEnglish = !!findMatch("en", parts.core);
+  const currentEnglishMatch = findMatch("en", parts.core);
+  const currentIsEnglish = !!currentEnglishMatch;
   const source = currentIsEnglish ? parts.core : (priorOriginal ?? parts.core);
-  const translated = translateRaw(parts.core, targetLocale, source);
+  const englishMatch = currentIsEnglish
+    ? currentEnglishMatch
+    : priorOriginal !== undefined ? findMatch("en", priorOriginal) : null;
+  const translated = translateRaw(parts.core, targetLocale, source, englishMatch);
   if (translated !== parts.core) {
     originalText.set(node, source);
     node.nodeValue = parts.leading + translated + parts.trailing;
   } else if (currentIsEnglish || priorOriginal !== undefined) {
     originalText.set(node, source);
-  } else if (activeLocale !== "en") {
-    const priorMatch = findMatch(activeLocale, parts.core);
-    if (priorMatch) originalText.set(node, interpolate(english!.messages[priorMatch.key] ?? source, priorMatch.params));
   }
 }
 const TRANSLATABLE_ATTRIBUTES = ["title", "aria-label", "aria-description", "aria-roledescription", "placeholder", "alt", "data-tooltip"];
 function localizeAttribute(element: Element, name: string, targetLocale: string): void {
   if (shouldIgnoreElement(element) || name === "data-l10n-rich") return;
+
+  // Explicit attribute keys take precedence over reverse matching.
+  const keyedAttributes = element.getAttribute("data-l10n-attr-keys");
+  if (keyedAttributes) {
+    try {
+      const mapping = JSON.parse(keyedAttributes) as Record<string, unknown>;
+      const key = mapping[name];
+      if (typeof key === "string" && key) {
+        element.setAttribute(name, translateKey(key, {}, targetLocale));
+        return;
+      }
+    } catch {
+      // Ignore malformed metadata and preserve the legacy localization path.
+    }
+  }
+
   const raw = element.getAttribute(name);
   if (raw === null || !raw.trim()) return;
   let byName = originalAttributes.get(element);
@@ -155,14 +177,19 @@ function localizeAttribute(element: Element, name: string, targetLocale: string)
     element.setAttribute(name, translated);
   } else if (currentIsEnglish || prior !== undefined) {
     byName.set(name, source);
-  } else if (activeLocale !== "en") {
-    const previous = findMatch(activeLocale, raw);
-    if (previous) byName.set(name, interpolate(english!.messages[previous.key] ?? source, previous.params));
   }
 }
 function localizeSubtree(node: Node, targetLocale: string): void {
   if (node.nodeType === Node.TEXT_NODE) { localizeTextNode(node as Text, targetLocale); return; }
   if (!(node instanceof Element) || shouldIgnoreElement(node)) return;
+
+  // Explicit keys are resolved directly, never inferred from translated text.
+  const localizationKey = node.getAttribute("data-l10n-key");
+  if (localizationKey) {
+    node.textContent = translateKey(localizationKey, {}, targetLocale);
+    return;
+  }
+
   for (const name of TRANSLATABLE_ATTRIBUTES) localizeAttribute(node, name, targetLocale);
   if (node instanceof HTMLElement && node.hasAttribute("data-l10n-rich")) {
     renderRichMessage(node, targetLocale);
@@ -254,30 +281,69 @@ export function initializeLocalization(): string {
   try { saved = localStorage.getItem(PREFERENCE_KEY) || ""; } catch { /* Browser storage may be unavailable. */ }
   activeLocale = catalogs.has(saved) ? saved : detectSystemLocale();
   localizeDocument(activeLocale);
-  observer = new MutationObserver((records) => {
-    if (!document.body) return;
-    for (const record of records) {
-      const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      if (shouldIgnoreElement(target) || inRichMessage(target)) continue;
-      if (record.type === "characterData" && record.target instanceof Text) {
-        localizeTextNode(record.target, activeLocale);
-      } else if (record.type === "attributes" && record.target instanceof Element && record.attributeName && TRANSLATABLE_ATTRIBUTES.includes(record.attributeName)) {
-        localizeAttribute(record.target, record.attributeName, activeLocale);
-      } else if (record.type === "childList") {
-        for (const added of Array.from(record.addedNodes)) localizeSubtree(added, activeLocale);
-      } else if (record.type === "attributes" && record.target instanceof HTMLElement && record.attributeName === "data-l10n-rich") {
-        renderRichMessage(record.target, activeLocale);
+  const observerOptions: MutationObserverInit = {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: [...TRANSLATABLE_ATTRIBUTES, "data-l10n-rich", "data-l10n-key"],
+  };
+  if (typeof MutationObserver !== "undefined" && document.documentElement) {
+    observer = new MutationObserver((records) => {
+      // Ignore mutations caused by localization itself.
+      observer?.disconnect();
+      try {
+        for (const record of records) {
+          if (record.type === "characterData" && record.target instanceof Text) {
+            localizeTextNode(record.target, activeLocale);
+          } else if (record.type === "childList") {
+            for (const node of Array.from(record.addedNodes)) {
+              localizeSubtree(node, activeLocale);
+            }
+          } else if (record.type === "attributes" && record.target instanceof Element) {
+            const name = record.attributeName;
+            if (name === "data-l10n-rich" && record.target instanceof HTMLElement) {
+              richRenderedLocale.delete(record.target);
+              renderRichMessage(record.target, activeLocale);
+            } else if (name === "data-l10n-key") {
+              localizeSubtree(record.target, activeLocale);
+            } else if (name && TRANSLATABLE_ATTRIBUTES.includes(name)) {
+              localizeAttribute(record.target, name, activeLocale);
+            }
+          }
+        }
+      } finally {
+        if (document.documentElement) {
+          observer?.observe(document.documentElement, observerOptions);
+        }
       }
-    }
-  });
-  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...TRANSLATABLE_ATTRIBUTES, "data-l10n-rich"] });
+    });
+    observer.observe(document.documentElement, observerOptions);
+  }
   return activeLocale;
 }
 export function setActiveLocale(locale: string, persist = false): string {
   const normalized = catalogs.has(locale) ? locale : "en";
   if (!initialized) initializeLocalization();
-  localizeDocument(normalized);
   activeLocale = normalized;
+  if (observer) {
+    // A full locale pass rewrites many observed nodes. Suspend observation so
+    // those writes cannot feed back into repeated translation matching.
+    observer.disconnect();
+    try {
+      localizeDocument(normalized);
+    } finally {
+      observer.observe(document.documentElement, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: [...TRANSLATABLE_ATTRIBUTES, "data-l10n-rich", "data-l10n-key"],
+      });
+    }
+  } else {
+    localizeDocument(normalized);
+  }
   if (persist) {
     try { localStorage.setItem(PREFERENCE_KEY, normalized); } catch { /* Preference is optional. */ }
   }
@@ -286,6 +352,39 @@ export function setActiveLocale(locale: string, persist = false): string {
   window.dispatchEvent(new CustomEvent("rdt-connect-language-changed", { detail: { locale: normalized } }));
   return normalized;
 }
+/**
+ * Render dynamic UI from a stable catalog key.
+ * Prefer this over translating previously rendered text.
+ */
+export function setLocalizedText(
+  element: HTMLElement,
+  key: string,
+  params: Record<string, string | number> = {},
+): void {
+  element.dataset.l10nKey = key;
+  element.textContent = translateKey(key, params, activeLocale);
+}
+
+/** Render a translatable attribute from a stable catalog key. */
+export function setLocalizedAttribute(
+  element: HTMLElement,
+  attribute: string,
+  key: string,
+  params: Record<string, string | number> = {},
+): void {
+  const allowed = ["title", "aria-label", "aria-description",
+    "aria-roledescription", "placeholder", "alt", "data-tooltip"];
+  if (!allowed.includes(attribute)) {
+    throw new Error(`Unsupported localized attribute: ${attribute}`);
+  }
+
+  let keys = element.dataset.l10nAttrKeys;
+  const mapping: Record<string, string> = keys ? JSON.parse(keys) : {};
+  mapping[attribute] = key;
+  element.dataset.l10nAttrKeys = JSON.stringify(mapping);
+  element.setAttribute(attribute, translateKey(key, params, activeLocale));
+}
+
 export function getActiveLocale(): string { return activeLocale; }
 export function getLocaleChoices(): Array<{ code: string; languageName: string }> {
   return LANGUAGE_ORDER.filter((code) => catalogs.has(code)).map((code) => ({ code, languageName: catalogs.get(code)!._meta.languageName }));

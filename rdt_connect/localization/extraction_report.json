@@ -15,10 +15,10 @@
     "src/style.css": "76a8fdd06fc71d7d512e7c2e7bb7d57ee39def413454cc7522c414306baf913b",
     "src-tauri/src/main.rs": "add00ee69b4372fa175c4b6ff7d31bdea9e0bb4318eebcef403d36397f2e6fe5"
   },
-  "messageCount": 881,
+  "messageCount": 990,
   "classificationCounts": {
     "KEEP_ENGLISH": 122,
-    "TRANSLATE": 759
+    "TRANSLATE": 868
   },
   "messagesWithNamedPlaceholders": 298,
   "distinctPlaceholderNames": 126,
@@ -80,7 +80,42 @@
     "remoteAccess.vpnRequirement",
     "settings.language.activeStatus",
     "settings.modelStorage.cacheHomeHelp",
-    "settings.security.existingCertificateHelp"
+    "settings.security.existingCertificateHelp",
+    {
+      "key": "msg.permanently_delete_only_these_selected_rdt_connect_mlx_model_caches_models_unselected_models_other_hugging_face_repositories_and_easywhisper_browser_data_will_remain_untouched.4235eebe",
+      "english": "Permanently delete only these selected RDT Connect MLX model caches?\n\n{models}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.add_the_rdt_connect_local_root_ca_to_this_computer_s_system_trust_store_your_system_will_ask_for_administrator_authorization_the_ca_is_restricted_to_localhost_127_0_0_1_and_1_and_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later_firefox_and_chrome_chromium_may_keep_separate_certificate_stores_and_are_not_changed.50cb7d5d",
+      "english": "Add the RDT Connect local root CA to this computer's system trust store? Your system will ask for administrator authorization. The CA is restricted to localhost, 127.0.0.1 and ::1, and RDT Connect records its exact fingerprint so it can remove only this entry later. Firefox and Chrome/Chromium may keep separate certificate stores and are not changed.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.add_the_rdt_connect_local_root_ca_to_the_windows_current_user_certificate_trust_store_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later.15d3811e",
+      "english": "Add the RDT Connect local root CA to the Windows current-user certificate trust store? RDT Connect records its exact fingerprint so it can remove only this entry later.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.ed4f1479",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.48ac1519",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.52dd3e5b",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.6e6bda5a",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    }
   ],
   "resolvedMissingSourceRows": [
     "src/main.ts:171 replaced by settings.language.activeStatus; obsolete HTML selector title removed."
@@ -96,9 +131,9 @@
     "The native RDT Voice resource folder and ~/dev/rdt-voice browser project are outside this patch scope.",
     "V10 consistency correction: keyMigrationReportSha256 is recalculated from the exact packaged key_migration_report.json; validator and installer cross-check all four catalog metadata hashes."
   ],
-  "englishCatalogSha256": "ee4833815b195b3e83450bac29ae0cd0ada9457219f2cc878d729466fc36ef42",
-  "inventorySha256": "8ddb7729770d02e21405c5e6eacb695e20ca86aa3746627020937289e52da8d0",
-  "sourceMapSha256": "a7ef8e75ec4c9599f80663a04ff7d0b3e304c9f3c9ebc7a48f3d83a4d909ec6d",
+  "englishCatalogSha256": "9030d60a4eb7457830010078ac125e3045d84f01c58020009e7c29be78e7da23",
+  "inventorySha256": "a4a51eb813f5189c0fae106b81bc5547757015065fe8e41c81ee47aceda8a8fa",
+  "sourceMapSha256": "eef46c0eb2d4eb89aa194684bf9e883f21b213ef3f48041035c832b184ead3db",
   "v6SemanticPlaceholderFixes": {
     "msg.tcp_port_listener_pid_s_arg1_arg2.41f3d3b1": "TCP {port} listener process IDs: {listener_pids}. Port owner details: {port_owner_details}",
     "msg.backend_pid_stopped_pid_was_stopped_but_port.9c4659af": "Backend PID {stopped_pid} was stopped, but port {port} is still occupied by these listener process IDs: {listener_pids}. RDT Connect did not stop any other processes. {port_owner_details}",
@@ -172,5 +207,5 @@
     "zipAndPayloadChecksums": "PASS — ZIP integrity and all listed payload/helper SHA-256 entries verified.",
     "rustTauriBuild": "NOT RUN here; requires native macOS build after the user applies the guarded patch."
   },
-  "keyMigrationReportSha256": "7ae795613f59b2ec4b4f7a70ee3dcba252ad0f7b01c4917b3c20c3cf72c956fe"
+  "keyMigrationReportSha256": "577faa9a7c10c4e5d69ce00dc7eed727026efdbc03ac10d2fd2037c167d15ad1"
 }

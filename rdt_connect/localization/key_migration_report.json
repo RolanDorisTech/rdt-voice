@@ -1,6 +1,6 @@
 {
   "previousCatalogKeys": 902,
-  "activeCatalogKeys": 881,
+  "activeCatalogKeys": 989,
   "excludedImplementationKeys": 16,
   "retiredFragmentKeys": 10,
   "newSemanticKeys": [
@@ -8,13 +8,48 @@
     "remoteAccess.vpnRequirement",
     "settings.language.activeStatus",
     "settings.modelStorage.cacheHomeHelp",
-    "settings.security.existingCertificateHelp"
+    "settings.security.existingCertificateHelp",
+    {
+      "key": "msg.permanently_delete_only_these_selected_rdt_connect_mlx_model_caches_models_unselected_models_other_hugging_face_repositories_and_easywhisper_browser_data_will_remain_untouched.4235eebe",
+      "english": "Permanently delete only these selected RDT Connect MLX model caches?\n\n{models}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.add_the_rdt_connect_local_root_ca_to_this_computer_s_system_trust_store_your_system_will_ask_for_administrator_authorization_the_ca_is_restricted_to_localhost_127_0_0_1_and_1_and_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later_firefox_and_chrome_chromium_may_keep_separate_certificate_stores_and_are_not_changed.50cb7d5d",
+      "english": "Add the RDT Connect local root CA to this computer's system trust store? Your system will ask for administrator authorization. The CA is restricted to localhost, 127.0.0.1 and ::1, and RDT Connect records its exact fingerprint so it can remove only this entry later. Firefox and Chrome/Chromium may keep separate certificate stores and are not changed.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.add_the_rdt_connect_local_root_ca_to_the_windows_current_user_certificate_trust_store_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later.15d3811e",
+      "english": "Add the RDT Connect local root CA to the Windows current-user certificate trust store? RDT Connect records its exact fingerprint so it can remove only this entry later.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.ed4f1479",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.48ac1519",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.52dd3e5b",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.6e6bda5a",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    }
   ],
   "missingSourceFindingsResolved": [
     "Replaced obsolete visible status with settings.language.activeStatus template.",
     "Removed obsolete title claiming English is the only integrated native language."
   ],
-  "legacyKeyPolicy": "All surviving v4 keys remain unchanged even if an English value has been corrected; key identity is maintained by source_to_key_map.json, never recomputed from value text.",
+  "legacyKeyPolicy": "All surviving v4 keys remain unchanged even if an English value has been corrected; key identity is maintained by source_to_key_map.json, never recomputed from value text.\nReconciliation: retained 101 existing translated catalog keys with stable identities; unverified source contexts are explicitly marked for follow-up.",
   "retiredKeys": {
     "msg.certificates_must_be_unexpired_match_the_key.c27e9cae": {
       "status": "replaced-by-complete-translation-unit",

@@ -260,7 +260,7 @@ def main() -> int:
                     if "cpu" not in provider:
                         raise RuntimeError(f"qualified_provider_not_cpu: {provider or 'unknown'}")
                     report["actual_inference_completed"] = True
-                    report["peak_rss_note"] += " peak_kib is the maximum sampled while this one real API request was active."
+                    report["sampled_peak_rss_note"] += " peak_kib is the maximum sampled while this one real API request was active."
                     report["sampled_peak_backend_tree_rss_kib"] = peak_rss
                     report["outcome"] = "PASS_REAL_PACKAGED_API_INFERENCE"
                     print("REAL_INFERENCE_OK " + json.dumps({

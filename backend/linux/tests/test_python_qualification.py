@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -48,6 +50,47 @@ class CanonicalRequirementsHashTests(unittest.TestCase):
     def test_invalid_utf8_fails_closed(self) -> None:
         with self.assertRaises(UnicodeDecodeError):
             canonical_direct_requirements_bytes(b"fastapi==0.162.0\n\xff\n")
+
+
+
+
+
+    def test_packaged_qualification_rss_note_key_is_consistent(self) -> None:
+        qualifier = ROOT / ".github/scripts/qualify-packaged-linux-backend.py"
+        source = qualifier.read_text(encoding="utf-8")
+        self.assertIn('"sampled_peak_rss_note":', source)
+        self.assertIn('report["sampled_peak_rss_note"] +=', source)
+        self.assertNotIn('report["peak_rss_note"]', source)
+
+class EarlyFailureReportTests(unittest.TestCase):
+    def test_missing_packaged_backend_still_writes_failure_report(self) -> None:
+        qualifier = ROOT / ".github/scripts/qualify-packaged-linux-backend.py"
+        self.assertTrue(qualifier.is_file(), f"missing qualifier: {qualifier}")
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            report_path = root / "evidence" / "failure.json"
+            result = subprocess.run(
+                [
+                    sys.executable, str(qualifier),
+                    "--backend", str(root / "missing-backend"),
+                    "--worker", str(root / "missing-worker"),
+                    "--frontend-dir", str(root / "missing-frontend"),
+                    "--model-dir", str(root / "missing-model"),
+                    "--fixture", str(root / "missing.wav"),
+                    "--output-json", str(report_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(report_path.is_file(), result.stderr[-2000:])
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(report.get("outcome"), "FAIL")
+            self.assertTrue(report.get("failure"))
+            self.assertTrue(report.get("outer_failure_traceback"))
 
 
 if __name__ == "__main__":

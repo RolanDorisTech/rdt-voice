@@ -16,7 +16,7 @@ Built by Rolan & Doris Tech
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>RDT Voice v0.2.0-dev.11</title>
         <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-mxy/GeHdXop/MPiuQbktce4lFchsENppSFXeaTfWG4k=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+BAa1y5b5+2gLbJPM9fxsX3RY8/XKzfoM/zbhkCE440=' 'sha256-CyQHeVNll6eW3399U1Jt/c+8D+qfkoiiOHi/e0MrtbY=' 'sha256-EKA1q/IJOaKWyX7GFOnUaLdj5ROlWLiXE/5N/9MzOKE=' 'sha256-FbrWQdnvi/lwYVb6JNFaq92EnVdgwoFS5vrRl1Ho9ZY=' 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:* https://*.ts.net:* https://*.tailscale.net:*; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* https://*.ts.net:* https://*.tailscale.net:* blob: https://huggingface.co https://*.hf.co https://*.huggingface.co https://cdn.jsdelivr.net https://api.github.com https://rdt-voice-hf-proxy.rolandoristech.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
                 <link rel="icon" id="rdt-dynamic-favicon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cpath%20d%3D%22M17%201H59Q63%201%2063%205V47Q63%2063%2047%2063H5Q1%2063%201%2059V17Q1%201%2017%201Z%22%20fill%3D%22%23101318%22%20stroke%3D%22%2335C6E8%22%20stroke-width%3D%222.2%22%2F%3E%3Ctext%20x%3D%2231%22%20y%3D%2241%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2229%22%20font-weight%3D%22900%22%20fill%3D%22%23F8FAFC%22%20textLength%3D%2255%22%20lengthAdjust%3D%22spacingAndGlyphs%22%3ERDT%3C%2Ftext%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2217%22%20r%3D%224.4%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23101318%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E">
     <style>
       /* === RDT stage-1 trust UX: explicit attachment actions + capture states === */
@@ -7617,7 +7617,7 @@ document.documentElement.lang = RDT_LANG;
 // ═══ end RDT i18n runtime ═══
 const BO = "v0.2.0-dev.11";
 document.documentElement.style.setProperty("--rdt-version-chars", String(BO.length));
-const RDT_BUILD = "Build r75";
+const RDT_BUILD = "Build r76";
 const RDT_CONNECT_RELEASES_PAGE = "https://github.com/RolanDorisTech/rdt-voice/releases";
 const RDT_CONNECT_RELEASES_API = "https://api.github.com/repos/RolanDorisTech/rdt-voice/releases?per_page=100";
 let rdtConnectDownloadCacheUrl = "";
@@ -19049,11 +19049,12 @@ React.createElement("button", {type:"button",disabled:easyWhisperDiagnosticBusy,
                          React.createElement("div", {className:"font-black tracking-widest text-[#FFEB00] mb-3", style:{fontSize:"12px"}}, "RELEASE NOTES • COMPLETE HISTORY"),
                          React.createElement("div", {className:"space-y-3 leading-relaxed", style:{fontSize:"10px"}},
                            React.createElement("div", null,
-  React.createElement("div", {className:"font-bold text-[#00D4FF] mb-1"}, "v0.2.0-dev.11 (current)"),
+  React.createElement("div", {className:"font-bold text-[#00D4FF] mb-1"}, "Build R76 • v0.2.0-dev.11 (current)"),
   React.createElement("ul", {className:"list-disc pl-4 space-y-1 opacity-80"},
     !RDT_IS_MOBILE_CLIENT && React.createElement("li", null, RDT_CONNECT_IS_MACOS ? "Easy Setup recommends RDT Connect for Apple silicon Macs." : RDT_CONNECT_IS_WINDOWS ? "Easy Setup recommends the Windows ARM64 RDT Connect test build." : RDT_CONNECT_IS_LINUX ? "Easy Setup offers the Linux RDT Connect build; it has not yet been verified." : "Easy Setup shows RDT Connect guidance for supported desktop platforms."),
     !RDT_IS_MOBILE_CLIENT && React.createElement("li", null, RDT_CONNECT_IS_MACOS ? "The RDT Connect download button finds the newest published Mac release automatically." : RDT_CONNECT_IS_WINDOWS ? "The RDT Connect download button finds the newest successful Windows ARM64 test artifact." : "Linux RDT Connect availability is still being verified."),
     React.createElement("li", null, "Local Server status, Test connection, and setup help are easier to find."),
+     React.createElement("li", null, "Build identifier corrected from R75 to R76; product version remains v0.2.0-dev.11."),
   ),
 ),
 React.createElement("div", null,

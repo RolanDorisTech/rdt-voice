@@ -17,7 +17,79 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  updater-contract:
+    name: Fast Linux updater artifact contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate Tauri updater configuration
+        shell: bash
+        run: |
+          python3 - <<'PYCONTRACT'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path("rdt_connect/src-tauri/tauri.conf.json").read_text())
+          bundle = config.get("bundle", {})
+          updater = config.get("plugins", {}).get("updater", {})
+          assert bundle.get("createUpdaterArtifacts") is True, "Updater artifacts must remain enabled"
+          assert isinstance(updater.get("pubkey"), str) and updater["pubkey"].strip(), "Updater public key is missing"
+          workflow = Path(".github/workflows/linux-native-qualification.yml").read_text()
+          assert "--bundles deb" in workflow, "Linux qualification must build a Debian package"
+          print("PASS: Linux updater/package configuration contract")
+          PYCONTRACT
+
+  signing-preflight:
+    needs: updater-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install locked dependencies for signing probe
+        working-directory: rdt_connect
+        run: npm ci
+      - name: Verify approved updater signing key and sign probe
+        working-directory: rdt_connect
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_SHA256: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_SHA256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+            echo "STOP: updater private-key secret is empty or unavailable." >&2
+            exit 1
+          fi
+          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY_SHA256:-}" ]]; then
+            echo "STOP: approved updater private-key fingerprint secret is missing." >&2
+            exit 1
+          fi
+          actual="$(python3 -c 'import hashlib, os; print(hashlib.sha256(os.environ["TAURI_SIGNING_PRIVATE_KEY"].strip().encode()).hexdigest())')"
+          expected="${TAURI_SIGNING_PRIVATE_KEY_SHA256//[[:space:]]/}"
+          if [[ "${actual,,}" != "${expected,,}" ]]; then
+            echo "STOP: updater private key does not match the approved SHA-256 fingerprint." >&2
+            exit 1
+          fi
+          probe="$RUNNER_TEMP/rdt-updater-signing-preflight.txt"
+          trap 'rm -f "$probe" "$probe.sig"' EXIT
+          printf '%s' 'RDT updater signing preflight' > "$probe"
+          npm run tauri -- signer sign "$probe"
+          test -s "$probe.sig" || {
+            echo "STOP: Tauri produced no non-empty signing probe." >&2
+            exit 1
+          }
+          echo "PASS: updater signing preflight"
+
   linux-native-qualification:
+    needs: signing-preflight
     name: Build and qualify Linux ${{ matrix.arch }} (no publish)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 100
@@ -282,6 +354,9 @@ jobs:
           }
 
       - name: Build the Linux Debian package (no publish)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           test -d rdt_connect/src-tauri/resources/third_party_notices

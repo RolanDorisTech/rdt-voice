@@ -7617,7 +7617,7 @@ document.documentElement.lang = RDT_LANG;
 // ═══ end RDT i18n runtime ═══
 const BO = "v0.2.0-dev.11";
 document.documentElement.style.setProperty("--rdt-version-chars", String(BO.length));
-const RDT_BUILD = "Build r75";
+const RDT_BUILD = "Build r76";
 const RDT_CONNECT_RELEASES_PAGE = "https://github.com/RolanDorisTech/rdt-voice/releases";
 const RDT_CONNECT_RELEASES_API = "https://api.github.com/repos/RolanDorisTech/rdt-voice/releases?per_page=100";
 let rdtConnectDownloadCacheUrl = "";
@@ -19049,11 +19049,12 @@ React.createElement("button", {type:"button",disabled:easyWhisperDiagnosticBusy,
                          React.createElement("div", {className:"font-black tracking-widest text-[#FFEB00] mb-3", style:{fontSize:"12px"}}, "RELEASE NOTES • COMPLETE HISTORY"),
                          React.createElement("div", {className:"space-y-3 leading-relaxed", style:{fontSize:"10px"}},
                            React.createElement("div", null,
-  React.createElement("div", {className:"font-bold text-[#00D4FF] mb-1"}, "v0.2.0-dev.11 (current)"),
+  React.createElement("div", {className:"font-bold text-[#00D4FF] mb-1"}, "Build R76 • v0.2.0-dev.11 (current)"),
   React.createElement("ul", {className:"list-disc pl-4 space-y-1 opacity-80"},
     !RDT_IS_MOBILE_CLIENT && React.createElement("li", null, RDT_CONNECT_IS_MACOS ? "Easy Setup recommends RDT Connect for Apple silicon Macs." : RDT_CONNECT_IS_WINDOWS ? "Easy Setup recommends the Windows ARM64 RDT Connect test build." : RDT_CONNECT_IS_LINUX ? "Easy Setup offers the Linux RDT Connect build; it has not yet been verified." : "Easy Setup shows RDT Connect guidance for supported desktop platforms."),
     !RDT_IS_MOBILE_CLIENT && React.createElement("li", null, RDT_CONNECT_IS_MACOS ? "The RDT Connect download button finds the newest published Mac release automatically." : RDT_CONNECT_IS_WINDOWS ? "The RDT Connect download button finds the newest successful Windows ARM64 test artifact." : "Linux RDT Connect availability is still being verified."),
     React.createElement("li", null, "Local Server status, Test connection, and setup help are easier to find."),
+     React.createElement("li", null, "Build identifier corrected from R75 to R76; product version remains v0.2.0-dev.11."),
   ),
 ),
 React.createElement("div", null,

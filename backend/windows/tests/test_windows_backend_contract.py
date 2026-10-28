@@ -33,6 +33,53 @@ class WindowsBackendContractTests(unittest.TestCase):
             self.assertIn(field, SERVER)
         self.assertIn('"engine_ready":bool(engine_status.get("ready"))', SERVER)
 
+    def test_health_separates_worker_liveness_from_inference_qualification(self):
+        self.assertIn("_ENGINE_INFERENCE_VERIFIED = False", SERVER)
+        self.assertIn("def _mark_engine_inference_verified(engine: Any) -> None:", SERVER)
+
+        health_start = SERVER.index('@app.get("/health")')
+        health_end = SERVER.index("# RDT Connect browser handoff", health_start)
+        health = SERVER[health_start:health_end]
+        self.assertIn('engine_status["inference_verified"] = inference_verified', health)
+        self.assertIn('if _ENGINE is not None and not inference_verified:', health)
+        self.assertIn('provider="unknown", worker_variant="unknown"', health)
+        self.assertIn('"engine_ready":bool(engine_status.get("ready"))', health)
+
+        route_start = SERVER.index('@app.post("/v1/audio/transcriptions")')
+        route = SERVER[route_start:]
+        inference = route.index("result = engine.transcribe(")
+        verified = route.index("_mark_engine_inference_verified(engine)", inference)
+        failure_handler = route.index("except Exception as e:", verified)
+        self.assertLess(inference, verified)
+        self.assertLess(verified, failure_handler)
+
+    def test_windows_transcription_disconnect_is_request_scoped_and_cleans_up(self):
+        start = SERVER.index('@app.post("/v1/audio/transcriptions")')
+        sync_start = SERVER.index("def _transcribe_sync(", start)
+        wrapper = SERVER[start:sync_start]
+        sync_end = SERVER.index("# Duration cache", sync_start)
+        sync = SERVER[sync_start:sync_end]
+
+        self.assertIn("async def trans(", wrapper)
+        self.assertIn("await request.is_disconnected()", wrapper)
+        self.assertIn("cancel_event.set()", wrapper)
+        self.assertIn("await asyncio.to_thread(_cancel_worker_request, worker_request_id)", wrapper)
+        self.assertIn("worker_request_id=worker_request_id", wrapper)
+        self.assertIn("def _cancel_worker_request(request_id: str) -> bool:", SERVER)
+        self.assertIn("request_id=worker_request_id", sync)
+        self.assertIn("_run_ffmpeg_bounded(cmd, cancel_event, FFMPEG_TIMEOUT_SECONDS)", sync)
+        self.assertIn("process.terminate()", SERVER)
+        self.assertIn("process.kill()", SERVER)
+        self.assertIn("_acquire_inference_lock(job_id, cancel_event)", sync)
+        self.assertIn("if lock_acquired:\n                INFERENCE_LOCK.release()", sync)
+
+        inference = sync.index("result = engine.transcribe(")
+        cancelled_check = sync.index("_check_transcription_cancelled(job_id, cancel_event)", inference)
+        verified = sync.index("_mark_engine_inference_verified(engine)", cancelled_check)
+        self.assertLess(inference, cancelled_check)
+        self.assertLess(cancelled_check, verified)
+        self.assertIn("if cancel_event.is_set():", sync)
+
     def test_download_only_does_not_eagerly_import_worker(self):
         self.assertIn('if _args.download_model:', SERVER)
         self.assertIn('_download_model_only(_args.download_model)', SERVER)

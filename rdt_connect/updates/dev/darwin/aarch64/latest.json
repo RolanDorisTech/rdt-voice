@@ -4,7 +4,7 @@
   "pub_date": "2026-10-28T06:04:27.265Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzdXMjB0V3RqMTVSMmtXeVBEK0F6N0JoMTZOTzcwNnVydEczKzljNGF1Q2xSRmh1R01KN3ZFZ1dXdENKcU5qMGJHQ1k1QktmaDN4L2RDRjl5UGFFelFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDQ5MTM1CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMC4wRC41Mwp6NHN2R2tCTWVkTlczbGpnT0tnSWNPZ2ZuYUxsV2xDV0JkNldOR2Q1akY2a1M0ekdOKzVoYzMzMlRCUThxbUZNUU4wZ0lEajFId2JHVHdBaEdaR1FCdz09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzkyeHQ0KytHMzJLSnd0S2lxT3VPaEU1Y0NqbGowWE04UUY4bUQwL2kzODVCMWtQU3B6UGYrR0c3bVBLSEdtWnc5MmpSTHU0bS9teDZkQXFzVnVJWHdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMTY4NTYwCWZpbGU6UkRULkNvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMS4xRDA0CkUvUkdETkpFcjVaZ0ZpVHdGckVyQzdoeWxGTkpxdUV2RFBRM0hSdmpvdm9KR2pTTmlrRzRMK1JKWjhUbGlyN1I1WWcyRE41Q3lsNnBaa3ZLZDVHK0NBPT0K",
       "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT.Connect.app.tar.gz"
     }
   }

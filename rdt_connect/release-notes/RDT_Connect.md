@@ -1,10 +1,18 @@
 # RDT Connect — Cumulative Development Release Notes
 
-Current build: **0D53**
-Version: `0.2.0-dev.10.0D.53`
-Platform: macOS on Apple Silicon (arm64); macOS 14 or later.
+Current build: **1D04**
+Version: `0.2.0-dev.11.1D04`
+Platform: macOS Apple Silicon (arm64); macOS 14 or later.
 
-These notes combine the relevant development changes from Builds 0D52 and 0D53.
+The Dev 10 notes below are retained as historical records. Dev 11 macOS updater verification is recorded first.
+
+## Dev 11 — macOS Apple Silicon, Build 1D04
+
+- Corrected the updater archive/signature pairing for the 1D04 release.
+- Verified the published `RDT.Connect.app.tar.gz` SHA-256: `bdffd7ef52f33bf3695e99a045d02829696a58a31de7935db9fd711b5f5330d3`.
+- Cryptographically verified the decoded release signature against the configured updater public key.
+- User-confirmed in-app update from installed Build 1D03 to 1D04 completed successfully; the app displayed the installed-update/reopen prompt.
+- The existing 1D04 tag and published release assets remain unchanged.
 
 ## Build 0D52
 

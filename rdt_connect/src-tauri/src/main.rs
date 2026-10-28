@@ -2007,7 +2007,7 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
     Ok(())
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn sha256_file_hex(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path)
         .map_err(|error| format!("Could not read a file for integrity verification: {error}"))?;

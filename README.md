@@ -4,7 +4,7 @@
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
   <p><strong>For macOS on Apple Silicon</strong></p>
-  <p><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11/RDT_Connect_0.2-dev.11_aarch64.dmg"><img src="https://img.shields.io/badge/Download-RDT%20Connect%20for%20macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS"></a></p>
+  <p><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/Download-RDT%20Connect%20for%20macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS"></a></p>
   <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
   <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
 </div>
@@ -37,7 +37,7 @@ Click either image below to try the live browser demo:
 
 No account is required. No RDT-operated audio-transcription service is required. The browser UI has no build step. The included Python backend is an optional, separate process for Apple Silicon Macs.
 
-> **Current browser build:** HTML build `r35` (currently published on `main`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
+> **Current browser build:** **Build R76** (currently published on `main`; product version remains `v0.2.0-dev.11`). This is a development build, not a claim that every browser, device, and model combination has been exhaustively tested.
 
 > **Which page is current?** The public app is served from the repository root at `https://rolandoristech.github.io/rdt-voice/`. The older `rdt-voice.html` file is deliberately preserved as a historical version and is not the current app.
 
@@ -96,10 +96,10 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11/RDT_Connect_0.2-dev.11_aarch64.dmg) | `0.2.0-dev.11.1A.10` | `0D53` | 388,852,136 bytes |
+| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
 | Windows | Installer (.exe) | Coming soon | — | — |
 
-**SHA-256 (Build 1A10):** `1bd1c2fccff991574d6ba2f8a1c1e849428462291decbffa0830af112fad59a9`
+**SHA-256 (Build 1D04):** `93b8442447e083e1e328904f06ec3ff3e8dd1f13df9fe28de1b6ae8e775ac39f`
 
 Download (.dmg) links directly to the published GitHub Release asset. The browser's Downloads panel handles download progress and cancellation. Update the link, version, build, and file size when publishing a new installer.
 
@@ -108,7 +108,7 @@ RDT Connect is optional. You can use RDT Voice directly in your browser without 
 
 <p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
 
-**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The custom Build 1A10 DMG uses the established installation layout. The development updater feed provides the signed 1A10 archive and matching signature for eligible existing installations.
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The published Build 1D04 DMG is available for macOS Apple Silicon. The development updater feed provides the corrected signed 1D04 updater archive and matching signature for eligible existing installations.
 
 See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
 

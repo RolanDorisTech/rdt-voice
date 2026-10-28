@@ -4,6 +4,11 @@ RDT Voice and RDT Connect are related products in one repository, but they
 are independent release streams. A release of one product does not require
 a version bump or release of the other.
 
+## RDT Voice — Build R76 (2026-10-28)
+
+- Corrected the public browser build identifier from `Build r75` to `Build R76`.
+- The product version remains `v0.2.0-dev.11`; R76 is a build-label correction, not a new product-version release or Git tag.
+
 ## Canonical tag names
 
 Use lowercase product-prefixed tags with a full Semantic Version:

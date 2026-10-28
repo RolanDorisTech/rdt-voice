@@ -14,7 +14,7 @@ function fixtureRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "rdt-build-stamp-test-"));
   for (const relative of ["scripts", "src-tauri"]) fs.mkdirSync(path.join(root, relative), { recursive: true });
   fs.writeFileSync(path.join(root, "scripts/build-id-sequence-windows.txt"), "2A01\n");
-  fs.writeFileSync(path.join(root, "scripts/build-id-sequence-linux.txt"), "4U01\n");
+  fs.writeFileSync(path.join(root, "scripts/build-id-sequence-linux.txt"), "4L001\n");
   fs.writeFileSync(path.join(root, "scripts/build-id-sequence.txt"), "1D01\n");
   const packageJson = { name: "rdt-connect-desktop", version: originalVersion, dependencies: {}, devDependencies: {} };
   fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
@@ -25,8 +25,10 @@ function fixtureRoot() {
   return root;
 }
 
-function run(root, platform) {
-  return spawnSync(process.execPath, [script, platform], {
+function run(root, platform, marker = null) {
+  const args = [script, platform];
+  if (marker !== null) args.push(marker);
+  return spawnSync(process.execPath, args, {
     encoding: "utf8",
     env: { ...process.env, GITHUB_ENV: "", RDT_STAMP_ROOT: root },
   });
@@ -67,6 +69,29 @@ try {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+
+
+// Linux ARM64 and x64 use five-character L markers; retired distro markers fail.
+for (const linuxMarker of ["4L001", "5L001"]) {
+  const linuxRoot = fixtureRoot();
+  try {
+    const result = run(linuxRoot, "linux", linuxMarker);
+    const expectedVersion = `0.2.0-dev.11.${linuxMarker}`;
+    assert.equal(result.status, 0,
+      `Linux ${linuxMarker} stamping should pass: ${result.stderr}\n${result.stdout}`);
+    assert.ok(result.stdout.includes(`marker=${linuxMarker} version=${expectedVersion}`));
+    assert.deepEqual(readVersions(linuxRoot), Array(6).fill(expectedVersion));
+
+    const beforeInvalid = readVersions(linuxRoot);
+    const invalid = run(linuxRoot, "linux", "4U01");
+    assert.notEqual(invalid.status, 0, "Retired Linux distro markers must be rejected");
+    assert.deepEqual(readVersions(linuxRoot), beforeInvalid,
+      "Invalid Linux markers must not mutate manifests");
+    console.log(`PASS: Linux ${linuxMarker} stamps all manifests and rejects retired markers`);
+  } finally {
+    fs.rmSync(linuxRoot, { recursive: true, force: true });
+  }
+}
 
 // Verify the actual Dev 11 Windows ARM64 marker remains intact.
 const markerRoot = fixtureRoot();

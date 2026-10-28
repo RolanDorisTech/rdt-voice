@@ -31,8 +31,10 @@ jobs:
       matrix:
         include:
           - arch: x64
+            build-marker: 5L001
             runner: ubuntu-24.04
           - arch: ARM64
+            build-marker: 4L001
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout source
@@ -72,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/stamp-platform-build.cjs linux
+          node scripts/stamp-platform-build.cjs linux "${{ matrix.build-marker }}"
           node scripts/test-platform-build-stamping.cjs
 
       - name: Build frontend
@@ -94,6 +96,10 @@ jobs:
       - name: Compile Linux desktop application (not a runtime test)
         working-directory: rdt_connect
         run: cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+
+      - name: Test Linux trusted local HTTPS (real OpenSSL; never modifies system trust)
+        working-directory: rdt_connect
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml linux_tls
 
       - name: Upload native Linux build evidence
         if: always()

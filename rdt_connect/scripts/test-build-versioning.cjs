@@ -12,13 +12,13 @@ const {
 const base = "0.2.0-dev.11";
 const build = marker => withBuildMarker(base, marker);
 
-const v00 = build("0D00");
+const v00 = build("1A00");
 const v51 = build("2A05");
 const v52 = build("2A06");
 const v53 = build("2A07");
-const v98 = build("0D98");
-const v99 = build("0D99");
-const v0E = build("0E00");
+const v98 = build("1D98");
+const v99 = build("1D99");
+const v0E = build("1E00");
 const v1C = build("1C99");
 const v1D = build("1D00");
 
@@ -27,8 +27,8 @@ const winA05 = build("2A05");
 const winA99 = build("2A99");
 const winB00 = build("2B00");
 const winX64 = build("3A01");
-const linuxARM64 = build("4U01");
-const linuxX64 = build("5U01");
+const linuxARM64 = build("4L001");
+const linuxX64 = build("5L001");
 
 const currentVersions = [
   v00, v51, v52, v53, v98, v99, v0E, v1C, v1D,
@@ -40,20 +40,20 @@ for (const version of currentVersions) {
   assert.ok(semver.gt(version, base), `${version} > ${base}`);
 }
 
-assert.equal(v00, "0.2.0-dev.11.0D00");
+assert.equal(v00, "0.2.0-dev.11.1A00");
 assert.equal(v51, "0.2.0-dev.11.2A05");
-assert.equal(v99, "0.2.0-dev.11.0D99");
-assert.equal(v0E, "0.2.0-dev.11.0E00");
+assert.equal(v99, "0.2.0-dev.11.1D99");
+assert.equal(v0E, "0.2.0-dev.11.1E00");
 assert.equal(v1D, "0.2.0-dev.11.1D00");
 assert.equal(winA05, "0.2.0-dev.11.2A05");
 assert.equal(winX64, "0.2.0-dev.11.3A01");
-assert.equal(linuxARM64, "0.2.0-dev.11.4U01");
-assert.equal(linuxX64, "0.2.0-dev.11.5U01");
+assert.equal(linuxARM64, "0.2.0-dev.11.4L001");
+assert.equal(linuxX64, "0.2.0-dev.11.5L001");
 
 assert.ok(semver.gt(v52, v51), "2A06 > 2A05");
 assert.ok(semver.gt(v53, v52), "2A07 > 2A06");
-assert.ok(semver.gt(v99, v98), "0D99 > 0D98");
-assert.ok(semver.gt(v0E, v99), "0E00 > 0D99");
+assert.ok(semver.gt(v99, v98), "1D99 > 1D98");
+assert.ok(semver.gt(v0E, v99), "1E00 > 1D99");
 assert.ok(semver.gt(v1D, v1C), "1D00 > 1C99");
 
 for (const [version, marker] of [
@@ -62,14 +62,14 @@ for (const [version, marker] of [
   [winA99, "2A99"],
   [winB00, "2B00"],
   [winX64, "3A01"],
-  [linuxARM64, "4U01"],
-  [linuxX64, "5U01"],
+  [linuxARM64, "4L001"],
+  [linuxX64, "5L001"],
 ]) {
   assert.equal(decodeBuildVersion(version).marker, marker);
   assert.ok(version.endsWith(`.${marker}`), `${marker} must remain contiguous`);
 }
 
-assert.throws(() => build("0D100"), /Invalid build marker/);
+assert.throws(() => build("1D100"), /Invalid build marker/);
 assert.throws(() => build("2A.05"), /Invalid build marker/);
 
 // Historical versions remain readable, but newly generated versions use
@@ -106,8 +106,8 @@ assert.equal(
   "v0.2.0-dev.11 Build 1D00"
 );
 
-console.log("PASS: four-character build markers remain contiguous in SemVer");
-console.log("PASS: platform markers 1D01, 2A05, 3A01, 4U01 and 5U01");
+console.log("PASS: platform build markers remain contiguous in SemVer");
+console.log("PASS: platform markers 1D01, 2A05, 3A01, 4L001 and 5L001");
 console.log("PASS: marker ordering and rollover");
 console.log("PASS: invalid marker formats are rejected");
 console.log("PASS: historical dotted versions remain readable");

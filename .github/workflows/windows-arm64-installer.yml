@@ -20,7 +20,61 @@ permissions:
   contents: read
 
 jobs:
+  signing-preflight:
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - name: Install dependencies for signing probe
+        working-directory: rdt_connect
+        shell: pwsh
+        run: npm ci
+      - name: Preflight updater signing secrets
+        working-directory: rdt_connect
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_SHA256: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_SHA256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw 'Updater signing preflight failed: private-key secret is empty or unavailable.'
+          }
+          $keyText = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $keyBytes = [System.Text.Encoding]::UTF8.GetBytes($keyText)
+            $actualFingerprint = [Convert]::ToHexString($sha.ComputeHash($keyBytes))
+          } finally {
+            $sha.Dispose()
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_SHA256) -or
+              $actualFingerprint -ine $env:TAURI_SIGNING_PRIVATE_KEY_SHA256.Trim()) {
+            throw 'Updater signing preflight failed: supplied private key does not match the approved fingerprint.'
+          }
+          Remove-Variable keyText,keyBytes,actualFingerprint -ErrorAction SilentlyContinue
+          $probe = Join-Path $env:RUNNER_TEMP 'rdt-updater-signing-preflight.txt'
+          $signature = "$probe.sig"
+          try {
+            Set-Content -LiteralPath $probe -Value 'RDT updater signing preflight' -NoNewline -Encoding ascii
+            npm run tauri -- signer sign $probe
+            if ($LASTEXITCODE -ne 0) { throw 'Tauri could not sign the preflight probe with the configured secrets.' }
+            if (!(Test-Path -LiteralPath $signature) -or (Get-Item -LiteralPath $signature).Length -eq 0) {
+              throw 'Signing preflight produced no non-empty signature.'
+            }
+            Write-Host 'Updater signing preflight: PASS'
+          } finally {
+            Remove-Item -LiteralPath $probe,$signature -Force -ErrorAction SilentlyContinue
+          }
+
   package:
+    needs: signing-preflight
     runs-on: windows-11-arm
     timeout-minutes: 120
 
@@ -186,7 +240,6 @@ jobs:
         working-directory: rdt_connect
         shell: pwsh
         run: npm ci
-
       - name: Stamp isolated Windows build version (2A05 namespace)
         working-directory: rdt_connect
         shell: pwsh
@@ -209,6 +262,9 @@ jobs:
       - name: Build Windows ARM64 NSIS installer
         working-directory: rdt_connect
         shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Stop'
           npm run tauri -- build --target aarch64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json
@@ -230,6 +286,27 @@ jobs:
             "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
             Write-Host "Installer: $($installer.Name)"
             Write-Host "SHA-256: $hash"
+          }
+
+      - name: Verify signed Windows updater artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis'
+          $archives = @(Get-ChildItem -LiteralPath $bundle -Filter '*.nsis.zip' -File)
+          if ($archives.Count -lt 1) {
+            throw "No signed NSIS updater archive found in $bundle"
+          }
+          foreach ($archive in $archives) {
+            $signature = "$($archive.FullName).sig"
+            if (-not (Test-Path -LiteralPath $signature -PathType Leaf)) {
+              throw "Updater signature missing: $signature"
+            }
+            foreach ($file in @($archive.FullName, $signature)) {
+              $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256" -Encoding ascii
+              Write-Host "Verified updater artifact: $(Split-Path $file -Leaf)"
+            }
           }
 
       - name: Package Windows pre-install guide
@@ -305,6 +382,21 @@ jobs:
           New-Item -ItemType Directory -Path $stage | Out-Null
           Copy-Item -LiteralPath $installer.FullName -Destination $stage
           Copy-Item -LiteralPath $installerHash -Destination $stage
+
+          $updaterArchives = @(Get-ChildItem -LiteralPath $bundle -Filter '*.nsis.zip' -File)
+          if ($updaterArchives.Count -lt 1) {
+            throw "No NSIS updater archive available to package from $bundle"
+          }
+          foreach ($archive in $updaterArchives) {
+            $signature = "$($archive.FullName).sig"
+            foreach ($file in @($archive.FullName, $signature, "$($archive.FullName).sha256", "$signature.sha256")) {
+              if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+                throw "Required signed updater distribution file is missing: $file"
+              }
+              Copy-Item -LiteralPath $file -Destination $stage
+            }
+          }
+
           foreach ($name in $required) {
             Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
           }

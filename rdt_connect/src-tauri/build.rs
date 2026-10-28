@@ -22,25 +22,31 @@ fn main() {
 
 fn is_valid_build_id_for_target(value: &str, target_os: &str, target_arch: &str) -> bool {
     let bytes = value.as_bytes();
-    if bytes.len() != 4
-        || !matches!(bytes[0], b'0'..=b'5')
-        || !bytes[1].is_ascii_uppercase()
-        || !bytes[2].is_ascii_digit()
-        || !bytes[3].is_ascii_digit()
-    {
-        return false;
-    }
+
     match target_os {
-        // Dev 11+: 0 reserved; 1 macOS ARM64; 2 Windows ARM64;
-        // 3 Windows x64; 4 Linux ARM64; 5 Linux x64.
-        "macos" => bytes[0] == b'1' && target_arch == "aarch64",
+        "macos" => {
+            bytes.len() == 4
+                && bytes[0] == b'1'
+                && bytes[1].is_ascii_uppercase()
+                && bytes[2].is_ascii_digit()
+                && bytes[3].is_ascii_digit()
+                && target_arch == "aarch64"
+        }
         "windows" => {
-            (bytes[0] == b'2' && target_arch == "aarch64")
-                || (bytes[0] == b'3' && target_arch == "x86_64")
+            bytes.len() == 4
+                && bytes[1].is_ascii_uppercase()
+                && bytes[2].is_ascii_digit()
+                && bytes[3].is_ascii_digit()
+                && ((bytes[0] == b'2' && target_arch == "aarch64")
+                    || (bytes[0] == b'3' && target_arch == "x86_64"))
         }
         "linux" => {
-            (bytes[0] == b'4' && target_arch == "aarch64")
-                || (bytes[0] == b'5' && target_arch == "x86_64")
+            bytes.len() == 5
+                && (bytes[0] == b'4' || bytes[0] == b'5')
+                && bytes[1] == b'L'
+                && bytes[2..].iter().all(u8::is_ascii_digit)
+                && ((bytes[0] == b'4' && target_arch == "aarch64")
+                    || (bytes[0] == b'5' && target_arch == "x86_64"))
         }
         _ => false,
     }

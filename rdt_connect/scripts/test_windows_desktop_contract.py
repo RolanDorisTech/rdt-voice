@@ -49,7 +49,7 @@ class WindowsBrowserContractTests(unittest.TestCase):
     def test_official_link_destinations_are_pinned(self) -> None:
         self.assertIn('const GITHUB: &str = "https://github.com/RolanDorisTech/rdt-voice";', self.source)
         self.assertIn('const WEBSITE: &str = "https://rolandoristech.github.io/rdt-voice/";', self.source)
-        windows_open = block_between(self.source, "fn open_url_windows", "#[cfg(target_os = \"macos\")]\nfn open_url_external")
+        windows_open = block_between(self.source, "fn open_url_windows", "#[tauri::command]\nfn list_available_browsers")
         self.assertIn('Some("rolandoristech.github.io" | "github.com" | "youtube.com" | "www.youtube.com")', windows_open)
         self.assertIn('"mailto" => parsed.path() == "woknewsbusiness@gmail.com"', windows_open)
 
@@ -174,7 +174,7 @@ class WindowsVersionStampContractTests(unittest.TestCase):
         connect = ROOT / "rdt_connect" / "scripts"
         self.assertEqual((connect / "build-id-sequence-windows.txt").read_text(encoding="utf-8").strip(), "2A05")
         self.assertEqual((connect / "build-id-sequence-linux.txt").read_text(encoding="utf-8").strip(), "4L001")
-        self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "1D01")
+        self.assertEqual((connect / "build-id-sequence.txt").read_text(encoding="utf-8").strip(), "1D04")
 
     def test_windows_workflows_stamp_before_native_build(self) -> None:
         workflows = [

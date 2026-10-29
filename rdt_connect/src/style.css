@@ -2743,7 +2743,7 @@ html[dir="rtl"] [data-l10n-ignore] {
   }
 }
 
-/* Windows installation guide actions in About. */
+/* About action layout. */
 .about-actions-row {
   display: flex;
   flex: 0 0 auto;
@@ -2753,15 +2753,7 @@ html[dir="rtl"] [data-l10n-ignore] {
   gap: 10px;
 }
 
-#about-installation-guide-button {
-  width: auto !important;
-  max-width: 100%;
-  white-space: nowrap !important;
-}
 
-#about-installation-guide-button[hidden] {
-  display: none !important;
-}
 
 @media (max-width: 720px) {
   .about-actions-row {

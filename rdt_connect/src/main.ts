@@ -267,6 +267,19 @@ const removeTlsTrustButton = $("remove-tls-trust-button") as HTMLButtonElement;
 const transportHttpsInput = $("transport-https") as HTMLInputElement;
 const transportHttpInput = $("transport-http") as HTMLInputElement;
 const keepInMenuBarInput = $("keep-in-menu-bar") as HTMLInputElement;
+
+function syncKeepInMenuBarPlatformCopy(): void {
+  if (!isWindowsRuntime()) return;
+  const copy = keepInMenuBarInput.closest(".menu-bar-option-copy");
+  const heading = copy?.querySelector("strong");
+  const description = copy?.querySelector("small");
+  if (heading) heading.textContent = "Show in notification center";
+  if (description) {
+    description.textContent =
+      "When on, closing the window keeps RDT Connect in the notification center. When off, closing quits the app and stops its managed server.";
+  }
+}
+syncKeepInMenuBarPlatformCopy();
 const settingsLockHint = document.querySelector<HTMLElement>("#settings-lock-hint");
 const localAddress = $("local-address");
 const preferredPortInput = $("preferred-port") as HTMLInputElement;
@@ -603,8 +616,6 @@ const startProgressText = $("start-progress-text");
 const startProgressDescription = $("start-progress-description");
 const aboutCompanyLink = $("about-company-link") as HTMLAnchorElement;
 const aboutYoutubeButton = $("about-youtube-button") as HTMLButtonElement;
-const aboutInstallationGuideButton = $("about-installation-guide-button") as HTMLButtonElement;
-aboutInstallationGuideButton.hidden = !/Windows/i.test(navigator.userAgent);
 const aboutBusinessContactLink = $("about-business-contact-link") as HTMLAnchorElement;
 const openButton = $("open-button") as HTMLButtonElement;
 const browserSelect = $("browser-select") as HTMLSelectElement;
@@ -1199,7 +1210,7 @@ function setBusy(value: boolean) {
   modelSelectTooltip.setAttribute("title", modelSelect.title);
   modelSelectTooltip.setAttribute("data-tooltip", modelSelect.title);
   syncModelSelectPresentation();
-  modelHelp.textContent = isNativeGgmlCatalog()
+  modelHelp.textContent = isNativeGgmlCatalog() && isLinuxRuntime()
     ? "GGML model files are shared across compatible Windows/Linux CPU architectures. GPU acceleration is not implied; the qualified baseline is CPU inference."
     : translateKey("msg.rdt_connect_uses_the_fastest_transcription_h.32d1234d", {}, getActiveLocale());
   renderBrowserChoiceRow();
@@ -3344,13 +3355,6 @@ if (brandHomeLink) brandHomeLink.addEventListener("click", async (event) => {
   try { await runAction(launchRdtVoice); }
   catch (error) { showNotice(`Could not open RDT Voice: ${String(error)}`, "error"); }
 });
-aboutInstallationGuideButton.addEventListener("click", async () => {
-  try {
-    await invoke("open_windows_installation_guide");
-  } catch (error) {
-    showNotice(`Could not open the Windows installation guide: ${String(error)}`, "error");
-  }
-});
 aboutYoutubeButton.addEventListener("click", async () => {
   try {
     await invoke("open_youtube_channel");
@@ -3471,11 +3475,17 @@ keepInMenuBarInput.addEventListener("change", async () => {
   keepInMenuBarInput.disabled = true;
   try {
     await invoke("set_keep_in_menu_bar", { enabled: keepInMenuBarInput.checked });
-    showNotice(keepInMenuBarInput.checked
-      ? "The RDT Connect menu-bar icon is now visible. Closing the window hides it there."
-      : "The menu-bar icon is hidden. Closing the window will quit RDT Connect and stop its managed server.", "info");
+    showNotice(isWindowsRuntime()
+      ? (keepInMenuBarInput.checked
+        ? "The RDT Connect notification-center icon is now visible. Closing the window hides it there."
+        : "The notification-center icon is hidden. Closing the window will quit RDT Connect and stop its managed server.")
+      : (keepInMenuBarInput.checked
+        ? "The RDT Connect menu-bar icon is now visible. Closing the window hides it there."
+        : "The menu-bar icon is hidden. Closing the window will quit RDT Connect and stop its managed server."), "info");
   } catch (error) {
-    showNotice(translateKey("msg.could_not_save_the_menu_bar_preference_error.cf3a5e22", { error: String(error) }, getActiveLocale()), "error");
+    showNotice(isWindowsRuntime()
+      ? `Could not save the notification-center preference: ${String(error)}`
+      : translateKey("msg.could_not_save_the_menu_bar_preference_error.cf3a5e22", { error: String(error) }, getActiveLocale()), "error");
     keepInMenuBarInput.checked = !keepInMenuBarInput.checked;
   } finally { keepInMenuBarInput.disabled = false; }
 });

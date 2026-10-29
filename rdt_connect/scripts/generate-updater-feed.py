@@ -219,9 +219,9 @@ def main():
             if new_key == old_key:
                 old_entry = existing["platforms"][args.target]
                 new_entry = {"url": args.url, "signature": args.signature}
-                if old_entry != new_entry:
+                if old_entry.get("signature") != new_entry["signature"]:
                     raise ValueError(
-                        "refusing same-version update because artifact URL or signature changed"
+                        "refusing same-version update because artifact signature changed"
                     )
 
         manifest = build_manifest(

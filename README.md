@@ -87,7 +87,23 @@ Open `http://localhost:5173/`. The root `index.html` is the current app. The exi
 
 [![RDT Connect with the server running and Open RDT Voice button](assets/rdt-connect-server-running.png)](#rdt-connect-downloads)
 
-Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional desktop companion currently available for **macOS on Apple Silicon** and **Windows (ARM64 and x64)**. Choose the matching installer in the downloads table below. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
+## RDT Connect Downloads
+
+Dev 11 packages below are **prereleases**. Complete the applicable VM and release qualification before treating them as final production releases.
+
+| Platform | Download | Product version | Build | Size |
+| --- | --- | --- | --- | --- |
+| macOS (Apple Silicon) | [Download (.dmg)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11` | `1D04` | 235.7 MB |
+| Windows (ARM64) | [Download installer (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT-Connect-Windows-Installation-Guide.zip) | `0.2.0-dev.11` | `2A05` | 102.0 MB |
+| Windows (x64) | [Download installer (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT-Connect-Windows-Installation-Guide.zip) | `0.2.0-dev.11` | `3A01` | 137.4 MB |
+| Ubuntu (ARM64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11` | `4U01` | 82.3 MB |
+| Debian (x64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11` | `5D01` | 83.0 MB |
+
+**Windows download note:** Wait until Chrome's Downloads panel reports that the installer has finished downloading. A completed download should normally have an `.exe` filename. If Chrome reports the download as complete but leaves it named `Unconfirmed <number>.crdownload`, rename it to the full installer filename for your architecture: `RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe` for Windows ARM64 or `RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe` for Windows x64. Do not rename or run a file if Chrome reports that the download failed or was interrupted; download it again instead.
+
+Advanced users who want to verify a download can find the SHA-256 checksum files on the corresponding GitHub release page.
+
+Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional desktop companion currently available for **macOS on Apple Silicon** and **Windows (ARM64 and x64)**. Choose the matching installer in the downloads table above. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
 
 1. Open RDT Connect.
 2. Choose a Whisper model.
@@ -140,22 +156,6 @@ If transcription does not start or RDT Voice cannot reach the local service:
 5. If the problem persists, include the relevant diagnostic output when reporting the issue. Remove any private information before sharing logs.
 
 RDT Connect is optional; RDT Voice can also be used directly in a supported browser configuration.
-
-## RDT Connect Downloads
-
-Dev 11 packages below are **prereleases**. Complete the applicable VM and release qualification before treating them as final production releases.
-
-| Platform | Installer and verification | Version | Build | File size |
-| --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [Download (.dmg)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) · [Release SHA-256 manifest](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/SHA256SUMS.txt) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
-| Windows (ARM64) | [Download (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe.sha256) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT-Connect-Windows-Installation-Guide.zip) · [Guide SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT-Connect-Windows-Installation-Guide.zip.sha256) | `0.2.0-dev.11.2A05` | `2A05` | 101,982,643 bytes |
-| Windows (x64) | [Download (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe.sha256) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT-Connect-Windows-Installation-Guide.zip) · [Guide SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT-Connect-Windows-Installation-Guide.zip.sha256) | `0.2.0-dev.11.3A01` | `3A01` | 137,375,653 bytes |
-| Ubuntu (ARM64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb.sha256) | `0.2.0-dev.11.4U.1` | `4U01` | 82,284,734 bytes |
-| Debian (x64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb.sha256) | `0.2.0-dev.11.5D.1` | `5D01` | 83,031,994 bytes |
-
-
-Download (.dmg) links directly to the published GitHub Release asset. The browser's Downloads panel handles download progress and cancellation. Update the link, version, build, and file size when publishing a new installer.
-
 
 RDT Connect is optional. You can use RDT Voice directly in your browser without installing it.
 

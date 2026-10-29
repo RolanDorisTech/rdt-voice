@@ -87,7 +87,7 @@ jobs:
           except (ValueError, TypeError) as exc:
               raise SystemExit(f"FAIL: invalid version/build marker: {exc}")
           marker = version.rsplit(".", 1)[1]
-          expected = "rdt-connect-v" + version.rsplit(".", 1)[0] + "-" + marker.lower()
+          expected = "connect-v" + version.rsplit(".", 1)[0] + "-" + marker.lower()
           if tag != expected:
               raise SystemExit(f"FAIL: expected release tag {expected}")
           feed = feeds[target]

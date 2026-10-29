@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0-dev.11.2A05",
+  "version": "0.2.0-dev.11.2A07",
   "notes": "RDT Connect Dev 11 Windows ARM64 updater feed",
-  "pub_date": "2026-10-29T07:05:17Z",
+  "pub_date": "2026-10-29T19:24:14Z",
   "platforms": {
     "windows-aarch64": {
-      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdytjR3dWZjFKTWF0a0h5R3Z5dWc0YnE0aEVpTDB0Tyt2MEx6STV4K0MxVjFYMU1Zb2gydWxDS2xUZ0pKbHhxMGZVbWJLc1c0N2xmcUpGSVVZNTJNWnc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMjI2NjEyCWZpbGU6UkRUIENvbm5lY3RfMC4yLjAtZGV2LjExLjJBMDVfYXJtNjQtc2V0dXAuZXhlCXZlcnNpb246MC4yLjAtZGV2LjExLjJBMDUKb1VWa0pocEEvbTZmOHhGYjh1TjVHcXNhTnU3RzJ5TURscDJvVWU3SGdJRlZVZjMxNWNYd0JrZytRbmZwR2tza3o0VXBqQUN2ZUFLdy91UGVSczBzRHc9PQo="
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdytSa2Jic3lxMDFWK3hCS0RpdU5CYXNqM1A2c0RkNWdMRVJWMkZLM2F0bEVaUXRZQW5ZUG54WWcrbkRmMUlNZGRkalE2VzdYaXR6QzVlZU1UdTFpQ2c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMjk4MjE5CWZpbGU6UkRUIENvbm5lY3RfMC4yLjAtZGV2LjExLjJBMDdfYXJtNjQtc2V0dXAuZXhlCXZlcnNpb246MC4yLjAtZGV2LjExLjJBMDcKbG92RHpsSkNNczFoRCt0aFBPZEdsc0ZkVi8ybDR5NU9FZHF3OXZnbnBOcTUzeW9LOVJ5YWoyMlZna2xkK3Nsd0dVbXdCZUhYSXJORGZqWnRKcVFnQ0E9PQo="
     }
   }
 }

@@ -7,19 +7,19 @@ RDT Connect is an optional desktop companion for [RDT Voice](https://rolandorist
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
 | macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
-| Windows (ARM64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) | `0.2.0-dev.11.2A05` | `2A05` | 101,982,643 bytes |
-| Windows (x64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) | `0.2.0-dev.11.3A01` | `3A01` | 137,375,653 bytes |
+| Windows (ARM64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) | `0.2.0-dev.11.2A07` | `2A07` | 101979239 bytes |
+| Windows (x64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) | `0.2.0-dev.11.3A03` | `3A03` | 137365296 bytes |
 
 **SHA-256 (Build 1D04):** `93b8442447e083e1e328904f06ec3ff3e8dd1f13df9fe28de1b6ae8e775ac39f`
 
 **Platform notes**
 
 - **macOS Apple Silicon:** The published DMG is ad-hoc signed and not notarized by Apple; macOS may show a first-launch security prompt.
-- **Windows ARM64:** The installer workflow passed CI. This does not claim an independent physical-device transcription test.
-- **Windows x64:** CI verified installation, installed-app architecture and build metadata, packaged resources, and a short startup smoke test. A full microphone/transcription test is not claimed.
+- **Windows ARM64:** Build 2A07 is published. CI packaging and signing checks passed; independent physical-device installation and updater testing have not been completed.
+- **Windows x64:** Build 3A03 is published. CI packaging checks passed. Manual UTM testing confirmed that RDT Connect opens, but the VM froze during HTTPS certificate setup, preventing further functional testing. In-app updater testing is planned in VMware.
 - **Linux:** Qualification and release integration are handled separately. Linux downloads will be listed when the corresponding release assets are published and verified.
 
-**Updater note:** Platform-specific development updater feeds and signatures are being reconciled separately. Use direct downloads rather than assuming cross-platform automatic updates are fully qualified.
+**Updater note:** Windows Dev 11 feeds are architecture-specific and will point to Builds 2A07 and 3A03 after the feed changes are published. VMware in-app updater verification remains pending.
 
 ## Developer notes
 

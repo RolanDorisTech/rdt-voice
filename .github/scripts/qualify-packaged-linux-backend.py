@@ -231,15 +231,17 @@ def main() -> int:
                     report["api_status_code"] = response.status_code
                     report["elapsed_ms_total"] = round((request_end - request_start) * 1000, 1)
                     if response.status_code != 200:
-                        raise RuntimeError(f"transcription_http_{response.status_code}: {response.text[:300]}")
+                        # Response bodies can contain user-derived data; retain status only.
+                        raise RuntimeError(f"transcription_http_{response.status_code}")
                     result = response.json()
-                    report["transcription_result"] = result
                     text = str(result.get("text", "")).strip()
-                    report["transcript"] = text
                     lower = text.casefold()
-                    missing = [word for word in ("quick", "fox") if word not in lower]
+                    anchor_presence = {word: word in lower for word in ("quick", "fox")}
+                    missing = [word for word, present in anchor_presence.items() if not present]
+                    report["transcript_nonempty"] = bool(text)
+                    report["transcript_anchor_words_present"] = anchor_presence
                     if not text or missing:
-                        raise RuntimeError(f"transcript_quality_anchor_missing={','.join(missing) or 'empty'}; transcript={text[:240]!r}")
+                        raise RuntimeError(f"transcript_quality_anchor_missing={','.join(missing) or 'empty'}")
                     segments = result.get("segments")
                     if not isinstance(segments, list) or not segments:
                         raise RuntimeError("transcription_has_no_segments")
@@ -249,6 +251,7 @@ def main() -> int:
                     if duration <= 0:
                         duration = 0.0
                     report["audio_duration_seconds"] = duration
+                    report["segment_count"] = len(segments)
                     report["real_time_factor"] = round(report["elapsed_ms_total"] / 1000.0 / duration, 3) if duration else None
                     # Actual post-inference health must qualify the resident worker/provider.
                     final_health = client.get(base + "/health", headers=headers).json()
@@ -259,13 +262,18 @@ def main() -> int:
                     provider = str(eng.get("provider") or "").casefold()
                     if "cpu" not in provider:
                         raise RuntimeError(f"qualified_provider_not_cpu: {provider or 'unknown'}")
+                    variant = str(eng.get("worker_variant") or "").casefold()
+                    if variant != "cpu":
+                        raise RuntimeError(f"qualified_worker_variant_not_cpu: {variant or 'unknown'}")
                     report["actual_inference_completed"] = True
                     report["sampled_peak_rss_note"] += " peak_kib is the maximum sampled while this one real API request was active."
                     report["sampled_peak_backend_tree_rss_kib"] = peak_rss
                     report["outcome"] = "PASS_REAL_PACKAGED_API_INFERENCE"
                     print("REAL_INFERENCE_OK " + json.dumps({
                         "model_id": args.model_id, "linux_model_id": model_id,
-                        "transcript": text, "segments": len(segments),
+                        "transcript_nonempty": bool(text),
+                        "transcript_anchor_words_present": anchor_presence,
+                        "segments": len(segments),
                         "elapsed_ms_total": report["elapsed_ms_total"],
                         "audio_duration_seconds": duration,
                         "real_time_factor": report["real_time_factor"],

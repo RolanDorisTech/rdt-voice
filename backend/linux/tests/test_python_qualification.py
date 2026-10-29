@@ -62,6 +62,29 @@ class CanonicalRequirementsHashTests(unittest.TestCase):
         self.assertIn('report["sampled_peak_rss_note"] +=', source)
         self.assertNotIn('report["peak_rss_note"]', source)
 
+    def test_linux_x64_generic_worker_disables_optional_isa_flags(self) -> None:
+        cmake = ROOT / "backend/whisper_cpp/worker/CMakeLists.txt"
+        source = cmake.read_text(encoding="utf-8")
+        self.assertIn('CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"', source)
+        self.assertIn("RDT Linux portable x86-64-v1 worker", source)
+        self.assertIn('set("GGML_${feature}" OFF CACHE BOOL "" FORCE)', source)
+        self.assertIn("foreach(feature SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C", source)
+
+    def test_packaged_qualification_does_not_persist_raw_transcripts_or_error_bodies(self) -> None:
+        qualifier = ROOT / ".github/scripts/qualify-packaged-linux-backend.py"
+        source = qualifier.read_text(encoding="utf-8")
+        self.assertNotIn('report["transcription_result"]', source)
+        self.assertNotIn('report["transcript"] = text', source)
+        self.assertNotIn('"transcript": text', source)
+        self.assertNotIn('response.text[:300]', source)
+        self.assertIn('report["transcript_anchor_words_present"] = anchor_presence', source)
+
+    def test_linux_x64_workflow_rejects_explicit_architecture_flags(self) -> None:
+        workflow = ROOT / ".github/workflows/linux-native-qualification.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("(march|mcpu)=", source)
+        self.assertIn("expected compiler-default x86-64-v1 baseline", source)
+
 class EarlyFailureReportTests(unittest.TestCase):
     def test_missing_packaged_backend_still_writes_failure_report(self) -> None:
         qualifier = ROOT / ".github/scripts/qualify-packaged-linux-backend.py"

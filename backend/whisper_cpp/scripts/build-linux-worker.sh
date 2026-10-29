@@ -86,6 +86,7 @@ cmake -S "$worker_source" -B "$build_root" \
   -DRDT_ENABLE_CUDA="$cuda" \
   -DRDT_ENABLE_VULKAN="$vulkan" \
   -DRDT_ENABLE_ARM_DOTPROD="$dotprod" \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$build_root" --config Release --target rdt_whisper_worker --parallel "$jobs"
 

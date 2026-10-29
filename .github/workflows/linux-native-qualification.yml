@@ -275,6 +275,28 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-build.log"
           WORKER=backend/whisper_cpp/bin/rdt_whisper_worker
           test -x "$WORKER"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            BUILD_DIR=backend/whisper_cpp/.build-linux-cpu
+            CACHE="$BUILD_DIR/CMakeCache.txt"
+            COMPILE_COMMANDS="$BUILD_DIR/compile_commands.json"
+            test -s "$CACHE"
+            test -s "$COMPILE_COMMANDS"
+            for feature in SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16; do
+              grep -Fxq "GGML_${feature}:BOOL=OFF" "$CACHE" || {
+                echo "STOP: generic x64 worker has GGML_${feature} enabled or unset." >&2
+                exit 1
+              }
+            done
+            if grep -Eq -- '-m(sse3|ssse3|sse4\.1|sse4\.2|avx[^[:space:],"]*|f16c|fma[^[:space:],"]*|bmi[^[:space:],"]*|popcnt|lzcnt|aes|pclmul|sha[^[:space:],"]*|vaes|vpclmulqdq|gfni|amx[^[:space:],"]*)' "$COMPILE_COMMANDS"; then
+              echo "STOP: generic x64 worker compile commands enable an optional x86 ISA flag." >&2
+              exit 1
+            fi
+            if grep -Eq -- '(^|[[:space:],"])-(march|mcpu)=' "$COMPILE_COMMANDS"; then
+              echo "STOP: generic x64 worker explicitly sets -march/-mcpu; expected compiler-default x86-64-v1 baseline." >&2
+              exit 1
+            fi
+            echo "PASS: generic x64 worker is configured for x86-64-v1; optional x86 ISA flags are absent."
+          fi
           ldd "$WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-ldd.txt"
           if ldd "$WORKER" 2>&1 | grep -q 'not found'; then
             echo "STOP: native worker has unresolved shared-library dependencies." >&2
@@ -379,6 +401,15 @@ jobs:
           grep -q '/rdt_voice_backend/rdt_voice_backend$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
           grep -q '/rdt_voice_backend/rdt_whisper_worker$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
           grep -q '/rdt_voice_web/index.html$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          BACKEND_EXE="$(find "$RUNNER_TEMP/rdt-linux-deb-root" -type f -path '*/rdt_voice_backend/rdt_voice_backend' -print -quit)"
+          test -n "$BACKEND_EXE"
+          BACKEND_DIR="$(dirname "$BACKEND_EXE")"
+          find "$BACKEND_DIR" -maxdepth 1 -type f -name 'rdt_whisper_worker*' -printf '%f\n' \
+            | LC_ALL=C sort > "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
+          printf '%s\n' rdt_whisper_worker > "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+          diff -u \
+            "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt" \
+            "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
           mkdir -p "$RUNNER_TEMP/rdt-linux-qualification/package"
           cp "$DEB" "$RUNNER_TEMP/rdt-linux-qualification/package/"
 

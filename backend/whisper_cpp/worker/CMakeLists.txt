@@ -182,6 +182,20 @@ else()
   endif()
   set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 endif()
+
+# The Linux amd64 package ships one worker under the generic CPU name. Keep
+# that worker at the x86-64-v1 baseline: GGML_NATIVE=OFF does not disable all
+# optional x86 ISA defaults in the pinned upstream build. Optimized workers
+# must have distinct names, runtime feature gates, and independent inference
+# qualification before they can be shipped.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+  set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+  foreach(feature SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16)
+    set("GGML_${feature}" OFF CACHE BOOL "" FORCE)
+  endforeach()
+  message(STATUS "RDT Linux portable x86-64-v1 worker; optional x86 ISA features disabled")
+endif()
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${WHISPER_CPP_SOURCE}" whisper.cpp)
 

@@ -4,7 +4,11 @@
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
   <p><strong>Available for macOS on Apple Silicon and Windows (ARM64 and x64)</strong></p>
-  <p><a href="#rdt-connect-downloads"><strong>Browse RDT Connect desktop installers ↓</strong></a></p>
+  <p>
+    <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20Apple%20Silicon%201D04-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS Apple Silicon, Build 1D04"></a>
+    <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20ARM64%202A05-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for Windows ARM64, Build 2A05"></a>
+    <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20x64%203A01-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for Windows x64, Build 3A01"></a>
+  </p>
   <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
   <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
 </div>

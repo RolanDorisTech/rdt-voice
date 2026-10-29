@@ -97,7 +97,8 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
 | macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
-| Windows | Installer (.exe) | Coming soon | — | — |
+| Windows (ARM64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) | `0.2.0-dev.11.2A05` | `2A05` | 101,982,643 bytes |
+| Windows (x64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) | `0.2.0-dev.11.3A01` | `3A01` | 137,375,653 bytes |
 
 **SHA-256 (Build 1D04):** `93b8442447e083e1e328904f06ec3ff3e8dd1f13df9fe28de1b6ae8e775ac39f`
 

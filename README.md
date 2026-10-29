@@ -3,8 +3,8 @@
   <h1>Meet RDT Connect</h1>
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
-  <p><strong>For macOS on Apple Silicon</strong></p>
-  <p><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/Download-RDT%20Connect%20for%20macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS"></a></p>
+  <p><strong>Available for macOS on Apple Silicon and Windows (ARM64 and x64)</strong></p>
+  <p><a href="#rdt-connect-downloads"><strong>Browse RDT Connect desktop installers ↓</strong></a></p>
   <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
   <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
 </div>
@@ -81,7 +81,7 @@ Open `http://localhost:5173/`. The root `index.html` is the current app. The exi
 
 [![RDT Connect with the server running and Open RDT Voice button](assets/rdt-connect-server-running.png)](#rdt-connect-downloads)
 
-Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional companion for **macOS on Apple Silicon**. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
+Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional desktop companion currently available for **macOS on Apple Silicon** and **Windows (ARM64 and x64)**. Choose the matching installer in the downloads table below. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
 
 1. Open RDT Connect.
 2. Choose a Whisper model.

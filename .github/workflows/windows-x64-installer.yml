@@ -42,7 +42,8 @@ jobs:
           assert '"$($installer.FullName).sig"' in workflow, "Workflow must verify the matching installer signature"
           assert "Install and qualify Windows x64 application" in workflow, "Missing installed-app qualification step"
           assert "Installed application PE machine must be AMD64/x64" in workflow, "Missing installed application architecture check"
-          assert "BaseName -ieq 'rdt_connect'" in workflow, "App selection must prefer the explicit Rust application binary name"
+          assert "rdt-connect-desktop.exe" in workflow, "Installed app detection must use the actual desktop executable name"
+          assert "needs: [signing-preflight, updater-contract]" in workflow, "Package must wait for fast contract and signing preflight"
           assert "Installed executables:" in workflow, "Executable-selection failures must report the installed EXE inventory"
           assert "RDT Connect_0.2.0-dev.11.3A01_x64-setup.exe" in workflow, "Missing exact Dev 11 x64 installer identity"
           assert "$signature.sha256" in workflow, "Distribution must include the signature checksum"
@@ -104,7 +105,7 @@ jobs:
           }
 
   package:
-    needs: signing-preflight
+    needs: [signing-preflight, updater-contract]
     runs-on: windows-latest
     timeout-minutes: 120
 
@@ -369,20 +370,9 @@ jobs:
           if (-not (Test-Path -LiteralPath $installDir -PathType Container)) { throw 'Installer did not create the requested install directory.' }
           Write-Host "PASS: silent install completed ($installDir)"
 
-          $app = Join-Path $installDir 'RDT Connect.exe'
+          $app = Join-Path $installDir 'rdt-connect-desktop.exe'
           if (-not (Test-Path -LiteralPath $app -PathType Leaf)) {
-            $executables = @(Get-ChildItem -LiteralPath $installDir -Filter '*.exe' -File -Recurse)
-            $candidates = @($executables | Where-Object { $_.BaseName -ieq 'rdt_connect' })
-            if ($candidates.Count -eq 0) {
-              $candidates = @($executables | Where-Object { $_.Name -ieq 'RDT Connect.exe' })
-            }
-            if ($candidates.Count -ne 1) {
-              $inventory = ($executables | ForEach-Object {
-                "{0} [ProductName={1}]" -f $_.FullName, $_.VersionInfo.ProductName
-              }) -join '; '
-              throw "Could not identify exactly one installed RDT Connect executable; exact candidates=$($candidates.Count). Installed executables: $inventory"
-            }
-            $app = $candidates[0].FullName
+            throw "Installed application executable missing: $app"
           }
 
           $stream = [System.IO.File]::OpenRead($app)

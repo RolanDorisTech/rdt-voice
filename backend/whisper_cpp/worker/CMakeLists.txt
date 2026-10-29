@@ -199,8 +199,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     endif()
     include(CheckCXXSourceCompiles)
     set(_RDT_SAVED_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
-    string(APPEND CMAKE_REQUIRED_FLAGS " -mavx2 -mfma")
-    unset(RDT_COMPILER_SUPPORTS_X64_AVX2_FMA CACHE)
+    string(APPEND CMAKE_REQUIRED_FLAGS " -mavx2 -mfma -mf16c")
+    unset(RDT_COMPILER_SUPPORTS_X64_AVX2_FMA_F16C CACHE)
     check_cxx_source_compiles(
       "#include <immintrin.h>
        int main() {
@@ -208,16 +208,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
          __m256 b = _mm256_fmadd_ps(a, a, a);
          return _mm256_movemask_ps(b) == 0;
        }"
-      RDT_COMPILER_SUPPORTS_X64_AVX2_FMA)
+      RDT_COMPILER_SUPPORTS_X64_AVX2_FMA_F16C)
     set(CMAKE_REQUIRED_FLAGS "${_RDT_SAVED_REQUIRED_FLAGS}")
     unset(_RDT_SAVED_REQUIRED_FLAGS)
-    if(NOT RDT_COMPILER_SUPPORTS_X64_AVX2_FMA)
+    if(NOT RDT_COMPILER_SUPPORTS_X64_AVX2_FMA_F16C)
       message(FATAL_ERROR "Compiler cannot build the x64 AVX2/FMA worker")
     endif()
     set(GGML_AVX ON CACHE BOOL "" FORCE)
     set(GGML_AVX2 ON CACHE BOOL "" FORCE)
     set(GGML_FMA ON CACHE BOOL "" FORCE)
-    foreach(feature SSE42 AVX_VNNI BMI2 F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16)
+    set(GGML_F16C ON CACHE BOOL "" FORCE)
+    foreach(feature SSE42 AVX_VNNI BMI2 AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16)
       set("GGML_${feature}" OFF CACHE BOOL "" FORCE)
     endforeach()
     message(STATUS "RDT Linux x64 AVX2/FMA optimized worker")
@@ -239,7 +240,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
   if(NOT TARGET ggml-cpu)
     message(FATAL_ERROR "x64 AVX2 build expected the ggml-cpu target")
   endif()
-  target_compile_options(ggml-cpu PRIVATE -mavx2 -mfma)
+  target_compile_options(ggml-cpu PRIVATE -mavx2 -mfma -mf16c)
 endif()
 
 if(MSVC AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64"

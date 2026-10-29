@@ -75,7 +75,7 @@ class _WorkerTranscriptionError(RuntimeError):
 
 
 def _linux_x64_avx2_available() -> bool:
-    """Conservatively require AVX2 and FMA on every CPU flags record."""
+    """Require AVX2, FMA, and F16C on every CPU flags record."""
     if not sys.platform.startswith("linux") or platform.machine().lower() not in {"x86_64", "amd64"}:
         return False
     records = []
@@ -87,7 +87,7 @@ def _linux_x64_avx2_available() -> bool:
                     records.append(set(value.lower().split()))
     except OSError:
         return False
-    return bool(records) and all({"avx2", "fma"}.issubset(flags) for flags in records)
+    return bool(records) and all({"avx2", "fma", "f16c"}.issubset(flags) for flags in records)
 
 
 class PersistentWhisperEngine:

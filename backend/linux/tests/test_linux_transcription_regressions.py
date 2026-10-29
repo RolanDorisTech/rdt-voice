@@ -809,10 +809,36 @@ class PersistentWorkerProtocolTests(unittest.TestCase):
             "rdt_whisper_worker",
         ])
 
+    def test_linux_x64_avx2_gate_requires_avx2_fma_and_f16c(self):
+        all_flags = "fpu sse sse2 avx avx2 fma f16c"
+        for missing in (None, "avx2", "fma", "f16c"):
+            flags = all_flags if missing is None else " ".join(
+                flag for flag in all_flags.split() if flag != missing
+            )
+            cpuinfo = f"flags : {flags}\n"
+            with self.subTest(missing=missing):
+                with mock.patch.object(engine_module.sys, "platform", "linux"):
+                    with mock.patch.object(engine_module.platform, "machine", return_value="x86_64"):
+                        with mock.patch("builtins.open", mock.mock_open(read_data=cpuinfo)):
+                            self.assertEqual(
+                                engine_module._linux_x64_avx2_available(),
+                                missing is None,
+                            )
+
+    def test_linux_x64_avx2_gate_requires_features_on_every_cpu_record(self):
+        cpuinfo = (
+            "processor : 0\nflags : fpu avx2 fma f16c\n"
+            "processor : 1\nflags : fpu avx2 fma\n"
+        )
+        with mock.patch.object(engine_module.sys, "platform", "linux"):
+            with mock.patch.object(engine_module.platform, "machine", return_value="x86_64"):
+                with mock.patch("builtins.open", mock.mock_open(read_data=cpuinfo)):
+                    self.assertFalse(engine_module._linux_x64_avx2_available())
+
     def test_windows_x64_does_not_select_linux_avx2_worker(self):
-        with mock.patch.object(engine_module.platform, "machine", return_value="AMD64"), \
-             mock.patch.object(engine_module.sys, "platform", "win32"):
-            self.assertFalse(engine_module._linux_x64_avx2_available())
+        with mock.patch.object(engine_module.platform, "machine", return_value="AMD64"):
+            with mock.patch.object(engine_module.sys, "platform", "win32"):
+                self.assertFalse(engine_module._linux_x64_avx2_available())
 
     def test_client_cancelled_non_cpu_crash_does_not_demote_candidate(self):
         gpu = Path("/tmp/rdt-whisper-fake-gpu-cancel-test")

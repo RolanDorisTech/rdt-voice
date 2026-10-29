@@ -328,14 +328,15 @@ jobs:
             test -x "$AVX2_WORKER"
             grep -q '^GGML_AVX2:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
             grep -q '^GGML_FMA:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
+            grep -q '^GGML_F16C:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
             python3 - "$AVX2_BUILD/compile_commands.json" <<'PYAVX'
           import json, sys
           from pathlib import Path
           commands = json.loads(Path(sys.argv[1]).read_text())
           cpu = [x["command"] for x in commands if "/ggml-cpu/" in x["file"] or "ggml-cpu" in x["file"]]
           assert cpu, "No ggml-cpu compile commands found"
-          assert any("-mavx2" in x and "-mfma" in x for x in cpu), "AVX2/FMA flags missing from ggml-cpu compilation"
-          print(f"PASS: AVX2/FMA flags present in {len(cpu)} ggml-cpu compile commands")
+          assert any("-mavx2" in x and "-mfma" in x and "-mf16c" in x for x in cpu), "AVX2/FMA/F16C flags missing from ggml-cpu compilation"
+          print(f"PASS: AVX2/FMA/F16C flags present in {len(cpu)} ggml-cpu compile commands")
           PYAVX
             ldd "$AVX2_WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"
             if grep -q 'not found' "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"; then

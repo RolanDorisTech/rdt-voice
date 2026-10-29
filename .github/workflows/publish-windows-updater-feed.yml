@@ -1,21 +1,28 @@
-name: Publish RDT Connect Windows updater feed
+name: Publish RDT Connect updater feed
 
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: Windows architecture to publish
+        description: Platform and architecture to publish
         required: true
         type: choice
         options:
+          - darwin-aarch64
           - windows-aarch64
           - windows-x86_64
+          - linux-aarch64
+          - linux-x86_64
       version:
         description: Exact version including platform build marker
         required: true
         type: string
       release_tag:
         description: Exact existing RDT Connect release tag
+        required: true
+        type: string
+      asset_name:
+        description: Exact updater-compatible release artifact filename
         required: true
         type: string
       notes:
@@ -28,7 +35,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: rdt-connect-windows-updater-feed
+  group: rdt-connect-updater-feed
   cancel-in-progress: false
 
 jobs:
@@ -48,6 +55,7 @@ jobs:
           TARGET: ${{ inputs.target }}
           VERSION: ${{ inputs.version }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          ASSET_NAME: ${{ inputs.asset_name }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -60,12 +68,20 @@ jobs:
           )
           gen = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(gen)
-          targets = {
-              "windows-aarch64": ("arm64", "aarch64"),
-              "windows-x86_64": ("x64", "x86_64"),
+          feeds = {
+              "darwin-aarch64": "rdt_connect/updates/dev/darwin/aarch64/latest.json",
+              "windows-aarch64": "rdt_connect/updates/dev/windows/aarch64/latest.json",
+              "windows-x86_64": "rdt_connect/updates/dev/windows/x86_64/latest.json",
+              "linux-aarch64": "rdt_connect/updates/dev/linux/aarch64/latest.json",
+              "linux-x86_64": "rdt_connect/updates/dev/linux/x86_64/latest.json",
           }
-          if target not in targets:
+          if target not in feeds:
               raise SystemExit("FAIL: unsupported target")
+          asset = os.environ.get("ASSET_NAME", "")
+          if not asset or asset in {".", ".."} or "/" in asset or "\\" in asset:
+              raise SystemExit("FAIL: asset_name must be a filename, not a path")
+          if target.startswith("linux-"):
+              raise SystemExit("FAIL: Linux updater publication is blocked until signed Tauri updater artifacts and verification sidecars are published.")
           try:
               gen.parse_version(version, target)
           except (ValueError, TypeError) as exc:
@@ -74,56 +90,86 @@ jobs:
           expected = "rdt-connect-v" + version.rsplit(".", 1)[0] + "-" + marker.lower()
           if tag != expected:
               raise SystemExit(f"FAIL: expected release tag {expected}")
-          suffix, arch = targets[target]
-          asset = f"RDT.Connect_{version}_{suffix}-setup.exe"
-          feed = f"rdt_connect/updates/dev/windows/{arch}/latest.json"
+          feed = feeds[target]
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"asset={asset}\nfeed={feed}\n")
-          print(f"PASS: {target} {version} {tag}")
+          print(f"PASS: {target} {version} {tag} asset={asset}")
           PY
 
-      - name: Download exact release assets
+      - name: Download and validate exact updater artifact
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ inputs.target }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           ASSET: ${{ steps.release.outputs.asset }}
         run: |
           set -euo pipefail
+          case "$TARGET" in
+            darwin-aarch64)
+              [[ "$ASSET" == *.app.tar.gz ]] || { echo "FAIL: macOS updater asset must be a signed .app.tar.gz"; exit 1; }
+              ;;
+            windows-aarch64|windows-x86_64)
+              [[ "$ASSET" == *.exe ]] || { echo "FAIL: Windows updater asset must be an .exe"; exit 1; }
+              ;;
+            linux-aarch64|linux-x86_64)
+              echo "FAIL: Linux updater publication is blocked until signed Tauri updater artifacts and verification sidecars are published."
+              exit 1
+              ;;
+            *)
+              echo "FAIL: unsupported target"; exit 1
+              ;;
+          esac
+
           mkdir -p "$RUNNER_TEMP/release"
+          patterns=(--pattern "$ASSET" --pattern "$ASSET.sig")
+          if [[ "$TARGET" == windows-* ]]; then
+            patterns+=(--pattern "$ASSET.sha256" --pattern "$ASSET.sig.sha256")
+          fi
           gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --dir "$RUNNER_TEMP/release" \
-            --pattern "$ASSET" \
-            --pattern "$ASSET.sha256" \
-            --pattern "$ASSET.sig" \
-            --pattern "$ASSET.sig.sha256"
-          python3 - "$RUNNER_TEMP/release" "$ASSET" <<'PY'
-          import hashlib, re, sys
-          from pathlib import Path
-          directory, name = Path(sys.argv[1]), sys.argv[2]
-          for sidecar_name, artifact in (
-              (name + ".sha256", directory / name),
-              (name + ".sig.sha256", directory / (name + ".sig")),
-          ):
-              sidecar = directory / sidecar_name
-              if not artifact.is_file() or not artifact.stat().st_size:
-                  raise SystemExit(f"FAIL: missing/empty artifact {artifact.name}")
-              if not sidecar.is_file():
-                  raise SystemExit(f"FAIL: missing checksum {sidecar_name}")
-              fields = sidecar.read_text().strip().split()
-              if not fields or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
-                  raise SystemExit(f"FAIL: malformed checksum {sidecar_name}")
-              actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
-              if actual.lower() != fields[0].lower():
-                  raise SystemExit(f"FAIL: SHA-256 mismatch for {artifact.name}")
-              print(f"PASS: checksum {artifact.name}")
-          signature = (directory / (name + ".sig")).read_text().strip()
-          if not signature or "\n" in signature or "\r" in signature:
-              raise SystemExit("FAIL: signature payload must be one nonempty line")
-          PY
+            "${patterns[@]}"
 
-      - name: Verify signed installer with configured updater key
+          python3 - "$RUNNER_TEMP/release" "$ASSET" "$TARGET" <<'PYVERIFY'
+          import base64, hashlib, re, sys
+          from pathlib import Path
+
+          directory, name, target = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          artifact = directory / name
+          signature_file = directory / (name + ".sig")
+          for f in (artifact, signature_file):
+              if not f.is_file() or not f.stat().st_size:
+                  raise SystemExit(f"FAIL: missing or empty required asset: {f.name}")
+
+          encoded = signature_file.read_text().strip()
+          if not encoded or "\n" in encoded or "\r" in encoded:
+              raise SystemExit("FAIL: signature payload must be one nonempty line")
+          try:
+              base64.b64decode(encoded, validate=True)
+          except Exception as exc:
+              raise SystemExit(f"FAIL: signature is not valid base64: {exc}")
+
+          if target.startswith("windows-"):
+              for sidecar_name, checked in (
+                  (name + ".sha256", artifact),
+                  (name + ".sig.sha256", signature_file),
+              ):
+                  sidecar = directory / sidecar_name
+                  if not sidecar.is_file() or not sidecar.stat().st_size:
+                      raise SystemExit(f"FAIL: missing checksum sidecar: {sidecar_name}")
+                  fields = sidecar.read_text().split()
+                  if not fields or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
+                      raise SystemExit(f"FAIL: malformed checksum: {sidecar_name}")
+                  actual = hashlib.sha256(checked.read_bytes()).hexdigest()
+                  if actual.lower() != fields[0].lower():
+                      raise SystemExit(f"FAIL: SHA-256 mismatch for {checked.name}")
+                  print(f"PASS: checksum {checked.name}")
+
+          print(f"PASS: required updater artifact and signature downloaded for {target}")
+          PYVERIFY
+
+      - name: Verify signed updater artifact with configured updater key
         shell: bash
         env:
           ASSET: ${{ steps.release.outputs.asset }}
@@ -151,7 +197,9 @@ jobs:
           signature_path.write_bytes(signature_bytes)
           print("PASS: decoded configured public key and installer signature")
           PYKEY
-          minisign -Vm "$RUNNER_TEMP/release/$ASSET"             -x "$RUNNER_TEMP/release/$ASSET.minisig"             -p "$RUNNER_TEMP/rdt-connect-updater.pub"
+          minisign -Vm "$RUNNER_TEMP/release/$ASSET" \
+            -x "$RUNNER_TEMP/release/$ASSET.minisig" \
+            -p "$RUNNER_TEMP/rdt-connect-updater.pub"
       - name: Run generator tests
         shell: bash
         run: |
@@ -214,7 +262,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           add-paths: ${{ steps.release.outputs.feed }}
-          branch: automation/windows-updater-feed-${{ inputs.target }}
+          branch: automation/updater-feed-${{ inputs.target }}
           base: main
           delete-branch: true
           commit-message: "Publish RDT Connect updater feed ${{ inputs.target }} ${{ inputs.version }}"

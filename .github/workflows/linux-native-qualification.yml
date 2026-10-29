@@ -277,6 +277,21 @@ jobs:
           test -x "$WORKER"
           if [[ "${{ matrix.arch }}" == "x64" ]]; then
             BUILD_DIR=backend/whisper_cpp/.build-linux-cpu
+            cp "$BUILD_DIR/compile_commands.json" "$RUNNER_TEMP/rdt-linux-qualification/x64-compile-commands.json"
+            cp "$BUILD_DIR/CMakeCache.txt" "$RUNNER_TEMP/rdt-linux-qualification/x64-cmake-cache.txt"
+            {
+              echo "=== uname ==="
+              uname -a
+              echo "=== CPU ==="
+              lscpu
+              echo "=== cgroup CPU limits ==="
+              for f in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu.stat /sys/fs/cgroup/cpuset.cpus.effective; do
+                if [[ -r "$f" ]]; then echo "--- $f"; cat "$f"; fi
+              done
+            } > "$RUNNER_TEMP/rdt-linux-qualification/x64-cpu-diagnostics.txt"
+          fi
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            BUILD_DIR=backend/whisper_cpp/.build-linux-cpu
             CACHE="$BUILD_DIR/CMakeCache.txt"
             COMPILE_COMMANDS="$BUILD_DIR/compile_commands.json"
             test -s "$CACHE"

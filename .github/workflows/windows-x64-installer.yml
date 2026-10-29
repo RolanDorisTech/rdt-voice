@@ -40,6 +40,9 @@ jobs:
           assert config.get("bundle", {}).get("createUpdaterArtifacts") is True, "Tauri updater artifacts must be enabled"
           assert "*-setup.exe" in workflow, "Workflow must verify the actual NSIS setup executable"
           assert '"$($installer.FullName).sig"' in workflow, "Workflow must verify the matching installer signature"
+          assert "Install and qualify Windows x64 application" in workflow, "Missing installed-app qualification step"
+          assert "Installed application PE machine must be AMD64/x64" in workflow, "Missing installed application architecture check"
+          assert "RDT Connect_0.2.0-dev.11.3A01_x64-setup.exe" in workflow, "Missing exact Dev 11 x64 installer identity"
           assert "$signature.sha256" in workflow, "Distribution must include the signature checksum"
           print("PASS: Tauri v2 NSIS updater artifact contract")
           PYCONTRACT
@@ -338,6 +341,89 @@ jobs:
             }
           }
 
+      - name: Install and qualify Windows x64 application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
+          if ($installers.Count -ne 1) { throw "Expected exactly one x64 setup installer; found $($installers.Count)." }
+          $installer = $installers[0]
+          $expectedName = 'RDT Connect_0.2.0-dev.11.3A01_x64-setup.exe'
+          if ($installer.Name -ne $expectedName) { throw "Unexpected installer identity: $($installer.Name)" }
+
+          $checksumPath = "$($installer.FullName).sha256"
+          if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) { throw 'Installer SHA-256 sidecar missing.' }
+          $checksumMatch = [regex]::Match((Get-Content -LiteralPath $checksumPath -Raw), '\b[0-9a-fA-F]{64}\b')
+          if (-not $checksumMatch.Success) { throw 'Installer SHA-256 sidecar has no valid digest.' }
+          $actualHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+          if ($actualHash -ne $checksumMatch.Value) { throw 'Installer SHA-256 does not match its sidecar.' }
+          Write-Host "PASS: installer hash and expected Dev 11 x64 filename ($actualHash)"
+
+          $installDir = Join-Path $env:RUNNER_TEMP 'rdt-connect-x64-install-smoke'
+          if (Test-Path -LiteralPath $installDir) { throw "Install target already exists; refusing to reuse it: $installDir" }
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList "/S /D=$installDir" -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) { throw "Silent installer exited with code $($installProcess.ExitCode)." }
+          if (-not (Test-Path -LiteralPath $installDir -PathType Container)) { throw 'Installer did not create the requested install directory.' }
+          Write-Host "PASS: silent install completed ($installDir)"
+
+          $app = Join-Path $installDir 'RDT Connect.exe'
+          if (-not (Test-Path -LiteralPath $app -PathType Leaf)) {
+            $candidates = @(Get-ChildItem -LiteralPath $installDir -Filter '*.exe' -File -Recurse |
+              Where-Object { $_.BaseName -ieq 'rdt_connect' -or $_.VersionInfo.ProductName -ieq 'RDT Connect' })
+            if ($candidates.Count -ne 1) { throw "Could not identify exactly one installed RDT Connect executable; found $($candidates.Count)." }
+            $app = $candidates[0].FullName
+          }
+
+          $stream = [System.IO.File]::OpenRead($app)
+          try {
+            $reader = [System.IO.BinaryReader]::new($stream)
+            if ($reader.ReadUInt16() -ne 0x5A4D) { throw 'Installed app has no valid MZ header.' }
+            $stream.Position = 0x3C
+            $peOffset = $reader.ReadInt32()
+            $stream.Position = $peOffset
+            if ($reader.ReadUInt32() -ne 0x00004550) { throw 'Installed app has no valid PE signature.' }
+            $machine = $reader.ReadUInt16()
+          } finally {
+            $stream.Dispose()
+          }
+          if ($machine -ne 0x8664) { throw ('Installed application PE machine must be AMD64/x64; actual 0x{0:X4}.' -f $machine) }
+          $appVersion = (Get-Item -LiteralPath $app).VersionInfo.ProductVersion
+          if ([string]::IsNullOrWhiteSpace($appVersion) -or $appVersion -notmatch '0\.2\.0-dev\.11\.3A01') {
+            throw "Installed app metadata does not confirm build marker 3A01; ProductVersion='$appVersion'."
+          }
+          Write-Host "PASS: installed app is x64; ProductVersion=$appVersion"
+
+          $installedDirs = @(Get-ChildItem -LiteralPath $installDir -Directory -Recurse -Force)
+          foreach ($name in @('rdt_voice_backend', 'rdt_voice_web', 'third_party_notices', 'windows_installation_guide')) {
+            $matches = @($installedDirs | Where-Object { $_.Name -ieq $name })
+            if ($matches.Count -lt 1) { throw "Installed resource directory missing: $name" }
+            $count = 0
+            foreach ($dir in $matches) {
+              $count += @(Get-ChildItem -LiteralPath $dir.FullName -File -Recurse -Force -ErrorAction Stop).Count
+            }
+            if ($count -lt 1) { throw "Installed resource directory is empty: $name" }
+            Write-Host "PASS: resource $name contains $count file(s)"
+          }
+
+          $workerFiles = @(Get-ChildItem -LiteralPath $installDir -File -Recurse -Force |
+            Where-Object { $_.FullName -match '(?i)worker' })
+          if ($workerFiles.Count -lt 1) { throw 'No worker-related file found in installed payload.' }
+          Write-Host "PASS: worker-related payload files found: $($workerFiles.Count)"
+
+          $appProcess = $null
+          try {
+            $appProcess = Start-Process -FilePath $app -WorkingDirectory $installDir -PassThru
+            Start-Sleep -Seconds 8
+            $appProcess.Refresh()
+            if ($appProcess.HasExited) { throw "Installed app exited during startup smoke test (exit $($appProcess.ExitCode))." }
+            Write-Host 'PASS: installed application remained running for the 8-second startup smoke test'
+          } finally {
+            if ($null -ne $appProcess) {
+              $appProcess.Refresh()
+              if (-not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue }
+            }
+          }
       - name: Package Windows pre-install guide
         shell: pwsh
         run: |

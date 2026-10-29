@@ -777,7 +777,8 @@ class PersistentWorkerProtocolTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"RDT_WHISPER_WORKER_EXE": ""}), \
                  mock.patch.object(engine_module.sys, "frozen", False, create=True), \
                  mock.patch.object(engine_module.platform, "machine", return_value="x86_64"), \
-                 mock.patch.object(engine_module.sys, "platform", "linux"):
+                 mock.patch.object(engine_module.sys, "platform", "linux"), \
+                 mock.patch.object(engine_module, "_linux_x64_avx2_available", return_value=False):
                 candidates = engine_module.PersistentWhisperEngine.worker_candidates()
             self.assertEqual([p.name for p in candidates], [
                 "rdt_whisper_worker_cuda", "rdt_whisper_worker_vulkan", "rdt_whisper_worker",
@@ -792,6 +793,26 @@ class PersistentWorkerProtocolTests(unittest.TestCase):
                 "rdt_whisper_worker_cuda", "rdt_whisper_worker_vulkan",
                 "rdt_whisper_worker_dotprod", "rdt_whisper_worker",
             ])
+
+    def test_linux_x64_avx2_worker_is_runtime_gated_before_portable_cpu(self):
+        with mock.patch.dict(os.environ, {"RDT_WHISPER_WORKER_EXE": ""}), \
+             mock.patch.object(engine_module.sys, "frozen", False, create=True), \
+             mock.patch.object(engine_module.platform, "machine", return_value="x86_64"), \
+             mock.patch.object(engine_module.sys, "platform", "linux"), \
+             mock.patch.object(engine_module, "_linux_x64_avx2_available", return_value=True):
+            candidates = engine_module.PersistentWhisperEngine.worker_candidates()
+
+        self.assertEqual([p.name for p in candidates], [
+            "rdt_whisper_worker_cuda",
+            "rdt_whisper_worker_vulkan",
+            "rdt_whisper_worker_avx2",
+            "rdt_whisper_worker",
+        ])
+
+    def test_windows_x64_does_not_select_linux_avx2_worker(self):
+        with mock.patch.object(engine_module.platform, "machine", return_value="AMD64"), \
+             mock.patch.object(engine_module.sys, "platform", "win32"):
+            self.assertFalse(engine_module._linux_x64_avx2_available())
 
     def test_client_cancelled_non_cpu_crash_does_not_demote_candidate(self):
         gpu = Path("/tmp/rdt-whisper-fake-gpu-cancel-test")

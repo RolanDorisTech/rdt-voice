@@ -6,7 +6,7 @@ PINNED_WHISPER_CPP_COMMIT="d1be6fde11ac6e0407606b4e42fe72d34add8037"
 
 usage() {
   cat >&2 <<'USAGE'
-Usage: build-linux-worker.sh [cpu|cuda|vulkan|dotprod] [WHISPER_CPP_SOURCE]
+Usage: build-linux-worker.sh [cpu|cuda|vulkan|dotprod|avx2] [WHISPER_CPP_SOURCE]
 
 The source tree must be a clean Git checkout at the pinned whisper.cpp v1.9.5 commit.
 Defaults: variant=cpu; source=$WHISPER_CPP_SOURCE.
@@ -18,7 +18,7 @@ USAGE
 variant="${1:-cpu}"
 source_arg="${2:-${WHISPER_CPP_SOURCE:-}}"
 case "$variant" in
-  cpu|cuda|vulkan|dotprod) ;;
+  cpu|cuda|vulkan|dotprod|avx2) ;;
   -h|--help) usage; exit 0 ;;
   *) usage; exit 2 ;;
 esac
@@ -59,8 +59,14 @@ bin_dir="$whisper_cpp_dir/bin"
 cuda=OFF
 vulkan=OFF
 dotprod=OFF
+avx2=OFF
 case "$variant" in
   cpu) target_name="rdt_whisper_worker" ;;
+  avx2)
+    machine="$(uname -m)"
+    case "$machine" in x86_64|amd64) ;; *) echo "avx2 variant requires Linux x86_64; got $machine." >&2; exit 2 ;; esac
+    target_name="rdt_whisper_worker_avx2"; avx2=ON
+    ;;
   cuda) target_name="rdt_whisper_worker_cuda"; cuda=ON ;;
   vulkan) target_name="rdt_whisper_worker_vulkan"; vulkan=ON ;;
   dotprod)
@@ -86,6 +92,7 @@ cmake -S "$worker_source" -B "$build_root" \
   -DRDT_ENABLE_CUDA="$cuda" \
   -DRDT_ENABLE_VULKAN="$vulkan" \
   -DRDT_ENABLE_ARM_DOTPROD="$dotprod" \
+  -DRDT_ENABLE_X64_AVX2="$avx2" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$build_root" --config Release --target rdt_whisper_worker --parallel "$jobs"

@@ -84,10 +84,18 @@ fi
 
 cp -a -- "${BUILT}/." "${STAGE_ROOT}/"
 install -m 0755 "${WORKER}" "${STAGE_ROOT}/rdt_whisper_worker"
+AVX2_WORKER="${REPO_ROOT}/backend/whisper_cpp/bin/rdt_whisper_worker_avx2"
+if [[ -x "${AVX2_WORKER}" ]]; then
+  if [[ "$(uname -m)" != "x86_64" && "$(uname -m)" != "amd64" ]]; then
+    echo "STOP: refusing to package an x64 AVX2 worker on $(uname -m)." >&2
+    exit 1
+  fi
+  install -m 0755 "${AVX2_WORKER}" "${STAGE_ROOT}/rdt_whisper_worker_avx2"
+fi
 
 # Refuse bundles with unresolved shared-library dependencies. A successful copy
 # alone is not evidence the executable will run on a supported Linux system.
-for binary in "${STAGE_ROOT}/rdt_voice_backend" "${STAGE_ROOT}/rdt_whisper_worker"; do
+for binary in "${STAGE_ROOT}/rdt_voice_backend" "${STAGE_ROOT}"/rdt_whisper_worker*; do
   deps="$(ldd "${binary}" 2>&1 || true)"
   if grep -q 'not found' <<<"${deps}"; then
     echo "STOP: missing shared library for ${binary}:" >&2
@@ -107,7 +115,10 @@ def sha(p):
             h.update(chunk)
     return h.hexdigest()
 files = {}
-for name in ('rdt_voice_backend', 'rdt_whisper_worker'):
+names = ['rdt_voice_backend', 'rdt_whisper_worker']
+if (stage/'rdt_whisper_worker_avx2').is_file():
+    names.append('rdt_whisper_worker_avx2')
+for name in names:
     p=stage/name
     if not p.is_file() or p.is_symlink():
         raise SystemExit(f'expected regular bundled binary missing: {p}')

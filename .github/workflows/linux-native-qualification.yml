@@ -319,6 +319,27 @@ jobs:
           fi
           sha256sum "$WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-sha256.txt"
           cp "$WORKER" "$RUNNER_TEMP/rdt-linux-qualification/rdt_whisper_worker"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            RDT_BUILD_JOBS=2 bash backend/whisper_cpp/scripts/build-linux-worker.sh avx2 "$SRC" \
+              2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-avx2-build.log"
+            AVX2_BUILD=backend/whisper_cpp/.build-linux-avx2
+            AVX2_WORKER=backend/whisper_cpp/bin/rdt_whisper_worker_avx2
+            test -x "$AVX2_WORKER"
+            grep -q '^GGML_AVX2:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
+            grep -q '^GGML_FMA:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
+            python3 - "$AVX2_BUILD/compile_commands.json" <<'PYAVX'
+import json, sys
+from pathlib import Path
+commands = json.loads(Path(sys.argv[1]).read_text())
+cpu = [x["command"] for x in commands if "/ggml-cpu/" in x["file"] or "ggml-cpu" in x["file"]]
+assert cpu, "No ggml-cpu compile commands found"
+assert any("-mavx2" in x and "-mfma" in x for x in cpu), "AVX2/FMA flags missing from ggml-cpu compilation"
+print(f"PASS: AVX2/FMA flags present in {len(cpu)} ggml-cpu compile commands")
+PYAVX
+            ldd "$AVX2_WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"
+            ! grep -q 'not found' "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"
+            sha256sum "$AVX2_WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/avx2-worker-sha256.txt"
+          fi
 
       - name: Verify and cache the approved Large-v3-Turbo GGML artifact
         run: |
@@ -359,9 +380,11 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/backend-bundle-build.log"
           test -x rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_voice_backend
           test -x rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker
-          sha256sum \
-            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_voice_backend \
-            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker \
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            test -x rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker_avx2
+          fi
+          sha256sum rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_voice_backend \
+            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker* \
             | tee "$RUNNER_TEMP/rdt-linux-qualification/bundled-executable-sha256.txt"
 
       - name: Install locked frontend dependencies
@@ -410,18 +433,26 @@ jobs:
           find "$RUNNER_TEMP/rdt-linux-deb-root" -type f \
             \( -path '*/rdt_voice_backend/rdt_voice_backend' \
                -o -path '*/rdt_voice_backend/rdt_whisper_worker' \
+               -o -path '*/rdt_voice_backend/rdt_whisper_worker_avx2' \
                -o -path '*/rdt_voice_web/index.html' \
                -o -path '*/rdt_voice_web/worker.js' \) \
             -print | sort | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
           grep -q '/rdt_voice_backend/rdt_voice_backend$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
           grep -q '/rdt_voice_backend/rdt_whisper_worker$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            grep -q '/rdt_voice_backend/rdt_whisper_worker_avx2$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          fi
           grep -q '/rdt_voice_web/index.html$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
           BACKEND_EXE="$(find "$RUNNER_TEMP/rdt-linux-deb-root" -type f -path '*/rdt_voice_backend/rdt_voice_backend' -print -quit)"
           test -n "$BACKEND_EXE"
           BACKEND_DIR="$(dirname "$BACKEND_EXE")"
           find "$BACKEND_DIR" -maxdepth 1 -type f -name 'rdt_whisper_worker*' -printf '%f\n' \
             | LC_ALL=C sort > "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
-          printf '%s\n' rdt_whisper_worker > "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            printf '%s\n' rdt_whisper_worker rdt_whisper_worker_avx2 > "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+          else
+            printf '%s\n' rdt_whisper_worker > "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+          fi
           diff -u \
             "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt" \
             "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
@@ -446,7 +477,44 @@ jobs:
             --output-json "$RUNNER_TEMP/rdt-linux-qualification/real-inference-timing.json" \
             --model-id "$MODEL_UI_ID" \
             --timeout-seconds 900 \
-            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-api-inference.log"
+            --expected-worker-variant cpu \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-api-inference-cpu.log"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            AVX2_WORKER="$(find "$ROOT" -type f -path '*/rdt_voice_backend/rdt_whisper_worker_avx2' -print -quit)"
+            test -n "$AVX2_WORKER"
+            "$RUNNER_TEMP/rdt-python/bin/python" .github/scripts/qualify-packaged-linux-backend.py \
+              --backend "$BACKEND" \
+              --worker "$AVX2_WORKER" \
+              --frontend-dir "$FRONTEND_DIR" \
+              --model-dir "$RUNNER_TEMP/rdt-models" \
+              --fixture "$RUNNER_TEMP/rdt-linux-qualification.wav" \
+              --output-json "$RUNNER_TEMP/rdt-linux-qualification/real-inference-timing-avx2.json" \
+              --model-id "$MODEL_UI_ID" \
+              --timeout-seconds 900 \
+              --expected-worker-variant x64-avx2 \
+              2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-api-inference-avx2.log"
+            "$RUNNER_TEMP/rdt-python/bin/python" - \
+              "$RUNNER_TEMP/rdt-linux-qualification/real-inference-timing.json" \
+              "$RUNNER_TEMP/rdt-linux-qualification/real-inference-timing-avx2.json" <<'PYBENCH'
+import json, sys
+from pathlib import Path
+
+baseline = json.loads(Path(sys.argv[1]).read_text())
+optimized = json.loads(Path(sys.argv[2]).read_text())
+base_ms = float(baseline["elapsed_ms_total"])
+avx_ms = float(optimized["elapsed_ms_total"])
+if base_ms <= 0 or avx_ms <= 0:
+    raise SystemExit("STOP: invalid inference timing")
+speedup = base_ms / avx_ms
+print(f"portable_cpu_elapsed_ms={base_ms:.1f}")
+print(f"x64_avx2_elapsed_ms={avx_ms:.1f}")
+print(f"x64_avx2_speedup={speedup:.2f}x")
+print(f"portable_cpu_rtf={baseline.get('real_time_factor', 'missing')}")
+print(f"x64_avx2_rtf={optimized.get('real_time_factor', 'missing')}")
+if avx_ms >= base_ms:
+    raise SystemExit("STOP: AVX2 worker did not beat portable CPU baseline")
+PYBENCH
+          fi
 
       - name: Upload qualification evidence and Linux package (never model weights)
         if: always()

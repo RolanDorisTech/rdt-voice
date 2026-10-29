@@ -112,6 +112,7 @@ class WindowsBackendContractTests(unittest.TestCase):
             ("rdt_whisper_worker_cuda", "cuda"),
             ("rdt_whisper_worker_vulkan", "vulkan"),
             ("rdt_whisper_worker_dotprod", "arm-dotprod"),
+            ("rdt_whisper_worker_avx2", "x64-avx2"),
             ("rdt_whisper_worker", "cpu"),
         ):
             self.assertIn(f'"{worker}": "{variant}"', ENGINE)

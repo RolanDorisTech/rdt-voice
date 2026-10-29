@@ -74,6 +74,22 @@ class _WorkerTranscriptionError(RuntimeError):
     """A well-formed ERROR record sent by the worker for this request."""
 
 
+def _linux_x64_avx2_available() -> bool:
+    """Conservatively require AVX2 and FMA on every CPU flags record."""
+    if not sys.platform.startswith("linux") or platform.machine().lower() not in {"x86_64", "amd64"}:
+        return False
+    records = []
+    try:
+        with open("/proc/cpuinfo", "r", encoding="ascii", errors="ignore") as cpuinfo:
+            for line in cpuinfo:
+                key, sep, value = line.partition(":")
+                if sep and key.strip().lower() == "flags":
+                    records.append(set(value.lower().split()))
+    except OSError:
+        return False
+    return bool(records) and all({"avx2", "fma"}.issubset(flags) for flags in records)
+
+
 class PersistentWhisperEngine:
     """One resident native worker, serialized requests, bounded stdout and IPC.
 
@@ -125,6 +141,8 @@ class PersistentWhisperEngine:
             candidates.append(root / "rdt_whisper_worker_dotprod.exe")
         elif _linux_arm_dotprod_available():
             candidates.append(root / "rdt_whisper_worker_dotprod")
+        if sys.platform.startswith("linux") and _linux_x64_avx2_available():
+            candidates.append(root / "rdt_whisper_worker_avx2")
         candidates.append(root / f"rdt_whisper_worker{suffix}")
         return candidates
 
@@ -197,6 +215,7 @@ class PersistentWhisperEngine:
                     "rdt_whisper_worker_cuda": "cuda",
                     "rdt_whisper_worker_vulkan": "vulkan",
                     "rdt_whisper_worker_dotprod": "arm-dotprod",
+                    "rdt_whisper_worker_avx2": "x64-avx2",
                     "rdt_whisper_worker": "cpu",
                 }.get(exe.stem, "custom")
                 self.provider_reason = (

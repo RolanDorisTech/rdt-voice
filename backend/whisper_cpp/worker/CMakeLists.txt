@@ -96,6 +96,8 @@ set(GGML_HIP OFF CACHE BOOL "" FORCE)
 set(GGML_METAL OFF CACHE BOOL "" FORCE)
 option(RDT_ENABLE_ARM_DOTPROD
   "Build an ARM64 worker optimized for ARM dot-product instructions" OFF)
+option(RDT_ENABLE_X64_AVX2
+  "Build a separately named Linux x64 AVX2/FMA worker" OFF)
 
 if(MSVC AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
   # MSVC ARM requires GGML_NATIVE=ON. The portable worker keeps optional
@@ -191,13 +193,54 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
   set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
-  foreach(feature SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16)
-    set("GGML_${feature}" OFF CACHE BOOL "" FORCE)
-  endforeach()
-  message(STATUS "RDT Linux portable x86-64-v1 worker; optional x86 ISA features disabled")
+  if(RDT_ENABLE_X64_AVX2)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      message(FATAL_ERROR "RDT x64 AVX2 requires GCC or Clang")
+    endif()
+    include(CheckCXXSourceCompiles)
+    set(_RDT_SAVED_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+    string(APPEND CMAKE_REQUIRED_FLAGS " -mavx2 -mfma")
+    unset(RDT_COMPILER_SUPPORTS_X64_AVX2_FMA CACHE)
+    check_cxx_source_compiles(
+      "#include <immintrin.h>
+       int main() {
+         __m256 a = _mm256_set1_ps(1.0f);
+         __m256 b = _mm256_fmadd_ps(a, a, a);
+         return _mm256_movemask_ps(b) == 0;
+       }"
+      RDT_COMPILER_SUPPORTS_X64_AVX2_FMA)
+    set(CMAKE_REQUIRED_FLAGS "${_RDT_SAVED_REQUIRED_FLAGS}")
+    unset(_RDT_SAVED_REQUIRED_FLAGS)
+    if(NOT RDT_COMPILER_SUPPORTS_X64_AVX2_FMA)
+      message(FATAL_ERROR "Compiler cannot build the x64 AVX2/FMA worker")
+    endif()
+    set(GGML_AVX ON CACHE BOOL "" FORCE)
+    set(GGML_AVX2 ON CACHE BOOL "" FORCE)
+    set(GGML_FMA ON CACHE BOOL "" FORCE)
+    foreach(feature SSE42 AVX_VNNI BMI2 F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16)
+      set("GGML_${feature}" OFF CACHE BOOL "" FORCE)
+    endforeach()
+    message(STATUS "RDT Linux x64 AVX2/FMA optimized worker")
+  else()
+    foreach(feature SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16)
+      set("GGML_${feature}" OFF CACHE BOOL "" FORCE)
+    endforeach()
+    message(STATUS "RDT Linux portable x86-64-v1 worker; optional x86 ISA features disabled")
+  endif()
+elseif(RDT_ENABLE_X64_AVX2)
+  message(FATAL_ERROR "RDT_ENABLE_X64_AVX2 requires Linux x86_64")
 endif()
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${WHISPER_CPP_SOURCE}" whisper.cpp)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"
+   AND RDT_ENABLE_X64_AVX2)
+  if(NOT TARGET ggml-cpu)
+    message(FATAL_ERROR "x64 AVX2 build expected the ggml-cpu target")
+  endif()
+  target_compile_options(ggml-cpu PRIVATE -mavx2 -mfma)
+endif()
 
 if(MSVC AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64"
    AND RDT_ENABLE_ARM_DOTPROD)

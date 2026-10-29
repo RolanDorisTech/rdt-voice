@@ -77,6 +77,8 @@ def main() -> int:
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--model-id", default="mlx-community/whisper-large-v3-turbo", help="existing RDT Connect desktop model ID to test mapping")
     parser.add_argument("--timeout-seconds", type=int, default=900)
+    parser.add_argument("--expected-worker-variant", default="cpu",
+                        choices=("cpu", "x64-avx2"))
     args = parser.parse_args()
 
     backend = args.backend.resolve(strict=True)
@@ -263,8 +265,10 @@ def main() -> int:
                     if "cpu" not in provider:
                         raise RuntimeError(f"qualified_provider_not_cpu: {provider or 'unknown'}")
                     variant = str(eng.get("worker_variant") or "").casefold()
-                    if variant != "cpu":
-                        raise RuntimeError(f"qualified_worker_variant_not_cpu: {variant or 'unknown'}")
+                    if variant != args.expected_worker_variant:
+                        raise RuntimeError(
+                            f"qualified_worker_variant_mismatch: expected={args.expected_worker_variant}; "
+                            f"actual={variant or 'unknown'}")
                     report["actual_inference_completed"] = True
                     report["sampled_peak_rss_note"] += " peak_kib is the maximum sampled while this one real API request was active."
                     report["sampled_peak_backend_tree_rss_kib"] = peak_rss

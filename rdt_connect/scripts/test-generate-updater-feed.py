@@ -94,8 +94,18 @@ class FeedTests(unittest.TestCase):
             self.assertEqual(output.read_bytes(), original)
 
             same = run("0.2.0-dev.11.2A05", update=True)
-            self.assertNotEqual(same.returncode, 0)
-            self.assertEqual(output.read_bytes(), original)
+            self.assertEqual(same.returncode, 0, same.stderr)
+            repaired = output.read_bytes()
+
+            changed_artifact = subprocess.run(
+                base + [
+                    "--version", "0.2.0-dev.11.2A05",
+                    "--update", "--signature", "different-signature",
+                ],
+                capture_output=True, text=True,
+            )
+            self.assertNotEqual(changed_artifact.returncode, 0)
+            self.assertEqual(output.read_bytes(), repaired)
 
             advanced = run("0.2.0-dev.11.2A06", update=True)
             self.assertEqual(advanced.returncode, 0, advanced.stderr)
@@ -103,6 +113,38 @@ class FeedTests(unittest.TestCase):
             self.assertEqual(data["version"], "0.2.0-dev.11.2A06")
             self.assertEqual(list(data["platforms"]), ["windows-aarch64"])
             self.assertEqual(data["notes"], "safe notes; not shell code")
+
+    def test_migrates_legacy_fractional_timestamp_on_update(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "latest.json"
+            manifest = GEN.build_manifest(
+                "0.2.0-dev.11.2A05", "windows-aarch64",
+                "https://example.com/release.exe", "test-signature", "old notes",
+            )
+            manifest["pub_date"] = "2026-10-28T06:04:27.265Z"
+            output.write_text(json.dumps(manifest), encoding="utf-8")
+
+            cmd = [
+                sys.executable, str(SCRIPT),
+                "--version", "0.2.0-dev.11.2A06",
+                "--target", "windows-aarch64",
+                "--url", "https://example.com/release.exe",
+                "--signature", "test-signature",
+                "--notes", "updated notes",
+                "--output", str(output),
+                "--update",
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            updated = json.loads(output.read_text(encoding="utf-8"))
+            self.assertRegex(
+                updated["pub_date"],
+                r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            )
+            with self.assertRaises(ValueError):
+                GEN.validate_manifest(manifest, "windows-aarch64")
+
 
     def test_refuses_malformed_existing_manifest_without_modifying_it(self):
         with tempfile.TemporaryDirectory() as temp:

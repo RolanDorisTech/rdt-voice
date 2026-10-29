@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: rdt-connect-windows-updater-feed
@@ -179,10 +180,10 @@ jobs:
           )
           if [[ -e "$FEED_PATH" ]]; then args+=(--update); fi
           python3 rdt_connect/scripts/generate-updater-feed.py "${args[@]}"
-          python3 - "$FEED_PATH" "$TARGET" "$VERSION" "$URL" <<'PY'
+          python3 - "$FEED_PATH" "$TARGET" "$VERSION" "$URL" "$SIGNATURE" <<'PY'
           import importlib.util, json, sys
           from pathlib import Path
-          path, target, version, url = sys.argv[1:]
+          path, target, version, url, expected_signature = sys.argv[1:]
           spec = importlib.util.spec_from_file_location(
               "feed_generator", "rdt_connect/scripts/generate-updater-feed.py"
           )
@@ -195,6 +196,8 @@ jobs:
                   raise ValueError("manifest version mismatch")
               if data["platforms"][target]["url"] != url:
                   raise ValueError("manifest URL mismatch")
+              if data["platforms"][target]["signature"] != expected_signature:
+                  raise ValueError("manifest signature does not match verified release asset")
               from urllib.parse import urlparse
               parsed = urlparse(url)
               if parsed.netloc != "github.com" or not parsed.path.startswith(
@@ -206,29 +209,16 @@ jobs:
           print(f"PASS: feed manifest {target} {version}")
           PY
 
-      - name: Commit only the selected feed
-        shell: bash
-        env:
-          TARGET: ${{ inputs.target }}
-          VERSION: ${{ inputs.version }}
-          FEED_PATH: ${{ steps.release.outputs.feed }}
-        run: |
-          set -euo pipefail
-          BASE_SHA="$(git rev-parse HEAD)"
-          git fetch origin main
-          if [[ "$(git rev-parse origin/main)" != "$BASE_SHA" ]]; then
-            echo "FAIL: main advanced since checkout; rerun from current main." >&2
-            exit 1
-          fi
-          git add -- "$FEED_PATH"
-          git diff --cached --check
-          git diff --cached --stat
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Publish RDT Connect updater feed $TARGET $VERSION"
-          git fetch origin main
-          if [[ "$(git rev-parse origin/main)" != "$BASE_SHA" ]]; then
-            echo "FAIL: main advanced during publishing; commit not pushed. Rerun." >&2
-            exit 1
-          fi
-          git push origin HEAD:main
+      - name: Open pull request for selected feed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: ${{ steps.release.outputs.feed }}
+          branch: automation/windows-updater-feed-${{ inputs.target }}
+          base: main
+          delete-branch: true
+          commit-message: "Publish RDT Connect updater feed ${{ inputs.target }} ${{ inputs.version }}"
+          title: "Publish RDT Connect updater feed: ${{ inputs.target }}"
+          body: |
+            Publishes the validated updater feed for `${{ inputs.target }}`.
+            The workflow validates the selected release assets and signature before opening this PR.

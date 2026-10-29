@@ -109,6 +109,28 @@ RDT Connect is an optional desktop companion for the RDT Voice browser app. It m
 - **Browser integration:** RDT Connect launches RDT Voice in your browser. RDT Voice can also be used directly without RDT Connect.
 - **Network considerations:** local transcription uses the local service, but acquiring models and checking for application updates may require network access. “Local transcription” is not a guarantee that every setup or update operation is offline.
 
+## Offline use
+
+RDT Connect is designed to manage transcription through a local Whisper service instead of requiring audio to be sent to a remote transcription API.
+
+Once the app is installed, the required model is available locally, and the selected backend and RDT Voice interface are running, transcription can work without an internet connection. This depends on your backend and configuration.
+
+An internet connection may still be needed to download the app, obtain models that are not already installed, check for application updates, or access online documentation. Offline transcription does not mean first-time setup and every supporting feature work offline.
+
+**Planning to work offline?** Install the app, download your intended model, start the local service, and complete a test transcription before disconnecting.
+
+## Troubleshooting RDT Connect
+
+If transcription does not start or RDT Voice cannot reach the local service:
+
+1. Confirm the intended backend is selected and the local service is running.
+2. Check the configured service port. The standard Whisper service uses `8888`; the MLX-Whisper service uses `8889` on supported builds. Another process using a port can prevent startup.
+3. Confirm the required model has been downloaded and is available to the selected backend.
+4. Check RDT Connect's diagnostics and the installation guide for your operating system.
+5. If the problem persists, include the relevant diagnostic output when reporting the issue. Remove any private information before sharing logs.
+
+RDT Connect is optional; RDT Voice can also be used directly in a supported browser configuration.
+
 ## RDT Connect Downloads
 
 Dev 11 packages below are **prereleases**. Complete the applicable VM and release qualification before treating them as final production releases.

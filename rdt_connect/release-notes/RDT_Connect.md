@@ -14,6 +14,21 @@ The Dev 10 notes below are retained as historical records. Dev 11 macOS updater 
 - User-confirmed in-app update from installed Build 1D03 to 1D04 completed successfully; the app displayed the installed-update/reopen prompt.
 - The existing 1D04 tag and published release assets remain unchanged.
 
+## Windows Dev 11 — Build 2A07 (ARM64)
+
+- Published Windows ARM64 development prerelease.
+- Installer checksum and Minisign signature verified against the existing updater public key.
+- GitHub Actions packaging workflow passed.
+- Physical ARM64 installation and in-app updater verification: not completed.
+
+## Windows Dev 11 — Build 3A03 (x64)
+
+- Published Windows x64 development prerelease.
+- Installer checksum and Minisign signature verified against the existing updater public key.
+- GitHub Actions packaging workflow passed.
+- Manual UTM testing confirmed the app opens on Windows x64. The VM froze during HTTPS certificate setup, so certificate setup and further functional tests could not be completed.
+- In-app updater verification is planned in VMware and remains pending.
+
 ## Build 0D52
 
 - Refreshed the signed macOS Apple Silicon updater.

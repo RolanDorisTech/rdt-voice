@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0-dev.11.2A05",
+  "notes": "RDT Connect Dev 11 Windows ARM64 updater feed",
+  "pub_date": "2026-10-29T07:05:17Z",
+  "platforms": {
+    "windows-aarch64": {
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdytjR3dWZjFKTWF0a0h5R3Z5dWc0YnE0aEVpTDB0Tyt2MEx6STV4K0MxVjFYMU1Zb2gydWxDS2xUZ0pKbHhxMGZVbWJLc1c0N2xmcUpGSVVZNTJNWnc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMjI2NjEyCWZpbGU6UkRUIENvbm5lY3RfMC4yLjAtZGV2LjExLjJBMDVfYXJtNjQtc2V0dXAuZXhlCXZlcnNpb246MC4yLjAtZGV2LjExLjJBMDUKb1VWa0pocEEvbTZmOHhGYjh1TjVHcXNhTnU3RzJ5TURscDJvVWU3SGdJRlZVZjMxNWNYd0JrZytRbmZwR2tza3o0VXBqQUN2ZUFLdy91UGVSczBzRHc9PQo="
+    }
+  }
+}

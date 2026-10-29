@@ -189,7 +189,7 @@ $serverStaged = Join-Path $stage 'server.py'
 & $pythonExe (Join-Path $RepoRoot 'rdt_connect/scripts/patch_desktop_backend.py') (Join-Path $RepoRoot 'backend/windows/server.py') $serverStaged
 if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the staged Windows backend.' }
 $env:PYTHONPATH = Join-Path $RepoRoot 'backend'
-$args = @('-m','PyInstaller','--noconfirm','--clean','--onedir','--name','rdt_voice_backend','--distpath',$dist,'--workpath',$work,'--specpath',$spec,'--paths',(Join-Path $RepoRoot 'backend'),'--hidden-import','model_registry','--hidden-import','engine','--hidden-import','whisper_cpp.model_registry','--hidden-import','whisper_cpp.engine','--hidden-import','qrcode.image.svg','--collect-all','qrcode')
+$args = @('-m','PyInstaller','--noconfirm','--clean','--onedir','--name','rdt_voice_backend','--distpath',$dist,'--workpath',$work,'--specpath',$spec,'--paths',(Join-Path $RepoRoot 'backend'),'--paths',(Join-Path $RepoRoot 'backend/windows'),'--hidden-import','model_registry','--hidden-import','engine','--hidden-import','whisper_cpp.model_registry','--hidden-import','whisper_cpp.engine','--hidden-import','qrcode.image.svg','--collect-all','qrcode')
 & $pythonExe @args $serverStaged
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller onedir backend build failed.' }
 $backendStage = Join-Path $dist 'rdt_voice_backend'

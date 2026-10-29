@@ -264,11 +264,11 @@ jobs:
         working-directory: rdt_connect
         shell: pwsh
         run: npm ci
-      - name: Stamp isolated Windows build version (2A05 namespace)
+      - name: Stamp isolated Windows build version (2A06 namespace)
         working-directory: rdt_connect
         shell: pwsh
         run: |
-          node scripts/stamp-platform-build.cjs windows 2A05
+          node scripts/stamp-platform-build.cjs windows 2A06
           if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
           node scripts/test-platform-build-stamping.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }

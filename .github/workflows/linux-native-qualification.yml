@@ -38,7 +38,10 @@ jobs:
           assert bundle.get("createUpdaterArtifacts") is True, "Updater artifacts must remain enabled"
           assert isinstance(updater.get("pubkey"), str) and updater["pubkey"].strip(), "Updater public key is missing"
           workflow = Path(".github/workflows/linux-native-qualification.yml").read_text()
-          assert "--bundles deb" in workflow, "Linux qualification must build a Debian package"
+          assert "--bundles deb,appimage" in workflow, "Linux qualification must build Debian and AppImage bundles"
+          assert 'APPIMAGE_SIG="${APPIMAGE}.sig"' in workflow, "AppImage updater signature must be verified"
+          assert 'test -s "$APPIMAGE_SIG"' in workflow, "Missing AppImage signature must fail qualification"
+          assert 'sha256sum "$APPIMAGE"' in workflow, "AppImage checksum must be recorded"
           print("PASS: Linux updater/package configuration contract")
           PYCONTRACT
 
@@ -463,6 +466,24 @@ jobs:
             "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
           mkdir -p "$RUNNER_TEMP/rdt-linux-qualification/package"
           cp "$DEB" "$RUNNER_TEMP/rdt-linux-qualification/package/"
+
+          # The .deb remains the direct installer; AppImage is the updater artifact.
+          APPIMAGE="$(find rdt_connect/src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$APPIMAGE" || {
+            echo "STOP: Tauri did not produce a Linux AppImage." >&2
+            exit 1
+          }
+          APPIMAGE_SIG="${APPIMAGE}.sig"
+          test -s "$APPIMAGE_SIG" || {
+            echo "STOP: signed AppImage updater artifact is missing or empty." >&2
+            exit 1
+          }
+          sha256sum "$APPIMAGE" > "${APPIMAGE}.sha256"
+          sha256sum "$APPIMAGE_SIG" > "${APPIMAGE_SIG}.sha256"
+          cp "$APPIMAGE" "$APPIMAGE_SIG" "${APPIMAGE}.sha256" "${APPIMAGE_SIG}.sha256"             "$RUNNER_TEMP/rdt-linux-qualification/package/"
+          printf '%s\n' "$APPIMAGE" > "$RUNNER_TEMP/rdt-linux-qualification/appimage-path.txt"
+          printf '%s\n' "$APPIMAGE_SIG" > "$RUNNER_TEMP/rdt-linux-qualification/appimage-signature-path.txt"
+          sha256sum "$APPIMAGE" "$APPIMAGE_SIG"             | tee "$RUNNER_TEMP/rdt-linux-qualification/appimage-artifact-sha256.txt"
 
       - name: One bounded real inference through the packaged API
         run: |

@@ -99,6 +99,14 @@ Dev 11 packages below are **prereleases**. Complete the applicable VM and releas
 | Ubuntu (ARM64) — **NOT YET TESTED** | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11` | `4U01` | 82.3 MB |
 | Debian (x64) — **NOT YET TESTED** | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11` | `5D01` | 83.0 MB |
 
+## Windows installation
+
+1. Download the Windows installer for your system and open the `.exe` file.
+2. If Windows SmartScreen appears, select **More info**.
+3. Verify the installer is from the official RDT Connect release before selecting **Run anyway**.
+
+For screenshots and other languages, use the **Installation guide** link beside your Windows download.
+
 **Development and testing environment:** Development is performed on a MacBook Pro with Apple M1 Max; no native Windows or Linux development machines are available. Windows and Linux evaluation is limited to VMware or UTM virtual machines. The Linux `.deb` packages have not yet been tested.
 
 **Windows download note:** Wait until Chrome's Downloads panel reports that the installer has finished downloading. A completed download should normally have an `.exe` filename. If Chrome reports the download as complete but leaves it named `Unconfirmed <number>.crdownload`, rename it to the full installer filename for your architecture: `RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe` for Windows ARM64 or `RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe` for Windows x64. Do not rename or run a file if Chrome reports that the download failed or was interrupted; download it again instead.

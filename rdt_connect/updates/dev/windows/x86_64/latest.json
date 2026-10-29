@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0-dev.11.3A01",
+  "notes": "RDT Connect Dev 11 Windows x64 updater release — Build 3A01.",
+  "pub_date": "2026-10-29T08:27:55Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3Fzd3l2Nkl0akJsR1ZSc05XUko2ZW1MZVAwK0hLWHlvaXUvcHY3T1N2Qkp6Qm1LU0pRRExmNkJoRE1zUzZWb0kzTVVlVElVM0dWYnB3N0k1bEJHdElhSWc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMjQzMzk4CWZpbGU6UkRUIENvbm5lY3RfMC4yLjAtZGV2LjExLjNBMDFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMi4wLWRldi4xMS4zQTAxCjZWakZkcmoyL1JSdGFjdEk4dHZmRWlSUEtWRUhjcFByWUxvb25OOXUyTnVScHExQ3N4c0l5U0tuZGJTQzNnaGdmemxUUFFXM2d4dFZ2ZU1wS1BncUNnPT0K"
+    }
+  }
+}

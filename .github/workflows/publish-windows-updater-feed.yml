@@ -1,0 +1,234 @@
+name: Publish RDT Connect Windows updater feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Windows architecture to publish
+        required: true
+        type: choice
+        options:
+          - windows-aarch64
+          - windows-x86_64
+      version:
+        description: Exact version including platform build marker
+        required: true
+        type: string
+      release_tag:
+        description: Exact existing RDT Connect release tag
+        required: true
+        type: string
+      notes:
+        description: Updater release notes
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rdt-connect-windows-updater-feed
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate requested release
+        id: release
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util, os
+          target, version, tag = (
+              os.environ["TARGET"], os.environ["VERSION"], os.environ["RELEASE_TAG"]
+          )
+          spec = importlib.util.spec_from_file_location(
+              "feed_generator", "rdt_connect/scripts/generate-updater-feed.py"
+          )
+          gen = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(gen)
+          targets = {
+              "windows-aarch64": ("arm64", "aarch64"),
+              "windows-x86_64": ("x64", "x86_64"),
+          }
+          if target not in targets:
+              raise SystemExit("FAIL: unsupported target")
+          try:
+              gen.parse_version(version, target)
+          except (ValueError, TypeError) as exc:
+              raise SystemExit(f"FAIL: invalid version/build marker: {exc}")
+          marker = version.rsplit(".", 1)[1]
+          expected = "rdt-connect-v" + version.rsplit(".", 1)[0] + "-" + marker.lower()
+          if tag != expected:
+              raise SystemExit(f"FAIL: expected release tag {expected}")
+          suffix, arch = targets[target]
+          asset = f"RDT.Connect_{version}_{suffix}-setup.exe"
+          feed = f"rdt_connect/updates/dev/windows/{arch}/latest.json"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"asset={asset}\nfeed={feed}\n")
+          print(f"PASS: {target} {version} {tag}")
+          PY
+
+      - name: Download exact release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ASSET: ${{ steps.release.outputs.asset }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern "$ASSET" \
+            --pattern "$ASSET.sha256" \
+            --pattern "$ASSET.sig" \
+            --pattern "$ASSET.sig.sha256"
+          python3 - "$RUNNER_TEMP/release" "$ASSET" <<'PY'
+          import hashlib, re, sys
+          from pathlib import Path
+          directory, name = Path(sys.argv[1]), sys.argv[2]
+          for sidecar_name, artifact in (
+              (name + ".sha256", directory / name),
+              (name + ".sig.sha256", directory / (name + ".sig")),
+          ):
+              sidecar = directory / sidecar_name
+              if not artifact.is_file() or not artifact.stat().st_size:
+                  raise SystemExit(f"FAIL: missing/empty artifact {artifact.name}")
+              if not sidecar.is_file():
+                  raise SystemExit(f"FAIL: missing checksum {sidecar_name}")
+              fields = sidecar.read_text().strip().split()
+              if not fields or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
+                  raise SystemExit(f"FAIL: malformed checksum {sidecar_name}")
+              actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
+              if actual.lower() != fields[0].lower():
+                  raise SystemExit(f"FAIL: SHA-256 mismatch for {artifact.name}")
+              print(f"PASS: checksum {artifact.name}")
+          signature = (directory / (name + ".sig")).read_text().strip()
+          if not signature or "\n" in signature or "\r" in signature:
+              raise SystemExit("FAIL: signature payload must be one nonempty line")
+          PY
+
+      - name: Verify signed installer with configured updater key
+        shell: bash
+        env:
+          ASSET: ${{ steps.release.outputs.asset }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y minisign
+          python3 - <<'PYKEY'
+          import base64, json, os
+          from pathlib import Path
+
+          config = json.loads(
+              Path("rdt_connect/src-tauri/tauri.conf.json").read_text()
+          )
+          encoded_key = config["plugins"]["updater"]["pubkey"]
+          key_bytes = base64.b64decode(encoded_key, validate=True)
+          key_path = Path(os.environ["RUNNER_TEMP"]) / "rdt-connect-updater.pub"
+          key_path.write_bytes(key_bytes)
+
+          release_dir = Path(os.environ["RUNNER_TEMP"]) / "release"
+          asset = os.environ["ASSET"]
+          encoded_signature = (release_dir / (asset + ".sig")).read_text().strip()
+          signature_bytes = base64.b64decode(encoded_signature, validate=True)
+          signature_path = release_dir / (asset + ".minisig")
+          signature_path.write_bytes(signature_bytes)
+          print("PASS: decoded configured public key and installer signature")
+          PYKEY
+          minisign -Vm "$RUNNER_TEMP/release/$ASSET"             -x "$RUNNER_TEMP/release/$ASSET.minisig"             -p "$RUNNER_TEMP/rdt-connect-updater.pub"
+      - name: Run generator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd rdt_connect
+          python3 -m py_compile scripts/generate-updater-feed.py
+          python3 scripts/test-generate-updater-feed.py -v
+
+      - name: Generate and validate feed
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ASSET: ${{ steps.release.outputs.asset }}
+          FEED_PATH: ${{ steps.release.outputs.feed }}
+          RELEASE_DIR: ${{ runner.temp }}/release
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ASSET}"
+          SIGNATURE="$(cat "$RELEASE_DIR/$ASSET.sig")"
+          args=(
+            --version "$VERSION" --target "$TARGET" --url "$URL"
+            --signature "$SIGNATURE" --notes "$NOTES" --output "$FEED_PATH"
+          )
+          if [[ -e "$FEED_PATH" ]]; then args+=(--update); fi
+          python3 rdt_connect/scripts/generate-updater-feed.py "${args[@]}"
+          python3 - "$FEED_PATH" "$TARGET" "$VERSION" "$URL" <<'PY'
+          import importlib.util, json, sys
+          from pathlib import Path
+          path, target, version, url = sys.argv[1:]
+          spec = importlib.util.spec_from_file_location(
+              "feed_generator", "rdt_connect/scripts/generate-updater-feed.py"
+          )
+          gen = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(gen)
+          try:
+              data = json.loads(Path(path).read_text(encoding="utf-8"))
+              gen.validate_manifest(data, target)
+              if data["version"] != version:
+                  raise ValueError("manifest version mismatch")
+              if data["platforms"][target]["url"] != url:
+                  raise ValueError("manifest URL mismatch")
+              from urllib.parse import urlparse
+              parsed = urlparse(url)
+              if parsed.netloc != "github.com" or not parsed.path.startswith(
+                  f"/{__import__('os').environ['GITHUB_REPOSITORY']}/releases/download/"
+              ):
+                  raise ValueError("release URL is outside the expected repository")
+          except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+              raise SystemExit(f"FAIL: feed manifest validation: {exc}")
+          print(f"PASS: feed manifest {target} {version}")
+          PY
+
+      - name: Commit only the selected feed
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ inputs.version }}
+          FEED_PATH: ${{ steps.release.outputs.feed }}
+        run: |
+          set -euo pipefail
+          BASE_SHA="$(git rev-parse HEAD)"
+          git fetch origin main
+          if [[ "$(git rev-parse origin/main)" != "$BASE_SHA" ]]; then
+            echo "FAIL: main advanced since checkout; rerun from current main." >&2
+            exit 1
+          fi
+          git add -- "$FEED_PATH"
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Publish RDT Connect updater feed $TARGET $VERSION"
+          git fetch origin main
+          if [[ "$(git rev-parse origin/main)" != "$BASE_SHA" ]]; then
+            echo "FAIL: main advanced during publishing; commit not pushed. Rerun." >&2
+            exit 1
+          fi
+          git push origin HEAD:main

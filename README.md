@@ -98,6 +98,17 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 *Click either screenshot to jump to the desktop downloads.*
 
+## How RDT Connect works
+
+RDT Connect is an optional desktop companion for the RDT Voice browser app. It manages the local transcription service and provides native app and system-tray controls; it does not replace the browser interface.
+
+- **Desktop layer:** Tauri and Rust handle native application lifecycle, tray controls, updates, and local server-process management.
+- **Service layer:** Python, FastAPI, and Uvicorn provide the local API that RDT Voice uses to reach the transcription backend.
+- **Speech engines:** supported Apple Silicon builds provide an MLX-Whisper path; other builds use their configured Whisper backend.
+- **Local endpoints:** the standard Whisper service uses port `8888`, while the MLX-Whisper service uses port `8889`. A port already in use can prevent the corresponding service from starting.
+- **Browser integration:** RDT Connect launches RDT Voice in your browser. RDT Voice can also be used directly without RDT Connect.
+- **Network considerations:** local transcription uses the local service, but acquiring models and checking for application updates may require network access. “Local transcription” is not a guarantee that every setup or update operation is offline.
+
 ## RDT Connect Downloads
 
 Dev 11 packages below are **prereleases**. Complete the applicable VM and release qualification before treating them as final production releases.
@@ -118,7 +129,7 @@ RDT Connect is optional. You can use RDT Voice directly in your browser without 
 
 <p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
 
-**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The custom Build 0D53 DMG uses the established installation layout. The development updater feed provides the signed 0D53 archive and matching signature for eligible existing installations.
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The published Build 1D04 DMG is available for macOS Apple Silicon. The development updater feed provides the corrected signed 1D04 updater archive and matching signature for eligible existing installations.
 
 See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
 ## Run your own Whisper backend

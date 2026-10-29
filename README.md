@@ -3,13 +3,13 @@
   <h1>Meet RDT Connect</h1>
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
-  <p><strong>Available for macOS, Windows, and Linux</strong></p>
+  <p><strong>Available for macOS and Windows; Linux packages are untested prereleases</strong></p>
   <p>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS%20Apple%20Silicon-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS Apple Silicon"></a>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe"><img src="https://img.shields.io/badge/RDT%20Connect-Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Windows ARM64"></a>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe"><img src="https://img.shields.io/badge/RDT%20Connect-Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Windows x64"></a>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/RDT%20Connect-Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Ubuntu ARM64"></a>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb"><img src="https://img.shields.io/badge/RDT%20Connect-Debian%20x64-A81D33?style=for-the-badge&amp;logo=debian&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Debian x64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe"><img src="https://img.shields.io/badge/Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows x64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="Ubuntu ARM64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb"><img src="https://img.shields.io/badge/Debian%20x64-A81D33?style=for-the-badge&amp;logo=debian&amp;logoColor=white&amp;labelColor=24292f" alt="Debian x64"></a>
   </p>
   <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
   <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
@@ -94,16 +94,18 @@ Dev 11 packages below are **prereleases**. Complete the applicable VM and releas
 | Platform | Download | Product version | Build | Size |
 | --- | --- | --- | --- | --- |
 | macOS (Apple Silicon) | [Download (.dmg)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11` | `1D04` | 235.7 MB |
-| Windows (ARM64) | [Download installer (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT-Connect-Windows-Installation-Guide.zip) | `0.2.0-dev.11` | `2A05` | 102.0 MB |
-| Windows (x64) | [Download installer (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT-Connect-Windows-Installation-Guide.zip) | `0.2.0-dev.11` | `3A01` | 137.4 MB |
-| Ubuntu (ARM64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11` | `4U01` | 82.3 MB |
-| Debian (x64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11` | `5D01` | 83.0 MB |
+| Windows (ARM64) | [Download installer (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) | `0.2.0-dev.11` | `2A05` | 102.0 MB |
+| Windows (x64) | [Download installer (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) | `0.2.0-dev.11` | `3A01` | 137.4 MB |
+| Ubuntu (ARM64) — **NOT YET TESTED** | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11` | `4U01` | 82.3 MB |
+| Debian (x64) — **NOT YET TESTED** | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11` | `5D01` | 83.0 MB |
+
+**Development and testing environment:** Development is performed on a MacBook Pro with Apple M1 Max; no native Windows or Linux development machines are available. Windows and Linux evaluation is limited to VMware or UTM virtual machines. The Linux `.deb` packages have not yet been tested.
 
 **Windows download note:** Wait until Chrome's Downloads panel reports that the installer has finished downloading. A completed download should normally have an `.exe` filename. If Chrome reports the download as complete but leaves it named `Unconfirmed <number>.crdownload`, rename it to the full installer filename for your architecture: `RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe` for Windows ARM64 or `RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe` for Windows x64. Do not rename or run a file if Chrome reports that the download failed or was interrupted; download it again instead.
 
 Advanced users who want to verify a download can find the SHA-256 checksum files on the corresponding GitHub release page.
 
-Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional desktop companion currently available for **macOS on Apple Silicon** and **Windows (ARM64 and x64)**. Choose the matching installer in the downloads table above. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
+Prefer a desktop app for managing your local Whisper server? RDT Connect is an optional desktop companion available for **macOS on Apple Silicon** and **Windows (ARM64 and x64)**. Linux `.deb` packages are listed above as untested prereleases. Choose the matching installer in the downloads table above. It lets you choose a model, start or stop your server, and open RDT Voice in your browser.
 
 1. Open RDT Connect.
 2. Choose a Whisper model.

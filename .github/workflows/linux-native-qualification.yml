@@ -8,6 +8,7 @@ on:
     branches:
       - connect-linux-track2-dev11
       - windows-linux-dev11-parity-20261028
+      - linux-qualification-audit-candidate-20261028
 
 permissions:
   contents: read

@@ -16,8 +16,7 @@ TARGET_PREFIXES = {
     "linux-aarch64": {"4"},
     "linux-x86_64": {"5"},
 }
-
-MARKER_RE = re.compile(r"^[1-5][A-Z][0-9]{2}$")
+MARKER_RE = re.compile(r"^(?:[1-3][A-Z][0-9]{2}|[45]L[0-9]{3})$")
 VERSION_RE = re.compile(
     r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
 )
@@ -33,7 +32,7 @@ def validate(version, target, url, signature):
     marker = version.rsplit(".", 1)[-1]
     if not MARKER_RE.fullmatch(marker):
         raise ValueError(
-            "Version must end with a four-character build marker, "
+            "Version must end with a valid platform build marker, "
             "for example 0.2.0-dev.11.1D01"
         )
 

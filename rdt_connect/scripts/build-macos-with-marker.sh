@@ -11,7 +11,7 @@ if [[ ! -f "$MARKER_FILE" ]]; then
   exit 2
 fi
 MARKER="$(tr -d '[:space:]' < "$MARKER_FILE")"
-if [[ ! "$MARKER" =~ ^[01][A-Z][0-9]{2}$ ]]; then
+if [[ ! "$MARKER" =~ ^1[A-Z][0-9]{2}$ ]]; then
   echo "ERROR: invalid build marker: $MARKER" >&2
   exit 2
 fi
@@ -27,6 +27,22 @@ case "${RDT_BUILD_APP_ONLY:-0}" in
   *) echo "ERROR: RDT_BUILD_APP_ONLY must be 0 or 1." >&2; exit 2 ;;
 esac
 APP_ONLY="${RDT_BUILD_APP_ONLY:-0}"
+
+# Make the existing updater key available to Tauri's build-time signer.
+KEY_PATH="$HOME/.tauri/rdt-connect-updater.key"
+if [[ "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" == "0" ]]; then
+  if [[ ! -s "$KEY_PATH" ]]; then
+    echo "ERROR: existing updater signing key is missing." >&2
+    exit 4
+  fi
+  export TAURI_SIGNING_PRIVATE_KEY_PATH="$KEY_PATH"
+  TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY_PATH")"
+  if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+    echo "ERROR: updater signing key is empty." >&2
+    exit 4
+  fi
+  export TAURI_SIGNING_PRIVATE_KEY
+fi
 
 # Require package.json, Tauri config, Cargo.toml, and Cargo.lock to agree.
 METADATA="$(python3 - "$ROOT" <<'PY_VERSION_SOURCE'
@@ -119,7 +135,29 @@ restore_config() {
     echo "PASS: original tauri.conf.json restored exactly."
   fi
 }
-trap restore_config EXIT INT TERM
+CREDITS_SOURCE="$ROOT/src-tauri/resources/Credits.html"
+CREDITS_BACKUP=""
+
+restore_credits() {
+  if [[ -n "${CREDITS_BACKUP:-}" && -f "$CREDITS_BACKUP" ]]; then
+    if cp -p "$CREDITS_BACKUP" "$CREDITS_SOURCE" &&
+       cmp -s "$CREDITS_BACKUP" "$CREDITS_SOURCE"; then
+      echo "PASS: original Credits.html restored exactly."
+      CREDITS_BACKUP=""
+    else
+      echo "ERROR: Credits.html restoration failed; backup retained: $CREDITS_BACKUP" >&2
+      return 1
+    fi
+  fi
+}
+
+restore_all() {
+  local status=0
+  restore_config || status=$?
+  restore_credits || status=$?
+  return "$status"
+}
+trap restore_all EXIT INT TERM
 
 # RDT_ABOUT_BUNDLE_VERSION_PATCH
 # Keep macOS's CFBundleVersion numeric while showing the full RDT marker
@@ -176,6 +214,45 @@ print(
 if skip_updater == "1":
     print("Updater artifact generation temporarily disabled for this build.")
 PY_TEMP_BUNDLE_METADATA
+# Stamp native macOS About with the same marker as the app.
+if [[ ! -s "$CREDITS_SOURCE" ]]; then
+  echo "ERROR: native About Credits.html is missing or empty." >&2
+  exit 4
+fi
+
+CREDITS_BACKUP_CANDIDATE="$ROOT/build/Credits.restore-${MARKER}-$$.html"
+if [[ -e "$CREDITS_BACKUP_CANDIDATE" || -L "$CREDITS_BACKUP_CANDIDATE" ]]; then
+  echo "ERROR: Credits backup already exists: $CREDITS_BACKUP_CANDIDATE" >&2
+  exit 4
+fi
+if ! cp -p "$CREDITS_SOURCE" "$CREDITS_BACKUP_CANDIDATE"; then
+  echo "ERROR: could not back up native About Credits.html." >&2
+  exit 4
+fi
+CREDITS_BACKUP="$CREDITS_BACKUP_CANDIDATE"
+
+if ! python3 - "$CREDITS_SOURCE" "$MARKER" <<'PY_CREDITS_MARKER'
+import re, sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+marker = sys.argv[2]
+text = p.read_text()
+pattern = re.compile(
+    r'(<p\s+class=["\']build["\']>\s*)Build\s+[0-9][A-Z][0-9]{2}(\s*</p>)'
+)
+updated, count = pattern.subn(
+    lambda m: f"{m.group(1)}Build {marker}{m.group(2)}", text
+)
+if count != 1:
+    raise SystemExit(f"ERROR: expected one native About build marker; found {count}.")
+p.write_text(updated)
+print(f"PASS: native macOS About stamped with Build {marker}.")
+PY_CREDITS_MARKER
+then
+  exit 4
+fi
+
 if [[ "$APP_ONLY" == "1" ]]; then
   if npm run tauri -- build --bundles app; then
     BUILD_STATUS=0
@@ -203,6 +280,164 @@ if [[ "$APP_ONLY" == "1" ]]; then
     exit 2
   fi
   echo "PASS: app bundle built for marker $RDT_BUILD_ID: $APP_BUNDLE"
+
+  if [[ "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" == "0" ]]; then
+    # Deduplicate identical MLX shaders only in the macOS app-only release path.
+    MLX_INTERNAL="$APP_BUNDLE/Contents/Resources/rdt_voice_backend/_internal"
+    MLX_CANONICAL="$MLX_INTERNAL/mlx/mlx.metallib"
+    MLX_TOP="$MLX_INTERNAL/mlx.metallib"
+    MLX_NESTED="$MLX_INTERNAL/mlx/lib/mlx.metallib"
+
+    for shader in "$MLX_CANONICAL" "$MLX_TOP" "$MLX_NESTED"; do
+      if [[ ! -f "$shader" || -L "$shader" ]]; then
+        echo "ERROR: expected regular MLX shader before deduplication: $shader" >&2
+        exit 4
+      fi
+    done
+
+    MLX_HASH="$(shasum -a 256 "$MLX_CANONICAL" | awk '{print $1}')"
+    for shader in "$MLX_TOP" "$MLX_NESTED"; do
+      shader_hash="$(shasum -a 256 "$shader" | awk '{print $1}')"
+      if [[ "$shader_hash" != "$MLX_HASH" ]]; then
+        echo "ERROR: MLX shader differs from canonical copy; refusing deduplication: $shader" >&2
+        exit 4
+      fi
+    done
+
+    rm "$MLX_TOP" "$MLX_NESTED"
+    ln -s "mlx/mlx.metallib" "$MLX_TOP"
+    ln -s "../mlx.metallib" "$MLX_NESTED"
+
+    if ! codesign --force --deep --sign - "$APP_BUNDLE" ||
+       ! codesign --verify --deep --strict "$APP_BUNDLE"; then
+      echo "ERROR: optimized app failed ad-hoc signing/verification." >&2
+      exit 4
+    fi
+
+    TMP_ARCHIVE="${UPDATER_ARCHIVE}.shader-dedupe.tmp.$$"
+    rm -f "$TMP_ARCHIVE"
+    if ! tar -czf "$TMP_ARCHIVE" -C "$UPDATER_DIR" "${PRODUCT}.app"; then
+      rm -f "$TMP_ARCHIVE"
+      echo "ERROR: failed to recreate optimized updater archive." >&2
+      exit 4
+    fi
+    if ! python3 - "$TMP_ARCHIVE" "$PRODUCT.app" <<'PYVALIDATE'
+import sys
+import tarfile
+
+archive_path, app_root = sys.argv[1:]
+base = app_root + "/Contents/Resources/rdt_voice_backend/_internal/"
+expected = {
+    base + "mlx/mlx.metallib": ("file", ""),
+    base + "mlx.metallib": ("symlink", "mlx/mlx.metallib"),
+    base + "mlx/lib/mlx.metallib": ("symlink", "../mlx.metallib"),
+}
+try:
+    with tarfile.open(archive_path, "r:gz") as tar:
+        members = {m.name: m for m in tar.getmembers()}
+        for name, (kind, target) in expected.items():
+            member = members.get(name)
+            if member is None:
+                raise RuntimeError(f"missing archive member: {name}")
+            if kind == "file" and not member.isfile():
+                raise RuntimeError(f"canonical shader is not a regular file: {name}")
+            if kind == "symlink" and (not member.issym() or member.linkname != target):
+                raise RuntimeError(f"wrong symlink: {name} -> {member.linkname!r}")
+        shader_members = [
+            m for m in members.values()
+            if m.name.endswith("/mlx.metallib") and (m.isfile() or m.issym())
+        ]
+        if len(shader_members) != 3:
+            raise RuntimeError(f"expected 3 shader paths, found {len(shader_members)}")
+except Exception as exc:
+    print(f"ERROR: optimized updater archive validation failed: {exc}", file=sys.stderr)
+    sys.exit(1)
+print("PASS: updater archive contains the canonical shader and both correct relative symlinks.")
+PYVALIDATE
+    then
+      rm -f "$TMP_ARCHIVE"
+      echo "ERROR: refusing to publish an invalid optimized updater archive." >&2
+      exit 4
+    fi
+
+    mv "$TMP_ARCHIVE" "$UPDATER_ARCHIVE"
+
+    KEY_PATH="$HOME/.tauri/rdt-connect-updater.key"
+    if [[ ! -s "$KEY_PATH" ]]; then
+      echo "ERROR: existing updater signing key is missing." >&2
+      exit 4
+    fi
+    : "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:?Set the existing updater-key password before building.}"
+
+    # Sign a same-named temporary archive; preserve the current signature on failure.
+    SIGN_WORK_DIR="$(mktemp -d "$UPDATER_DIR/.updater-sign.XXXXXX")"
+    SIGN_TEMP_ARCHIVE="$SIGN_WORK_DIR/$(basename "$UPDATER_ARCHIVE")"
+
+    if ! cp -p "$UPDATER_ARCHIVE" "$SIGN_TEMP_ARCHIVE"; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: could not stage updater archive for signing." >&2
+      exit 4
+    fi
+
+    if ! env -u TAURI_SIGNING_PRIVATE_KEY "$ROOT/node_modules/.bin/tauri" signer sign \
+      --private-key-path "$KEY_PATH" \
+      --app-version "$VERSION" \
+      "$SIGN_TEMP_ARCHIVE"; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: optimized updater archive signing failed." >&2
+      exit 4
+    fi
+
+    MINISIGN_BIN="$(command -v minisign || true)"
+    PUBLIC_KEY_PATH="$HOME/.tauri/rdt-connect-updater.key.pub"
+
+    if [[ -z "$MINISIGN_BIN" || ! -s "$PUBLIC_KEY_PATH" ]]; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: minisign verifier or updater public key is missing." >&2
+      exit 4
+    fi
+
+    DECODED_PUBLIC_KEY="$SIGN_WORK_DIR/updater-public-key.minisign.pub"
+    DECODED_SIGNATURE="$SIGN_WORK_DIR/updater-signature.minisig"
+
+    if [[ ! -s "$SIGN_TEMP_ARCHIVE" ]]; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: updater archive is missing or empty before verification." >&2
+      exit 4
+    fi
+
+    if [[ ! -s "$SIGN_TEMP_ARCHIVE.sig" ]]; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: updater signature is missing or empty." >&2
+      exit 4
+    fi
+
+    if ! base64 -D -i "$PUBLIC_KEY_PATH" -o "$DECODED_PUBLIC_KEY" ||
+       ! base64 -D -i "$SIGN_TEMP_ARCHIVE.sig" -o "$DECODED_SIGNATURE"; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: could not decode updater signature or public key." >&2
+      exit 4
+    fi
+
+    if ! "$MINISIGN_BIN" -V -m "$SIGN_TEMP_ARCHIVE" \
+         -x "$DECODED_SIGNATURE" -p "$DECODED_PUBLIC_KEY" -q ||
+       ! codesign --verify --deep --strict "$APP_BUNDLE"; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: optimized app/updater artifact validation failed." >&2
+      exit 4
+    fi
+
+    # The staged signature is on the same filesystem; replace only after validation.
+    if ! mv -f "$SIGN_TEMP_ARCHIVE.sig" "$UPDATER_SIGNATURE"; then
+      rm -rf "$SIGN_WORK_DIR"
+      echo "ERROR: could not promote validated updater signature." >&2
+      exit 4
+    fi
+    rm -rf "$SIGN_WORK_DIR"
+
+    echo "PASS: duplicate MLX shaders replaced with relative symlinks."
+    echo "PASS: app re-signed and updater archive regenerated/signed."
+  fi
 
   if [[ "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" == "0" ]]; then
     for artifact in "$UPDATER_ARCHIVE" "$UPDATER_SIGNATURE"; do

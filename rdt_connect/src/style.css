@@ -1450,9 +1450,12 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
   border-radius:10px !important; background:rgba(10,13,17,.25) !important;
 }
 #local-port-tools .dev-port-inline-row {
-  display:grid !important; grid-template-columns:minmax(120px,auto) minmax(92px,122px) minmax(110px,auto);
-  align-items:center; gap:10px; margin:0 0 5px !important;
+  display:grid !important; grid-template-columns:minmax(0,1fr) auto;
+  align-items:center; gap:8px; margin:0 0 5px !important;
 }
+#local-port-tools .dev-port-controls { display:flex; align-items:center; justify-content:flex-end; gap:8px; min-width:0; }
+#local-port-tools .dev-port-controls #preferred-port-tooltip { width:112px; flex:0 1 112px; }
+#local-port-tools .dev-port-controls .dev-port-active { justify-self:end; }
 #local-port-tools .dev-port-inline-row > .field-label { margin:0 !important; color:#d8e0e7; font-size:11px; font-weight:800; }
 #local-port-tools #preferred-port-tooltip { min-width:0; }
 #local-port-tools #preferred-port { width:100%; min-height:32px; padding:6px 9px; margin:0 !important; text-align:center; font-variant-numeric:tabular-nums; }
@@ -1477,8 +1480,10 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
 /* The footer stays about the app; company credit lives only at the end of Settings > About. */
 .about-copyright { align-self:flex-end; text-align:right; margin-top:14px; padding-top:10px; border-top:1px solid rgba(148,163,184,.14); color:#84909e; font-size:10px; letter-spacing:.02em; }
 @media(max-width:620px) {
-  #local-port-tools .dev-port-inline-row { grid-template-columns:minmax(0,1fr) 112px; gap:8px; }
-  .dev-port-active { grid-column:2; justify-self:start; }
+  #local-port-tools .dev-port-inline-row { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+  #local-port-tools .dev-port-controls { gap:6px; }
+  #local-port-tools .dev-port-controls #preferred-port-tooltip { width:88px; flex-basis:88px; }
+  .dev-port-active { justify-self:end; }
   .model-select-trigger { min-height:50px; padding:9px 10px; }
   .model-select-option { padding:10px 8px; gap:9px; }
   .model-select-option-meta { max-width:92px; }
@@ -1900,7 +1905,8 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
   box-sizing:border-box;
   max-height:0;
   margin:0;
-  padding:0 12px;
+  padding:0;
+  border-width:0;
   overflow:hidden;
   opacity:0;
   transform:translateY(-5px);
@@ -1915,6 +1921,7 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
   max-height:340px;
   margin:12px 0 13px;
   padding:13px 14px;
+  border-width:1px;
   opacity:1;
   transform:translateY(0);
   visibility:visible;
@@ -2768,14 +2775,19 @@ html[dir="rtl"] [data-l10n-ignore] {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  justify-content: flex-start;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  margin: 12px 0 16px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin: 8px 0;
+  border: 1px solid rgba(148,163,184,.16);
+  border-radius: 9px;
+  background: rgba(10,13,17,.22);
   cursor: pointer;
 }
-.auto-check-updates-copy { min-width: 0; display: grid; gap: 4px; }
+.auto-check-updates-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; }
 .auto-check-updates-copy strong { color: #dce5ed; font-size: 12px; font-weight: 800; }
 .auto-check-updates-copy small { color: var(--muted, #9aa8b5); font-size: 11px; line-height: 1.45; }
 .auto-check-updates-toggle input {
@@ -2799,4 +2811,113 @@ html[dir="rtl"] [data-l10n-ignore] {
 }
 .auto-check-updates-toggle input:focus-visible + .auto-check-updates-switch {
   outline: 2px solid #d8b66e; outline-offset: 3px;
+}
+
+
+/* Focused UI alignment fixes */
+#local-port-tools .dev-port-inline-row {
+  align-items: start !important;
+}
+#local-port-tools .dev-port-controls {
+  align-items: start !important;
+}
+.settings-updates-grid .about-card .auto-check-updates-toggle {
+  margin-top: 4px;
+}
+.settings-updates-grid .about-card .about-card-heading + p {
+  margin-bottom: 4px;
+}
+
+
+/* Keep port guidance beside the port controls, wrapping only when needed. */
+#local-port-tools .dev-port-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center !important;
+  gap: 8px 12px;
+}
+#local-port-tools #port-help {
+  flex: 1 1 300px;
+  min-width: 0;
+  margin: 0 !important;
+}
+
+
+/* Focused UI corrections: updater spacing and port alignment. */
+#local-port-tools .dev-port-inline-row {
+  align-items: center !important;
+}
+#local-port-tools .dev-port-controls {
+  align-items: center !important;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+#local-port-tools #port-help {
+  flex: 1 1 300px;
+  min-width: 0;
+  margin: 0 !important;
+}
+.settings-updates-grid .about-card .auto-check-updates-toggle {
+  margin: 0 !important;
+}
+.settings-updates-grid .about-card .application-update-panel:not(.is-open) {
+  display: none !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+.settings-updates-grid .about-card .application-update-panel.is-open {
+  display: block;
+}
+
+
+/* Fine-tune General and About settings spacing. */
+/* Reduce the Offline only pill's vertical padding by 35%. */
+.settings-general-card#offline-only-mode-setting {
+  padding-top: 10.4px !important;
+  padding-bottom: 10.4px !important;
+  margin-top: 3.5px !important;
+}
+/* Halve the extra margin above Show in menu bar; match the gap before Offline only. */
+.settings-general-card > .menu-bar-option {
+  margin-top: 3.5px !important;
+}
+.settings-general-card > .menu-bar-option + #offline-only-mode-setting {
+  margin-top: 3.5px !important;
+}
+/* Halve the excess space before the About description. */
+.settings-updates-grid .about-card .about-card-heading + p {
+  margin-top: -5px !important;
+  margin-bottom: 2px !important;
+}
+
+/* Compact developer-only command row at the bottom of Developer Options. */
+#tray-test-access-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: max-content minmax(160px, 1fr) max-content;
+  align-items: center;
+  gap: 8px 12px;
+  height: auto;
+  padding: 8px 12px;
+}
+#tray-test-access-card .field-label {
+  margin: 0;
+  font-size: .78rem;
+}
+#tray-test-access-card input {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 8px;
+}
+#tray-test-access-card #tray-test-phrase-status {
+  margin: 0;
+  font-size: .75rem;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  #tray-test-access-card { grid-template-columns: minmax(0, 1fr); }
+  #tray-test-access-card #tray-test-phrase-status { white-space: normal; }
 }

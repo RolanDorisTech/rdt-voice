@@ -2443,7 +2443,7 @@
     "msg.encrypted_requires_a_valid_certificate_and_v.8631e6f7": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "Encrypted. Requires a valid certificate and verified trust on this Mac.",
+      "english": "Encrypted. Requires a valid certificate and verified operating-system trust.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:196",
       "stableKey": true
@@ -2763,7 +2763,7 @@
     "msg.https_encrypts_the_connection_between_this_m.f3c18b38": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "HTTPS encrypts the connection between this Mac and its local browser. RDT Connect can configure trusted HTTPS for you; the private key stays on this Mac.",
+      "english": "HTTPS encrypts the connection between this device and its local browser. RDT Connect can configure trusted HTTPS for you; the private key stays on this device.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:350",
       "stableKey": true
@@ -3155,7 +3155,7 @@
     "msg.local_transport_arg1_certificate_configured.b76c9b41": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "Local transport: {arg1}; certificate configured={arg2}; macOS trust verified={arg3}; RDT-added CA trust entries={arg4}; {arg5}",
+      "english": "Local transport: {arg1}; certificate configured={arg2}; OS trust verified={arg3}; RDT-added CA trust entries={arg4}; {arg5}",
       "sourceKind": "rust-ui-or-error",
       "sourceContext": "src-tauri/src/main.rs:3302 format!(\"Local transport: {}; certificate configured={}; macOS trust verified={}; RDT-added CA trust entries={}; {}\", tls.mode.to_ascii_uppercase(), tls.configu",
       "stableKey": true
@@ -4123,7 +4123,7 @@
     "msg.rdt_connect_can_set_up_the_certificate_and_m.4c69ccdf": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "RDT Connect can set up the certificate and Mac trust for you. Your private key stays on this Mac.",
+      "english": "RDT Connect can set up the certificate and operating-system trust for you. Your private key stays on this device.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:87",
       "stableKey": true
@@ -4211,7 +4211,7 @@
     "msg.rdt_connect_creates_a_local_certificate_auth.24273ba1": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "RDT Connect creates a local certificate authority for localhost and 127.0.0.1, then offers to add that CA to your macOS login Keychain. Your CA private key remains on this Mac. Never share it.",
+      "english": "RDT Connect creates a local certificate authority for localhost and 127.0.0.1, then helps add that CA to this device's certificate trust store. Your CA private key remains on this device. Never share it.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:354",
       "stableKey": true
@@ -4243,7 +4243,7 @@
     "msg.rdt_connect_helps_you_run_your_own_private_l.9deb2043": {
       "status": "active",
       "classification": "TRANSLATE",
-      "english": "RDT Connect helps you run your own private, local transcription server. You choose when to connect another device, and the app keeps the security details visible instead of hiding them.",
+      "english": "RDT Connect turns your computer into a local transcription server. Your audio is processed locally, so you stay in control of all your data.",
       "sourceKind": "html-text",
       "sourceContext": "index.html:377",
       "stableKey": true
@@ -7090,6 +7090,877 @@
       "placeholders": [
         "languageName"
       ]
+    },
+    "msg.a_verified_local_copy_is_already_available_no_download_is_needed.d7746783": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "A verified local copy is already available; no download is needed.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.arg1_recommended.495e5c94": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "{arg1} · Recommended",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.browse_models_while_running_select_another_model_and_choose_swit.cb276627": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Browse models while running; select another model and choose Switch Model to restart safely.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.cache_status_is_still_being_checked_or_could_not_be_verified_reo.54782a8e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Cache status is still being checked or could not be verified. Reopen Settings to retry.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.cannot_delete_the_active_model_cache_while_the_local_server_is_r.2a3728ac": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Cannot delete the active model cache while the local server is running.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.cannot_download_the_active_model_cache_while_the_local_server_is.65fe9060": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Cannot download the active model cache while the local server is running.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.cannot_safely_delete_model_caches_while_the_running_server_s_act.429948b7": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Cannot safely delete model caches while the running server's active model is unknown.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.cannot_safely_download_a_model_while_the_running_server_s_active.2868278f": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Cannot safely download a model while the running server's active model is unknown.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.cannot_verify_the_running_server_s_active_model_download_is_paus.e37cde10": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Cannot verify the running server's active model; download is paused for safety.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.choose_a_self_signed_root_ca_file_first.d54a069c": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Choose a self-signed root CA file first.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_build_the_official_rdt_voice_website_url_arg1.f07b30e7": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not build the official RDT Voice website URL: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_check_the_selected_model_before_starting_arg1.f4e48a8d": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not check the selected model before starting: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_create_a_temporary_https_settings_file_arg1.3c9e150e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not create a temporary HTTPS settings file: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_create_preference_folder_error.3077cdee": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not create preference folder: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_create_temporary_preference_file_error.f778a82b": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not create temporary preference file: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_delete_selected_model_caches_arg1.7dfa9acc": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not delete selected model caches: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_determine_the_current_user_s_home_folder.6043e0f0": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not determine the current user's home folder.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_encode_recent_server_choice_error.c054ac6e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not encode recent server choice: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_flush_preference_file_error.28ea9d28": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not flush preference file: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_protect_preference_file_error.6b117d0c": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not protect preference file: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_protect_saved_preference_error.0aa4fd3b": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not protect saved preference: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_save_preference_file_error.18976578": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not save preference file: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_verify_https_status_check_your_connection_and_retry_th.71dc92e9": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not verify HTTPS status. Check your connection and retry; the current trust state is unknown.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_verify_the_selected_model_cache_the_current_server_was.4456b302": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not verify the selected model cache; the current server was left running. {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_write_https_settings_arg1.ddda18f4": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not write HTTPS settings: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.could_not_write_preference_file_error.9e2dff0f": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not write preference file: {error}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.count_inactive_model_cache_is_selected_for_confirmation.aec8dadf": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "{count} inactive model cache is selected for confirmation.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.count_inactive_model_cache_is_selected_for_confirmation_the_runn.7b8a0666": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "{count} inactive model cache is selected for confirmation. The running model is protected.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.count_inactive_model_caches_are_selected_for_confirmation.86df3b05": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "{count} inactive model caches are selected for confirmation.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.count_inactive_model_caches_are_selected_for_confirmation_the_ru.04f0ec68": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "{count} inactive model caches are selected for confirmation. The running model is protected.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.finish_model_downloads_and_storage_changes_before_switching_mode.addffeca": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Finish model downloads and storage changes before switching models.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.finish_or_cancel_model_downloads_and_storage_changes_before_dele.3ef332b7": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Finish or cancel model downloads and storage changes before deleting caches.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.finish_or_cancel_model_downloads_and_storage_changes_before_swit.77238833": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Finish or cancel model downloads and storage changes before switching models.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.finish_or_cancel_the_active_model_download_before_deleting_cache.e6efd88d": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Finish or cancel the active model download before deleting cached models.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.finish_or_cancel_the_active_model_download_before_deleting_model.abde8468": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Finish or cancel the active model download before deleting model caches.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.finish_saving_model_storage_changes_before_deleting_model_caches.bbc62d5e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Finish saving model-storage changes before deleting model caches.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.help.b79cac92": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Help",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.https_is_the_default_but_no_private_key_is_linked_yet_open_setti.b3fe39c7": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "HTTPS is the default, but no private key is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.https_is_the_default_but_no_server_certificate_is_linked_yet_ope.385adaf5": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "HTTPS is the default, but no server certificate is linked yet. Open Settings → Local HTTPS and set up a trusted certificate; RDT Connect will not silently fall back to HTTP.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.https_setup_failed_arg1.25103fd5": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "HTTPS setup failed: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.https_setup_finished_but_its_current_status_could_not_be_verifie.91d45be7": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "HTTPS setup finished, but its current status could not be verified. The setup button remains available to retry.{arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.in_use_protected_while_the_server_runs.f57b7714": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "In use — protected while the server runs",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.loading.ba3bbbe1": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Loading…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.model_storage_status_worker_failed_arg1.8919812c": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Model-storage status worker failed: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.no_active_downloader_process_was_recorded_refresh_status_then_re.1be48280": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "No active downloader process was recorded. Refresh status, then retry Cancel or retry the download.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.no_downloaded_rdt_connect_mlx_models_were_found_in_your_configur.c90184f8": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "No downloaded RDT Connect MLX models were found in your configured storage locations.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.no_managed_backend_is_running_in_this_rdt_connect_instance_a_sep.1997da3e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "No managed backend is running in this RDT Connect instance. A separate browser connection is not established.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.no_model_storage_location_is_configured_open_settings.9ee9e7ce": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "No model-storage location is configured. Open Settings.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.preference_path_has_no_parent_folder.31b61428": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Preference path has no parent folder.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.rdt_connect_kept_the_existing_local_certificate_files_but_could.19985d6f": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "RDT Connect kept the existing local certificate files but could not finish Keychain trust. Resolve the Keychain issue and retry setup. Detail: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.select_at_least_one_downloaded_rdt_connect_model_to_delete.5bfa101e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Select at least one downloaded RDT Connect model to delete.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.select_inactive_downloaded_model_caches_the_running_model_is_pro.7ec562b7": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Select inactive downloaded model caches. The running model is protected and cannot be selected.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.select_one_or_more_downloaded_model_caches_above_nothing_is_pres.604c39f1": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Select one or more downloaded model caches above. Nothing is preselected.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.select_one_or_more_downloaded_models_first_nothing_is_preselecte.005d9cde": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Select one or more downloaded models first. Nothing is preselected.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.server_started_successfully.2c4a56fc": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Server started successfully.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.server_startup_worker_failed_arg1.948ffff9": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Server startup worker failed: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.server_stop_worker_failed_arg1.6972e67e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Server stop worker failed: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.server_stopped_from_the_menu_bar.058995fe": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Server stopped from the menu bar.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.some_cache_locations_could_not_be_verified_unknown_entries_are_n.7e20e7be": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Some cache locations could not be verified; unknown entries are not offered for deletion.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.starting_the_selected_model.4d384f5a": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Starting the selected model…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.stop_the_active_server_and_start_the_selected_model_only_after_t.5b77c9a4": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Stop the active server and start the selected model only after the stop is verified.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.stopping_before_switching_models.fb0c9aa6": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Stopping before switching models…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.stopping_the_current_server_before_switching_models.c41d642a": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Stopping the current server before switching models…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.stopping_the_download_and_its_helper_workers.79299d70": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Stopping the download and its helper workers…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.switch_model.7aa32f4a": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Switch Model",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.switch_to_the_selected_transcription_model.29347c97": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Switch to the selected transcription model",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.tailscale_did_not_return_a_private_https_url.1ad8e8db": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Tailscale did not return a private HTTPS URL.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_active_model_cache_is_protected_while_the_server_runs_select.8dde9398": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The active model cache is protected while the server runs. Select only inactive caches.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_backend_did_not_become_healthy_within_60_seconds_arg1.0ff1152c": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The backend did not become healthy within 60 seconds.\n{arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_backend_did_not_return_a_qr_image.408d24a4": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The backend did not return a QR image.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_backend_did_not_return_a_valid_one_time_browser_handoff_code.0d34153a": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The backend did not return a valid one-time browser handoff code. Update the RDT Voice backend, rebuild the bundled resources, and try again.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_backend_exited_during_startup_arg1_arg2.ecdd4b59": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The backend exited during startup ({arg1}).\n{arg2}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_current_server_could_not_be_confirmed_stopped_the_replacemen.c93371b4": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The current server could not be confirmed stopped. The replacement model was not started.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_deletion_request_included_an_unsupported_model_id.9fc010e5": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The deletion request included an unsupported model ID.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_existing_local_certificate_and_trust_status_could_not_be_ver.d5d4f04b": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The existing local certificate and trust status could not be verified: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_existing_local_certificate_could_not_be_confirmed_after_sele.4958a98a": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The existing local certificate could not be confirmed after selecting HTTPS: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_previous_server_is_confirmed_stopped_starting_the_replacemen.a40640b4": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The previous server is confirmed stopped. Starting the replacement model now.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_previous_server_is_stopped_starting_the_selected_model.b3fd7cda": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The previous server is stopped. Starting the selected model…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_recent_preferred_port_must_be_between_1024_and_65535.5a1a9168": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The recent preferred port must be between 1024 and 65535.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_running_server_s_active_model_could_not_be_verified_download.cd60bf94": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The running server's active model could not be verified; downloading is paused for safety.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_running_server_s_active_model_could_not_be_verified_so_cache.7b813da8": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The running server's active model could not be verified, so cache deletion is paused for safety.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_selected_model_is_currently_running_choose_a_different_model.1116006b": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The selected model is currently running. Choose a different model before downloading.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_selected_model_is_not_downloaded_yet_the_current_server_was.0fb6cf2d": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The selected model is not downloaded yet. The current server was left running; download that model, then try Switch Model again.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.the_server_stopped_but_another_backend_conflict_or_active_model.0db27a3f": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The server stopped, but another backend conflict or active model operation prevents switching. The replacement model was not started.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.this_model_is_running_select_a_different_model_to_download_anoth.812491f9": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "This model is running; select a different model to download another cache safely.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.trusted_https_setup_is_required_arg1.dfacc79f": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Trusted HTTPS setup is required: {arg1}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.trusted_https_setup_is_required_the_certificate_and_trust_status.f9a59d79": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Trusted HTTPS setup is required: The certificate and trust status are not ready.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.unsupported_interface_language_locale.d9e3009d": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Unsupported interface language: {locale}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.available": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Version {VERSION} is available.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.checkFailed": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not check for updates: {ERROR}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.checking": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Checking for updates…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.downloadInstall": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Download and install update",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.downloading": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Downloading and installing update…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.feedMissing": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The development update feed is not published yet.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.installFailed": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Could not install the update: {ERROR}",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.installedReopen": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Update installed. Select Reopen App to use the new version.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.progress": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Downloaded {DOWNLOADED} of {TOTAL}.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.relaunching": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Update installed. Restarting RDT Connect…",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.reopenApp": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Reopen App",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.restartFailed": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "The update was installed, but RDT Connect could not restart automatically. Quit and reopen the app.",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "updater.upToDate": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "RDT Connect is up to date",
+      "sourceKind": "legacy-catalog-entry",
+      "sourceContext": "UNVERIFIED: source context not recovered; existing catalog entry retained.",
+      "stableKey": true
+    },
+    "msg.permanently_delete_only_these_selected_rdt_connect_mlx_model_caches_models_unselected_models_other_hugging_face_repositories_and_easywhisper_browser_data_will_remain_untouched.4235eebe": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Permanently delete only these selected RDT Connect MLX model caches?\n\n{models}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.",
+      "sourceKind": "typescript-interpolated-template",
+      "sourceContext": "src/main.ts model-cache deletion confirmation; selected model names are inserted at {models}.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
+    },
+    "msg.add_the_rdt_connect_local_root_ca_to_this_computer_s_system_trust_store_your_system_will_ask_for_administrator_authorization_the_ca_is_restricted_to_localhost_127_0_0_1_and_1_and_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later_firefox_and_chrome_chromium_may_keep_separate_certificate_stores_and_are_not_changed.50cb7d5d": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Add the RDT Connect local root CA to this computer's system trust store? Your system will ask for administrator authorization. The CA is restricted to localhost, 127.0.0.1 and ::1, and RDT Connect records its exact fingerprint so it can remove only this entry later. Firefox and Chrome/Chromium may keep separate certificate stores and are not changed.",
+      "sourceKind": "typescript-literal",
+      "sourceContext": "src/main.ts Linux system trust-store confirmation.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
+    },
+    "msg.add_the_rdt_connect_local_root_ca_to_the_windows_current_user_certificate_trust_store_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later.15d3811e": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Add the RDT Connect local root CA to the Windows current-user certificate trust store? RDT Connect records its exact fingerprint so it can remove only this entry later.",
+      "sourceKind": "typescript-literal",
+      "sourceContext": "src/main.ts Windows current-user certificate trust confirmation.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
+    },
+    "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.ed4f1479": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "sourceKind": "typescript-interpolated-template",
+      "sourceContext": "src/main.ts Linux trust removal confirmation, singular.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
+    },
+    "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.48ac1519": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "sourceKind": "typescript-interpolated-template",
+      "sourceContext": "src/main.ts Linux trust removal confirmation, plural.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
+    },
+    "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.52dd3e5b": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "sourceKind": "typescript-interpolated-template",
+      "sourceContext": "src/main.ts Windows trust removal confirmation, singular.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
+    },
+    "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.6e6bda5a": {
+      "status": "active",
+      "classification": "TRANSLATE",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "sourceKind": "typescript-interpolated-template",
+      "sourceContext": "src/main.ts Windows trust removal confirmation, plural.",
+      "stableKey": true,
+      "translationStatus": "PROVISIONAL_ENGLISH_FALLBACK_PENDING_TRANSLATION"
     }
   },
   "retiredKeys": {

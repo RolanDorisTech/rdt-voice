@@ -67,7 +67,7 @@ def main() -> int:
 
     guard = 'if origin != _RDT_OFFICIAL_BROWSER_ORIGIN:'
     replacement = (
-        'if origin != _RDT_OFFICIAL_BROWSER_ORIGIN and origin != _request_origin(request):'
+        'if origin != _RDT_OFFICIAL_BROWSER_ORIGIN and origin != (f"{request.url.scheme.lower()}://{host.strip().lower()}"):'
     )
     text, guard_count = re.subn(re.escape(guard), replacement, text, count=1)
     if guard_count != 1:

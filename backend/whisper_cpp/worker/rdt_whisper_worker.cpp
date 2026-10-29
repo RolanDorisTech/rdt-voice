@@ -14,6 +14,7 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <unordered_set>
 #include <thread>
 #include <vector>
 #include <condition_variable>
@@ -33,6 +34,9 @@ static std::atomic_bool g_shutdown{false};
 static std::atomic_bool g_cancel{false};
 static std::mutex g_active_mutex;
 static std::string g_active_id;
+// IDs are registered before queue insertion; queued cancellation must not be lost.
+static std::unordered_set<std::string> g_known_request_ids;
+static std::unordered_set<std::string> g_cancel_requested_ids;
 
 static std::string architecture_name() {
 #if defined(_M_ARM64) || defined(__aarch64__)
@@ -129,11 +133,35 @@ static bool read_pcm16_wav(const fs::path &path, std::vector<float> &samples, st
     }
     samples.resize(data_size / 2);
     stream.clear(); stream.seekg(data_pos);
-    std::vector<std::int16_t> raw(samples.size());
-    stream.read(reinterpret_cast<char *>(raw.data()), static_cast<std::streamsize>(data_size));
-    if (!stream) { code = "audio_wav_truncated"; samples.clear(); return false; }
-    for (std::size_t i = 0; i < raw.size(); ++i) samples[i] = static_cast<float>(raw[i]) / 32768.0f;
+    constexpr std::size_t kReadChunkSamples = 32768;
+    std::vector<std::int16_t> raw(std::min(samples.size(), kReadChunkSamples));
+    for (std::size_t offset = 0; offset < samples.size();) {
+        if (g_cancel.load(std::memory_order_relaxed)) { code = "cancelled"; samples.clear(); return false; }
+        const std::size_t count = std::min(raw.size(), samples.size() - offset);
+        stream.read(reinterpret_cast<char *>(raw.data()),
+                    static_cast<std::streamsize>(count * sizeof(std::int16_t)));
+        if (!stream) { code = "audio_wav_truncated"; samples.clear(); return false; }
+        for (std::size_t i = 0; i < count; ++i) {
+            samples[offset + i] = static_cast<float>(raw[i]) / 32768.0f;
+        }
+        offset += count;
+    }
+    if (g_cancel.load(std::memory_order_relaxed)) {
+        code = "cancelled"; samples.clear(); return false;
+    }
     return !samples.empty();
+}
+
+static bool valid_request_id(const std::string &id) {
+    if (id.empty() || id.size() > 48) return false;
+    for (unsigned char c : id) {
+        const bool allowed = (c >= 'A' && c <= 'Z') ||
+                             (c >= 'a' && c <= 'z') ||
+                             (c >= '0' && c <= '9') ||
+                             c == '_' || c == '-';
+        if (!allowed) return false;
+    }
+    return true;
 }
 
 static void reader_thread() {
@@ -143,11 +171,35 @@ static void reader_thread() {
         auto fields = split_tabs(line);
         if (!fields.empty() && fields[0] == "CANCEL" && fields.size() == 2) {
             std::lock_guard<std::mutex> lock(g_active_mutex);
-            if (fields[1] == g_active_id) g_cancel.store(true, std::memory_order_relaxed);
+            if (fields[1] == g_active_id) {
+                g_cancel.store(true, std::memory_order_relaxed);
+            } else if (g_known_request_ids.find(fields[1]) != g_known_request_ids.end()) {
+                // The command may be queued but not active yet. Keep the cancel
+                // scoped to that registered request until its processing begins.
+                g_cancel_requested_ids.insert(fields[1]);
+            }
             continue;
         }
         if (!fields.empty() && fields[0] == "SHUTDOWN") {
             g_shutdown.store(true); g_cancel.store(true); g_queue_cv.notify_all(); break;
+        }
+        const auto command_fields = split_tabs(line);
+        if (command_fields.size() == 4 && command_fields[0] == "TRANSCRIBE"
+                && valid_request_id(command_fields[1])) {
+            bool duplicate_request = false;
+            {
+                std::lock_guard<std::mutex> lock(g_active_mutex);
+                duplicate_request =
+                    g_known_request_ids.find(command_fields[1]) != g_known_request_ids.end();
+                if (!duplicate_request) g_known_request_ids.insert(command_fields[1]);
+            }
+            if (duplicate_request) {
+                // Duplicate outstanding IDs make request-scoped cancellation ambiguous.
+                g_shutdown.store(true);
+                g_cancel.store(true, std::memory_order_relaxed);
+                g_queue_cv.notify_all();
+                break;
+            }
         }
         {
             std::lock_guard<std::mutex> lock(g_queue_mutex);
@@ -160,21 +212,37 @@ static void reader_thread() {
     g_queue_cv.notify_all();
 }
 
+static void finish_request(const std::string &id) {
+    std::lock_guard<std::mutex> lock(g_active_mutex);
+    if (g_active_id == id) g_active_id.clear();
+    g_cancel_requested_ids.erase(id);
+    g_known_request_ids.erase(id);
+}
+
 static bool transcribe(struct whisper_context *ctx, const std::vector<std::string> &f) {
-    if (f.size() != 4 || f[0] != "TRANSCRIBE" || f[1].empty() || f[1].size() > 48) {
+    if (f.size() != 4 || f[0] != "TRANSCRIBE" || !valid_request_id(f[1])) {
         std::cout << "ERROR\t0\trequest_invalid" << std::endl; return false;
     }
     const std::string id = f[1]; std::string language, path_bytes;
     if (!b64_decode(f[2], language) || language.size() > 48 || !b64_decode(f[3], path_bytes) || path_bytes.empty() || path_bytes.size() > 32768) {
+        finish_request(id);
         std::cout << "ERROR\t" << id << "\trequest_invalid" << std::endl; return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_active_mutex);
+        g_active_id = id;
+        const bool cancel_before_activation = g_cancel_requested_ids.erase(id) > 0;
+        const bool shutting_down = g_shutdown.load(std::memory_order_relaxed);
+        g_cancel.store(cancel_before_activation || shutting_down,
+                       std::memory_order_relaxed);
     }
     fs::path wav = fs::u8path(path_bytes.begin(), path_bytes.end());
     std::vector<float> pcm; std::string error;
     if (!read_pcm16_wav(wav, pcm, error)) {
-        std::cout << "ERROR\t" << id << "\t" << error << std::endl; return false;
+        finish_request(id);
+        std::cout << "ERROR\t" << id << "\t" << error << std::endl;
+        return false;
     }
-    g_cancel.store(false, std::memory_order_relaxed);
-    { std::lock_guard<std::mutex> lock(g_active_mutex); g_active_id = id; }
     whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     params.print_progress = false; params.print_realtime = false; params.print_timestamps = false;
     params.no_context = true; params.temperature = 0.0f; params.n_threads = std::max(1, std::min(16, static_cast<int>(std::thread::hardware_concurrency())));
@@ -200,7 +268,7 @@ static bool transcribe(struct whisper_context *ctx, const std::vector<std::strin
         const char *lang_name = lang_id >= 0 ? whisper_lang_str(lang_id) : nullptr;
         std::cout << "DONE\t" << id << '\t' << (lang_name ? b64_encode(lang_name) : "-") << std::endl;
     }
-    { std::lock_guard<std::mutex> lock(g_active_mutex); g_active_id.clear(); }
+    finish_request(id);
     return result == 0;
 }
 

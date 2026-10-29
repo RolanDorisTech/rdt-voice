@@ -30,6 +30,7 @@ if MODEL_ID not in WINDOWS_MODELS:
 _ENGINE = None
 _ENGINE_ERROR = None
 _MODEL_LEASE = None
+_ENGINE_INFERENCE_VERIFIED = False
 
 def _rdt_load_model_lock() -> dict:
     # Compatibility surface for diagnostics only; this is deliberately not the Apple MLX lock.
@@ -51,7 +52,7 @@ def _rdt_resolve_model_snapshot(model_id: str) -> str:
     return str(_windows_model_path(model_id, require_verified=True))
 
 def _ensure_engine() -> Any:
-    global _ENGINE, _ENGINE_ERROR, _MODEL_LEASE
+    global _ENGINE, _ENGINE_ERROR, _MODEL_LEASE, _ENGINE_INFERENCE_VERIFIED
     if _ENGINE is not None and _ENGINE.status().get("ready"):
         return _ENGINE
     if _ENGINE_ERROR:
@@ -64,6 +65,7 @@ def _ensure_engine() -> Any:
         from engine import PersistentWhisperEngine
         engine = PersistentWhisperEngine(verified_path, MODEL_ID)
         engine.start()
+        _ENGINE_INFERENCE_VERIFIED = False
         _ENGINE = engine
         return engine
     except Exception as exc:
@@ -74,9 +76,17 @@ def _ensure_engine() -> Any:
         _ENGINE_ERROR = str(exc).splitlines()[0][:180]
         raise RuntimeError("Windows transcription engine is not ready. Download/verify the selected model and install the packaged native worker, then restart RDT Connect.") from exc
 
+def _mark_engine_inference_verified(engine: Any) -> None:
+    """Qualify this resident worker only after a successful transcription."""
+    global _ENGINE_INFERENCE_VERIFIED
+    if engine is not None and engine is _ENGINE:
+        _ENGINE_INFERENCE_VERIFIED = True
+
+
 def _shutdown_engine() -> None:
-    global _ENGINE, _MODEL_LEASE
+    global _ENGINE, _MODEL_LEASE, _ENGINE_INFERENCE_VERIFIED
     engine, _ENGINE = _ENGINE, None
+    _ENGINE_INFERENCE_VERIFIED = False
     if engine is not None:
         try: engine.stop()
         except Exception: pass
@@ -1582,6 +1592,107 @@ def get_progress(job_id):
         _prune_progress_locked()
         return PROGRESS.get(job_id)
 
+
+
+class _TranscriptionCancelled(Exception):
+    """Internal signal to stop work for a disconnected transcription client."""
+
+
+def _check_transcription_cancelled(
+    job_id: str, cancel_event: Optional[threading.Event]
+) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        set_progress(
+            job_id, 100, "cancelled",
+            label="Transcription cancelled because the client disconnected",
+        )
+        raise _TranscriptionCancelled()
+
+
+def _acquire_inference_lock(
+    job_id: str, cancel_event: Optional[threading.Event], poll_seconds: float = 0.25
+) -> None:
+    """Wait for serialized inference without pinning a slot after disconnect."""
+    poll_seconds = max(0.01, min(1.0, float(poll_seconds)))
+    while True:
+        _check_transcription_cancelled(job_id, cancel_event)
+        if INFERENCE_LOCK.acquire(timeout=poll_seconds):
+            return
+
+
+def _cancel_worker_request(request_id: str) -> bool:
+    """Cancel only the request ID belonging to this disconnected HTTP call."""
+    engine = _ENGINE
+    if engine is None:
+        return False
+    try:
+        return bool(engine.cancel(request_id))
+    except Exception:
+        return False
+
+
+def _run_ffmpeg_bounded(
+    cmd: list[str],
+    cancel_event: Optional[threading.Event],
+    timeout_seconds: float,
+) -> subprocess.CompletedProcess:
+    """Run FFmpeg with bounded runtime and terminate the child on disconnect."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise _TranscriptionCancelled()
+
+    started = time.monotonic()
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        creationflags=(
+            getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        ),
+    )
+    try:
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                try:
+                    if process.poll() is None:
+                        process.terminate()
+                except OSError:
+                    pass
+                try:
+                    process.communicate(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                raise _TranscriptionCancelled()
+
+            remaining = timeout_seconds - (time.monotonic() - started)
+            if remaining <= 0:
+                process.kill()
+                _, stderr = process.communicate()
+                raise subprocess.TimeoutExpired(cmd, timeout_seconds, stderr=stderr)
+
+            try:
+                _, stderr = process.communicate(timeout=min(0.2, remaining))
+            except subprocess.TimeoutExpired:
+                continue
+
+            if cancel_event is not None and cancel_event.is_set():
+                raise _TranscriptionCancelled()
+            return subprocess.CompletedProcess(
+                cmd, process.returncode, None, stderr or ""
+            )
+    finally:
+        if process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=2.0)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    process.kill()
+                    process.wait(timeout=2.0)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+
 # No model warmup occurs during import. The native worker is created from the ASGI
 # startup hook after CLI handling, and only after a verified model exists.
 
@@ -1701,10 +1812,24 @@ def health(host: Optional[str]=Header(None)):
     check_host(host)
     engine_status = _ENGINE.status() if _ENGINE is not None else {
         "ready": False, "running": False, "engine": "whisper.cpp/v1.9.5",
-        "architecture": None, "provider": "CPU", "worker_variant": "unknown",
+        "architecture": None, "provider": "unknown", "worker_variant": "unknown",
         "provider_reason": "Worker has not completed startup.",
     }
-    # Preserve old top-level status/model/features and add explicit inference readiness.
+    inference_verified = bool(
+        _ENGINE is not None
+        and engine_status.get("ready")
+        and _ENGINE_INFERENCE_VERIFIED
+    )
+    if _ENGINE is not None and not inference_verified:
+        engine_status = dict(engine_status)
+        engine_status.update(
+            provider="unknown", worker_variant="unknown",
+            provider_reason=(
+                "Provider is not advertised until this worker completes "
+                "a successful inference."
+            ),
+        )
+    engine_status["inference_verified"] = inference_verified
     return {"status":"ok", "model":MODEL_ID, "engine":engine_status,
             "engine_ready":bool(engine_status.get("ready")),
             "features":{"concurrent":True,"concurrent_requests":True,"parallel_inference":False,
@@ -1804,12 +1929,99 @@ def open_recording(authorization: Optional[str]=Header(None), host: Optional[str
     return {"ok":True,"path":str(target.relative_to(ALLOWED_ROOT))}
 
 @app.post("/v1/audio/transcriptions")
-def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audio_cache_dir: str=Form(default=None), language: str=Form(default="auto"), job_id: Optional[str]=Form(default=None), authorization: Optional[str]=Header(None), host: Optional[str]=Header(None), origin: Optional[str]=Header(None), tailscale_user_login: Optional[str]=Header(None, alias="Tailscale-User-Login")):
+async def trans(
+    request: Request,
+    file: UploadFile = File(...),
+    model: str = Form(default="whisper-1"),
+    audio_cache_dir: str = Form(default=None),
+    language: str = Form(default="auto"),
+    job_id: Optional[str] = Form(default=None),
+    authorization: Optional[str] = Header(None),
+    host: Optional[str] = Header(None),
+    origin: Optional[str] = Header(None),
+    tailscale_user_login: Optional[str] = Header(None, alias="Tailscale-User-Login"),
+):
+    """Keep blocking work off the event loop and cancel on client disconnect."""
+    stable_job_id = job_id or uuid.uuid4().hex
+    worker_request_id = uuid.uuid4().hex[:24]
+    cancel_event = threading.Event()
+
+    work = asyncio.create_task(asyncio.to_thread(
+        _transcribe_sync,
+        file=file,
+        model=model,
+        audio_cache_dir=audio_cache_dir,
+        language=language,
+        job_id=stable_job_id,
+        authorization=authorization,
+        host=host,
+        origin=origin,
+        tailscale_user_login=tailscale_user_login,
+        worker_request_id=worker_request_id,
+        cancel_event=cancel_event,
+    ))
+    disconnected = False
+    try:
+        while not work.done():
+            await asyncio.wait({work}, timeout=0.20)
+            if work.done():
+                break
+            if not disconnected:
+                try:
+                    disconnected = await request.is_disconnected()
+                except Exception:
+                    disconnected = False
+                if disconnected:
+                    cancel_event.set()
+            if disconnected:
+                # Retry across the narrow race before the worker request becomes active.
+                await asyncio.to_thread(_cancel_worker_request, worker_request_id)
+
+        if disconnected:
+            try:
+                await work
+            except Exception:
+                pass
+            return Response(status_code=499)
+        return await work
+    except asyncio.CancelledError:
+        cancel_event.set()
+        # Don't abandon the thread holding files or the inference slot.
+        while not work.done():
+            await asyncio.to_thread(_cancel_worker_request, worker_request_id)
+            try:
+                await asyncio.wait_for(asyncio.shield(work), timeout=0.20)
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                break
+        raise
+
+
+def _transcribe_sync(
+    file: UploadFile,
+    model: str = "whisper-1",
+    audio_cache_dir: Optional[str] = None,
+    language: str = "auto",
+    job_id: Optional[str] = None,
+    authorization: Optional[str] = None,
+    host: Optional[str] = None,
+    origin: Optional[str] = None,
+    tailscale_user_login: Optional[str] = None,
+    *,
+    worker_request_id: Optional[str] = None,
+    cancel_event: Optional[threading.Event] = None,
+):
     check_host(host); require_bearer(authorization, tailscale_user_login)
     if not FFMPEG:
         raise HTTPException(status_code=500, detail="ffmpeg is not installed. Install ffmpeg or set FFMPEG_PATH.")
 
     job_id = job_id or uuid.uuid4().hex
+    cancel_event = cancel_event or threading.Event()
+    worker_request_id = worker_request_id or uuid.uuid4().hex[:24]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,48}", worker_request_id):
+        raise HTTPException(status_code=400, detail="Invalid internal transcription request ID.")
+    _check_transcription_cancelled(job_id, cancel_event)
     set_progress(job_id, 0, "receiving", label="Receiving audio")
     cache_dir = resolve_cache_dir_safe(audio_cache_dir)
     original_name = safe_filename(file.filename or "rec.webm")
@@ -1830,6 +2042,7 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
             inp = tf.name
             total = 0
             while True:
+                _check_transcription_cancelled(job_id, cancel_event)
                 chunk = file.file.read(UPLOAD_CHUNK_BYTES)
                 if not chunk: break
                 total += len(chunk)
@@ -1855,11 +2068,12 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
 
         w1=inp+".1.wav"; w2=inp+".2.wav"
         cmd=[FFMPEG,"-hide_banner","-loglevel","error","-y","-i",inp,"-vn","-sn","-dn","-ar","16000","-ac","1","-f","wav",w1]
-        p=subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=FFMPEG_TIMEOUT_SECONDS, check=False,
-                         creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0))
+        p = _run_ffmpeg_bounded(cmd, cancel_event, FFMPEG_TIMEOUT_SECONDS)
+        _check_transcription_cancelled(job_id, cancel_event)
         if p.returncode != 0 or not pathlib.Path(w1).exists() or pathlib.Path(w1).stat().st_size < 1000:
             detail=(p.stderr or "").strip().splitlines()[-1] if (p.stderr or "").strip() else "unknown decoder error"
             raise HTTPException(status_code=415, detail=f"RDT Voice could not decode this audio file. Supported formats include {SUPPORTED_HINTS}. Decoder: {detail[:300]}")
+        _check_transcription_cancelled(job_id, cancel_event)
         set_progress(job_id, 32, "decoded", label="Audio decoded")
 
         try:
@@ -1872,7 +2086,9 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
             return {"text":"","reason":"empty","job_id":job_id}
         set_progress(job_id, 42, "analyzing", label="Checking speech and silence")
 
+        _check_transcription_cancelled(job_id, cancel_event)
         kept,cuts,vad_info=detect_long_silences(raw,sr)
+        _check_transcription_cancelled(job_id, cancel_event)
         if vad_info.get("gate_rejected"):
             set_progress(job_id, 100, "silence", label="No meaningful audio detected")
             return {"text":"","reason":"silence","duration_original":len(raw)/float(sr),"vad":vad_info,"job_id":job_id}
@@ -1884,6 +2100,7 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
         with wave.open(w2,"wb") as wf:
             wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
             for os_,oe in kept:
+                _check_transcription_cancelled(job_id, cancel_event)
                 if oe<=os_: continue
                 chunk=raw[os_:oe]
                 if len(chunk)==0: continue
@@ -1896,15 +2113,27 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
         set_progress(job_id, 50, "transcribing", label="Transcribing with whisper.cpp CPU worker", duration_original=len(raw)/float(sr))
 
         with ACTIVE_JOBS_LOCK: ACTIVE_JOBS.add(job_id)
+        lock_acquired = False
         try:
             if INFERENCE_LOCK.locked():
                 set_progress(job_id, 49, "waiting", label="Waiting for transcription engine", duration_original=len(raw)/float(sr))
-            with INFERENCE_LOCK:
-                set_progress(job_id, 50, "transcribing", label="Transcribing with whisper.cpp CPU worker", duration_original=len(raw)/float(sr))
-                result = _ensure_engine().transcribe(w2, language=language if language and language != "auto" else "auto")
+            _acquire_inference_lock(job_id, cancel_event)
+            lock_acquired = True
+            _check_transcription_cancelled(job_id, cancel_event)
+            engine = _ensure_engine()
+            set_progress(job_id, 50, "transcribing", label="Transcribing with whisper.cpp worker", duration_original=len(raw)/float(sr))
+            _check_transcription_cancelled(job_id, cancel_event)
+            result = engine.transcribe(
+                w2,
+                language=language if language and language != "auto" else "auto",
+                request_id=worker_request_id,
+            )
+            _check_transcription_cancelled(job_id, cancel_event)
+            _mark_engine_inference_verified(engine)
         finally:
+            if lock_acquired:
+                INFERENCE_LOCK.release()
             with ACTIVE_JOBS_LOCK: ACTIVE_JOBS.discard(job_id)
-
         set_progress(job_id, 92, "finalizing", label="Cleaning transcript")
         segments = result.get("segments", []) or []
         for segment in segments:
@@ -1924,6 +2153,9 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
             "saved_recording":bool(saved_path),
             "recording_name":saved_path.name if saved_path else None,
         }
+    except _TranscriptionCancelled:
+        set_progress(job_id, 100, "cancelled", label="Transcription cancelled because the client disconnected")
+        raise HTTPException(status_code=499, detail="Transcription cancelled because the client disconnected.")
     except HTTPException as e:
         set_progress(job_id, 100, "error", label="Transcription failed", error=str(e.detail))
         raise
@@ -1931,6 +2163,9 @@ def trans(file: UploadFile=File(...), model: str=Form(default="whisper-1"), audi
         set_progress(job_id, 100, "error", label="Audio decoding timed out")
         raise HTTPException(status_code=504, detail="Audio decoding timed out. The recording may be unusually large or the codec may be problematic.")
     except Exception as e:
+        if cancel_event.is_set():
+            set_progress(job_id, 100, "cancelled", label="Transcription cancelled because the client disconnected")
+            raise HTTPException(status_code=499, detail="Transcription cancelled because the client disconnected.")
         set_progress(job_id, 100, "error", label="Transcription failed", error=str(e)[:500])
         raise HTTPException(status_code=500, detail=f"RDT Voice could not finish transcription: {str(e)[:400]}")
     finally:

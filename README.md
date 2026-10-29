@@ -3,11 +3,13 @@
   <h1>Meet RDT Connect</h1>
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
-  <p><strong>Available for macOS on Apple Silicon and Windows (ARM64 and x64)</strong></p>
+  <p><strong>Available for macOS, Windows, and Linux</strong></p>
   <p>
-    <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20Apple%20Silicon%201D04-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for macOS Apple Silicon, Build 1D04"></a>
-    <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20ARM64%202A05-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for Windows ARM64, Build 2A05"></a>
-    <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20x64%203A01-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Download RDT Connect for Windows x64, Build 3A01"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS%20Apple%20Silicon-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS Apple Silicon"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe"><img src="https://img.shields.io/badge/RDT%20Connect-Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Windows ARM64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe"><img src="https://img.shields.io/badge/RDT%20Connect-Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Windows x64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/RDT%20Connect-Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Ubuntu ARM64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb"><img src="https://img.shields.io/badge/RDT%20Connect-Debian%20x64-A81D33?style=for-the-badge&amp;logo=debian&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect Debian x64"></a>
   </p>
   <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
   <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
@@ -98,13 +100,16 @@ Prefer a desktop app for managing your local Whisper server? RDT Connect is an o
 
 ## RDT Connect Downloads
 
-| Platform | Installer | Version | Build | File size |
-| --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
-| Windows (ARM64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) | `0.2.0-dev.11.2A05` | `2A05` | 101,982,643 bytes |
-| Windows (x64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) | `0.2.0-dev.11.3A01` | `3A01` | 137,375,653 bytes |
+Dev 11 packages below are **prereleases**. Complete the applicable VM and release qualification before treating them as final production releases.
 
-**SHA-256 (Build 1D04):** `93b8442447e083e1e328904f06ec3ff3e8dd1f13df9fe28de1b6ae8e775ac39f`
+| Platform | Installer and verification | Version | Build | File size |
+| --- | --- | --- | --- | --- |
+| macOS (Apple Silicon) | [Download (.dmg)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) · [Release SHA-256 manifest](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/SHA256SUMS.txt) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
+| Windows (ARM64) | [Download (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT.Connect_0.2.0-dev.11.2A05_arm64-setup.exe.sha256) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT-Connect-Windows-Installation-Guide.zip) · [Guide SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a05/RDT-Connect-Windows-Installation-Guide.zip.sha256) | `0.2.0-dev.11.2A05` | `2A05` | 101,982,643 bytes |
+| Windows (x64) | [Download (.exe)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT.Connect_0.2.0-dev.11.3A01_x64-setup.exe.sha256) · [Installation guide (.zip)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT-Connect-Windows-Installation-Guide.zip) · [Guide SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a01/RDT-Connect-Windows-Installation-Guide.zip.sha256) | `0.2.0-dev.11.3A01` | `3A01` | 137,375,653 bytes |
+| Ubuntu (ARM64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb.sha256) | `0.2.0-dev.11.4U.1` | `4U01` | 82,284,734 bytes |
+| Debian (x64) | [Download (.deb)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb.sha256) | `0.2.0-dev.11.5D.1` | `5D01` | 83,031,994 bytes |
+
 
 Download (.dmg) links directly to the published GitHub Release asset. The browser's Downloads panel handles download progress and cancellation. Update the link, version, build, and file size when publishing a new installer.
 
@@ -113,10 +118,9 @@ RDT Connect is optional. You can use RDT Voice directly in your browser without 
 
 <p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
 
-**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The published Build 1D04 DMG is available for macOS Apple Silicon. The development updater feed provides the corrected signed 1D04 updater archive and matching signature for eligible existing installations.
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The custom Build 0D53 DMG uses the established installation layout. The development updater feed provides the signed 0D53 archive and matching signature for eligible existing installations.
 
 See [all RDT Connect releases](https://github.com/RolanDorisTech/rdt-voice/releases) for future versions and updates.
-
 ## Run your own Whisper backend
 
 ### Why run your own backend?

@@ -329,16 +329,19 @@ jobs:
             grep -q '^GGML_AVX2:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
             grep -q '^GGML_FMA:BOOL=ON$' "$AVX2_BUILD/CMakeCache.txt"
             python3 - "$AVX2_BUILD/compile_commands.json" <<'PYAVX'
-import json, sys
-from pathlib import Path
-commands = json.loads(Path(sys.argv[1]).read_text())
-cpu = [x["command"] for x in commands if "/ggml-cpu/" in x["file"] or "ggml-cpu" in x["file"]]
-assert cpu, "No ggml-cpu compile commands found"
-assert any("-mavx2" in x and "-mfma" in x for x in cpu), "AVX2/FMA flags missing from ggml-cpu compilation"
-print(f"PASS: AVX2/FMA flags present in {len(cpu)} ggml-cpu compile commands")
-PYAVX
+          import json, sys
+          from pathlib import Path
+          commands = json.loads(Path(sys.argv[1]).read_text())
+          cpu = [x["command"] for x in commands if "/ggml-cpu/" in x["file"] or "ggml-cpu" in x["file"]]
+          assert cpu, "No ggml-cpu compile commands found"
+          assert any("-mavx2" in x and "-mfma" in x for x in cpu), "AVX2/FMA flags missing from ggml-cpu compilation"
+          print(f"PASS: AVX2/FMA flags present in {len(cpu)} ggml-cpu compile commands")
+          PYAVX
             ldd "$AVX2_WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"
-            ! grep -q 'not found' "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"
+            if grep -q 'not found' "$RUNNER_TEMP/rdt-linux-qualification/avx2-ldd.txt"; then
+              echo "STOP: AVX2 worker has unresolved shared-library dependencies" >&2
+              exit 1
+            fi
             sha256sum "$AVX2_WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/avx2-worker-sha256.txt"
           fi
 
@@ -497,24 +500,24 @@ PYAVX
             "$RUNNER_TEMP/rdt-python/bin/python" - \
               "$RUNNER_TEMP/rdt-linux-qualification/real-inference-timing.json" \
               "$RUNNER_TEMP/rdt-linux-qualification/real-inference-timing-avx2.json" <<'PYBENCH'
-import json, sys
-from pathlib import Path
+          import json, sys
+          from pathlib import Path
 
-baseline = json.loads(Path(sys.argv[1]).read_text())
-optimized = json.loads(Path(sys.argv[2]).read_text())
-base_ms = float(baseline["elapsed_ms_total"])
-avx_ms = float(optimized["elapsed_ms_total"])
-if base_ms <= 0 or avx_ms <= 0:
-    raise SystemExit("STOP: invalid inference timing")
-speedup = base_ms / avx_ms
-print(f"portable_cpu_elapsed_ms={base_ms:.1f}")
-print(f"x64_avx2_elapsed_ms={avx_ms:.1f}")
-print(f"x64_avx2_speedup={speedup:.2f}x")
-print(f"portable_cpu_rtf={baseline.get('real_time_factor', 'missing')}")
-print(f"x64_avx2_rtf={optimized.get('real_time_factor', 'missing')}")
-if avx_ms >= base_ms:
-    raise SystemExit("STOP: AVX2 worker did not beat portable CPU baseline")
-PYBENCH
+          baseline = json.loads(Path(sys.argv[1]).read_text())
+          optimized = json.loads(Path(sys.argv[2]).read_text())
+          base_ms = float(baseline["elapsed_ms_total"])
+          avx_ms = float(optimized["elapsed_ms_total"])
+          if base_ms <= 0 or avx_ms <= 0:
+              raise SystemExit("STOP: invalid inference timing")
+          speedup = base_ms / avx_ms
+          print(f"portable_cpu_elapsed_ms={base_ms:.1f}")
+          print(f"x64_avx2_elapsed_ms={avx_ms:.1f}")
+          print(f"x64_avx2_speedup={speedup:.2f}x")
+          print(f"portable_cpu_rtf={baseline.get('real_time_factor', 'missing')}")
+          print(f"x64_avx2_rtf={optimized.get('real_time_factor', 'missing')}")
+          if avx_ms >= base_ms:
+              raise SystemExit("STOP: AVX2 worker did not beat portable CPU baseline")
+          PYBENCH
           fi
 
       - name: Upload qualification evidence and Linux package (never model weights)

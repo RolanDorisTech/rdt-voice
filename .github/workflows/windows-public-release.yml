@@ -922,31 +922,31 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Download ARM64 distribution
-        uses: actions/download-artifact@v7.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: RDT-Connect-Windows-ARM64-DISTRIBUTION
           path: ${{ runner.temp }}/release-assets/arm64-distribution
 
       - name: Download x64 distribution
-        uses: actions/download-artifact@v7.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: RDT-Connect-Windows-x64-DISTRIBUTION
           path: ${{ runner.temp }}/release-assets/x64-distribution
 
       - name: Download Windows installation guide package
-        uses: actions/download-artifact@v7.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: RDT-Connect-Windows-ARM64-INSTALLATION-GUIDE
           path: ${{ runner.temp }}/release-assets/guide
 
       - name: Download ARM64 signed installer files
-        uses: actions/download-artifact@v7.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: RDT-Connect-Windows-ARM64-PUBLIC-RELEASE-INSTALLER
           path: ${{ runner.temp }}/release-assets/arm64-installer
 
       - name: Download x64 signed installer files
-        uses: actions/download-artifact@v7.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: RDT-Connect-Windows-x64-PUBLIC-RELEASE-INSTALLER
           path: ${{ runner.temp }}/release-assets/x64-installer

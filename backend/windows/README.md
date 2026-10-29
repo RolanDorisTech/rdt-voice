@@ -7,7 +7,7 @@ This is a Windows-only fork of the current `backend/apple/server.py` API service
 - `server.py`: Windows service entry point, API/auth/pairing/recordings/progress/transcription contract.
 - `model_registry.py`: pinned model candidates and verified downloader/cache.
 - `engine.py`: bounded worker IPC client, startup handshake and lifecycle.
-- `worker/rdt_whisper_worker.cpp`: persistent native C API worker; CPU-only until GPU backends are separately qualified.
+- `worker/rdt_whisper_worker.cpp`: persistent native C API worker. The packaging script always builds the portable CPU worker, attempts an optional ARM dot-product worker on ARM64, and supports explicitly requested Vulkan or CUDA worker builds. The Windows ARM64 and x64 workflows request Vulkan builds; runtime acceleration still requires successful inference qualification.
 - `worker/CMakeLists.txt`: native worker build target.
 - `requirements-windows.txt`: exact Python dependency version baseline. It is **not a hash-locked release lock** until native x64 and ARM64 wheel resolution/import tests pass.
 
@@ -33,4 +33,4 @@ Rust reads these existing lines from stdout; do not rename their prefixes or col
 - Windows plaintext HTTP is accepted only on loopback. Remote HTTP binding is rejected. Windows native certificate trust is not implemented or release-qualified in this patch, so do not enable remote access/release use.
 - `health` preserves `status: "ok"` and existing fields and adds `engine_ready` / `engine` status. ASGI startup fails if the verified model or native worker is missing, so listener readiness is not treated as inference readiness.
 - Recording uploads and open operations accept only the explicit audio extension allowlist; reparse-point checks and regular-file containment are applied to recording paths. The server never opens client-selected arbitrary file types.
-- The native C++ worker remains unbuilt/unexecuted here. Its actual architecture, cancellation and transcription behaviour must be demonstrated by the native Windows Actions jobs before a release claim.
+- The Windows packaging workflows build architecture-specific native workers from the pinned whisper.cpp source. A successful worker build or installer build does not, by itself, prove successful runtime inference or qualify GPU acceleration. Release evidence must include native Windows checks of worker startup, real model-backed transcription, and relevant cancellation and fallback behaviour. Keep the mandatory CPU worker available as the portable fallback.

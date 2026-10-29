@@ -109,6 +109,16 @@ RDT Connect is an optional desktop companion for the RDT Voice browser app. It m
 - **Browser integration:** RDT Connect launches RDT Voice in your browser. RDT Voice can also be used directly without RDT Connect.
 - **Network considerations:** local transcription uses the local service, but acquiring models and checking for application updates may require network access. “Local transcription” is not a guarantee that every setup or update operation is offline.
 
+## Connection and security
+
+RDT Connect has separate controls for local browser connectivity and optional remote access.
+
+- **Local browser connection:** RDT Connect can configure HTTPS for localhost. Setting up trusted HTTPS may require explicit approval to add a local certificate authority to your system's trust store. The setup UI describes this authority as restricted to loopback addresses (`127.0.0.1` and `::1`). Review certificate-trust prompts before approving them.
+- **Optional remote access:** Remote pairing uses Tailscale and requires Tailscale to be installed and connected. Starting the local transcription server alone does not enable public access. The pairing QR is described by the app as single-use and time-limited; pairing requests still require approval.
+- **Protect access information:** Do not share pairing QR codes, private pairing links, credentials, or diagnostic reports containing sensitive information.
+
+These controls reduce specific connection risks; they are not a guarantee against a compromised computer, browser, or other software running on your device. Keep your operating system and browser up to date, and approve certificate or pairing requests only when you initiated and understand them.
+
 ## Offline use
 
 RDT Connect is designed to manage transcription through a local Whisper service instead of requiring audio to be sent to a remote transcription API.

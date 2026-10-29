@@ -19,7 +19,7 @@ RDT Connect is an optional desktop companion for [RDT Voice](https://rolandorist
 - **Windows x64:** Build 3A03 is published. CI packaging checks passed. Manual UTM testing confirmed that RDT Connect opens, but the VM froze during HTTPS certificate setup, preventing further functional testing. In-app updater testing is planned in VMware.
 - **Linux:** Qualification and release integration are handled separately. Linux downloads will be listed when the corresponding release assets are published and verified.
 
-**Updater note:** Windows Dev 11 feeds are architecture-specific and will point to Builds 2A07 and 3A03 after the feed changes are published. VMware in-app updater verification remains pending.
+**Updater note:** The Windows Dev 11 updater feeds are published and point to Build 2A07 (ARM64) and Build 3A03 (x64). In-app updater installation and restart verification in VMware remains pending.
 
 ## Developer notes
 

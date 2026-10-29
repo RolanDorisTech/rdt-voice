@@ -95,6 +95,24 @@ class FeedTests(unittest.TestCase):
 
             same = run("0.2.0-dev.11.2A05", update=True)
             self.assertEqual(same.returncode, 0, same.stderr)
+
+            # Allow a same-version URL migration only when the signature matches.
+            migrated = subprocess.run(
+                base + [
+                    "--version", "0.2.0-dev.11.2A05",
+                    "--update",
+                    "--url", "https://example.com/canonical-release.exe",
+                ],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(migrated.returncode, 0, migrated.stderr)
+            migrated_data = json.loads(output.read_text(encoding="utf-8"))
+            migrated_entry = migrated_data["platforms"]["windows-aarch64"]
+            self.assertEqual(
+                migrated_entry["url"],
+                "https://example.com/canonical-release.exe",
+            )
+            self.assertEqual(migrated_entry["signature"], "test-signature")
             repaired = output.read_bytes()
 
             changed_artifact = subprocess.run(

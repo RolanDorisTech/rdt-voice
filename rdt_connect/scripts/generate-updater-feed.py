@@ -85,7 +85,7 @@ def validate_entry(entry, target):
     return entry
 
 
-def validate_manifest(data, target):
+def validate_manifest(data, target, *, allow_legacy_pub_date=False):
     expected_keys = {"version", "notes", "pub_date", "platforms"}
     if not isinstance(data, dict) or set(data) != expected_keys:
         raise ValueError("manifest must contain version, notes, pub_date, and platforms")
@@ -95,12 +95,18 @@ def validate_manifest(data, target):
     pub_date = data["pub_date"]
     if not isinstance(pub_date, str):
         raise ValueError("pub_date must be text")
+    strict_date = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"
+    legacy_date = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{1,6}Z"
+    accepted_date = strict_date
+    if allow_legacy_pub_date:
+        accepted_date = rf"(?:{strict_date}|{legacy_date})"
+    if not isinstance(pub_date, str) or not re.fullmatch(accepted_date, pub_date):
+        raise ValueError("pub_date must use an accepted UTC timestamp format")
     try:
-        datetime.strptime(pub_date, "%Y-%m-%dT%H:%M:%SZ")
+        fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in pub_date else "%Y-%m-%dT%H:%M:%SZ"
+        datetime.strptime(pub_date, fmt)
     except ValueError as exc:
-        raise ValueError("pub_date must use YYYY-MM-DDTHH:MM:SSZ") from exc
-    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", pub_date):
-        raise ValueError("pub_date must use YYYY-MM-DDTHH:MM:SSZ")
+        raise ValueError("pub_date must use a valid UTC timestamp") from exc
     platforms = data["platforms"]
     if not isinstance(platforms, dict) or list(platforms) != [target]:
         raise ValueError("manifest must contain only the requested target")
@@ -116,7 +122,7 @@ def read_existing(path, target):
     if list(platforms) != [target]:
         raise ValueError("existing feed must contain only the requested target")
     validate_entry(platforms[target], target)
-    return validate_manifest(data, target)
+    return validate_manifest(data, target, allow_legacy_pub_date=True)
 
 
 def build_manifest(version, target, url, signature, notes):
@@ -206,10 +212,17 @@ def main():
                 raise ValueError("output exists; pass --update to request a validated update")
             existing = read_existing(output, args.target)
             old_key = parse_version(existing["version"], args.target)
-            if new_key <= old_key:
+            if new_key < old_key:
                 raise ValueError(
-                    f"refusing same-version or downgrade: {existing['version']} -> {args.version}"
+                    f"refusing downgrade: {existing['version']} -> {args.version}"
                 )
+            if new_key == old_key:
+                old_entry = existing["platforms"][args.target]
+                new_entry = {"url": args.url, "signature": args.signature}
+                if old_entry != new_entry:
+                    raise ValueError(
+                        "refusing same-version update because artifact URL or signature changed"
+                    )
 
         manifest = build_manifest(
             args.version, args.target, args.url, args.signature, args.notes

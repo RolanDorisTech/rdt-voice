@@ -1,18 +1,18 @@
 <!-- RDT_CONNECT_PROMO_START -->
-<div align="left">
+<div align="center">
   <h1>Meet RDT Connect</h1>
   <h3>Your desktop companion for RDT Voice and local Whisper</h3>
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
   <p><strong>Available for macOS and Windows; Linux packages are untested prereleases</strong></p>
   <p>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS%20Apple%20Silicon-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS Apple Silicon"></a>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS"></a>
+  <a href="#rdt-connect-downloads"><img src="assets/badges/windows.svg" alt="Windows" height="28"></a><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe"><img src="https://img.shields.io/badge/Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows x64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="Ubuntu ARM64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb"><img src="https://img.shields.io/badge/Debian%20x64-A81D33?style=for-the-badge&amp;logo=debian&amp;logoColor=white&amp;labelColor=24292f" alt="Debian x64"></a>
   </p>
   <p><a href="#rdt-connect-downloads">Screenshots and installation guide ↓</a> · <a href="https://github.com/RolanDorisTech/rdt-voice/releases">All releases</a></p>
-  <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="760"></a>
+  <a href="#rdt-connect-downloads"><img src="assets/rdt-connect-server-running.png" alt="RDT Connect running with the Open RDT Voice button available" width="100%"></a>
 </div>
 <!-- RDT_CONNECT_PROMO_END -->
 
@@ -27,7 +27,7 @@ Click either image below to try the live browser demo:
 <div align="center">
   <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-ui.png" alt="RDT Voice Main Interface" width="100%"></a>
   <br><br>
-  <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-EasySetup.png" alt="RDT Voice EasySetup" width="500"></a>
+  <a href="https://rolandoristech.github.io/rdt-voice/"><img src="assets/rdt-voice-EasySetup.png" alt="RDT Voice EasySetup" width="100%"></a>
 </div>
 
 <p align="center">👉 <strong><a href="https://rolandoristech.github.io/rdt-voice/">Click here to try RDT Voice in your browser</a></strong></p>
@@ -96,22 +96,30 @@ RDT Connect is optional. You can also use RDT Voice directly in a supported brow
 Dev 11 packages are **prereleases**. Complete the applicable release qualification before treating them as final production releases.
 
 | Platform | Download | Version | Build | Size |
-| --- | --- | --- | --- | ---: |
-| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) · [SHA-256 manifest](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/SHA256SUMS.txt) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
-| Windows ARM64 | [Installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe.sha256) · [Guide (HTML)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/windows-installation-guide.html) · [Guide ZIP](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT-Connect-Windows-Installation-Guide.zip) · [Guide ZIP SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT-Connect-Windows-Installation-Guide.zip.sha256) | `0.2.0-dev.11.2A07` | `2A07` | 101,979,239 bytes |
-| Windows x64 | [Installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) · [SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe.sha256) · [Guide (HTML)](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/windows-installation-guide.html) · [Guide ZIP](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT-Connect-Windows-Installation-Guide.zip) · [Guide ZIP SHA-256](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT-Connect-Windows-Installation-Guide.zip.sha256) | `0.2.0-dev.11.3A03` | `3A03` | 137,365,296 bytes |
-| Ubuntu ARM64 — **NOT YET TESTED** | [DEB](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11.4U.1` | `4U01` | 82.3 MB |
-| Debian x64 — **NOT YET TESTED** | [DEB](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11.5D.1` | `5D01` | 83.0 MB |
+|:---|:---:|:---:|:---:|---:|
+| macOS | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) · [Guide](docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html) | `0.2.0-dev.11` | `1D04` | 235.7&nbsp;MB |
+| Windows&nbsp;ARM64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `2A07` | 102.0&nbsp;MB |
+| Windows&nbsp;x64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `3A03` | 137.4&nbsp;MB |
+| Linux&nbsp;ARM64 | Not&nbsp;yet&nbsp;published | `0.2.0-dev.11` | `4L001` | 78.39&nbsp;MiB |
+| Linux&nbsp;x64 | Not&nbsp;yet&nbsp;published | `0.2.0-dev.11` | `5L001` | 79.16&nbsp;MiB |
 
 ## Installation guides
 
+**Build identifiers:** The first digit identifies the platform: `1` = macOS Apple Silicon, `2` = Windows ARM64, `3` = Windows x64, `4L` = Linux ARM64, and `5L` = Linux x64. For Windows and Linux, ARM64 uses even prefixes and x64 uses odd prefixes. Linux always uses `L`, regardless of distribution or package format. Build numbers are contiguous within each letter series; for example, `2A99` rolls over to `2B00`.
+
 ### macOS
 
-<p align="center"><img src="assets/RDT_Connect_Installation_Guide.png" alt="RDT Connect installation guide (English)" width="1200"></p>
+[Open the complete macOS installation guide (HTML)](docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html)
+
+<p align="center"><a href="docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html"><img src="assets/RDT_Connect_Installation_Guide.png" alt="Open the complete RDT Connect macOS installation guide" width="100%"></a></p>
 
 **macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The published Build 1D04 DMG is available for macOS Apple Silicon. The development updater feed provides the corrected signed 1D04 updater archive and matching signature for eligible existing installations.
 
 ### Windows
+
+[Open the complete Windows installation guide (HTML)](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html)
+
+<p align="center"><a href="docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html"><img src="assets/rdt-connect-windows-installation.png" alt="Download the RDT Connect Windows installation guide (HTML)" width="100%"></a></p>
 
 1. Download the installer for your system and open the `.exe` file.
 2. If Windows SmartScreen appears, select **More info**.

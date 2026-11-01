@@ -6,7 +6,7 @@
   <p><strong>Available for macOS and Windows; Linux packages are untested prereleases</strong></p>
   <p>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS"></a>
-  <a href="#rdt-connect-downloads"><img src="https://img.shields.io/badge/%20-24292f?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows"></a><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
+  <a href="#rdt-connect-downloads"><img src="https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Windows"></a><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe"><img src="https://img.shields.io/badge/Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows x64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="Ubuntu ARM64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb"><img src="https://img.shields.io/badge/Debian%20x64-A81D33?style=for-the-badge&amp;logo=debian&amp;logoColor=white&amp;labelColor=24292f" alt="Debian x64"></a>
@@ -97,11 +97,11 @@ Dev 11 packages are **prereleases**. Complete the applicable release qualificati
 
 | Platform | Download | Version | Build | Size |
 |:---|:---:|:---:|:---:|---:|
-| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11.1D04` | `1D04` | 235.7 MB |
-| Windows (ARM64) | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) | `0.2.0-dev.11.2A07` | `2A07` | 102.0 MB |
-| Windows (x64) | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) | `0.2.0-dev.11.3A03` | `3A03` | 137.4 MB |
-| Ubuntu — **UNTESTED PRERELEASE** (ARM64) | [DEB](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11.4U.1` | `4U01` | 82.3 MB |
-| Debian — **UNTESTED PRERELEASE** (x64) | [DEB](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11.5D.1` | `5D01` | 83.0 MB |
+| macOS (Apple Silicon) · [Installation guide](docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11` | `1D04` | 235.7 MB |
+| Windows (ARM64) · [Installation guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) | `0.2.0-dev.11` | `2A07` | 102.0 MB |
+| Windows (x64) · [Installation guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) | `0.2.0-dev.11` | `3A03` | 137.4 MB |
+| Ubuntu — **UNTESTED PRERELEASE** (ARM64) | [DEB](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb) | `0.2.0-dev.11` | `4U01` | 82.3 MB |
+| Debian — **UNTESTED PRERELEASE** (x64) | [DEB](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-5d01/RDT.Connect_0.2.0-dev.11.5D.1_amd64.deb) | `0.2.0-dev.11` | `5D01` | 83.0 MB |
 
 ## Installation guides
 
@@ -117,7 +117,7 @@ Dev 11 packages are **prereleases**. Complete the applicable release qualificati
 
 [Open the complete Windows installation guide (HTML)](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html)
 
-<p align="center"><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/windows-installation-guide.html"><img src="assets/rdt-connect-windows-installation.png" alt="Download the RDT Connect Windows installation guide (HTML)" width="100%"></a></p>
+<p align="center"><a href="docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html"><img src="assets/rdt-connect-windows-installation.png" alt="Download the RDT Connect Windows installation guide (HTML)" width="100%"></a></p>
 
 1. Download the installer for your system and open the `.exe` file.
 2. If Windows SmartScreen appears, select **More info**.

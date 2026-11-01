@@ -105,6 +105,8 @@ Dev 11 packages are **prereleases**. Complete the applicable release qualificati
 
 ## Installation guides
 
+**Build identifiers:** The first digit identifies the platform: `1` = macOS Apple Silicon, `2` = Windows ARM64, `3` = Windows x64, `4L` = Linux ARM64, and `5L` = Linux x64. For Windows and Linux, ARM64 uses even prefixes and x64 uses odd prefixes. Linux always uses `L`, regardless of distribution or package format. Build numbers are contiguous within each letter series; for example, `2A99` rolls over to `2B00`.
+
 ### macOS
 
 [Open the complete macOS installation guide (HTML)](docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html)

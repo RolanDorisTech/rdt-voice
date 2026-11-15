@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Найти вкладку с загруженной моделью",
   "Tiny may occasionally omit punctuation.": "Tiny иногда может пропускать знаки препинания.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper отключён в целях вашей безопасности и конфиденциальности",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Для защиты вашей конфиденциальности EasyWhisper отключён в автономной версии RDT Voice, используемой RDT Connect. Чтобы пользоваться EasyWhisper и его моделями, посетите официальный сайт RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Для защиты вашей конфиденциальности EasyWhisper отключён в автономной версии RDT Voice, используемой RDT Connect. Чтобы пользоваться EasyWhisper и его моделями, посетите официальный сайт RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Режим приватного просмотра не поддерживается. Откройте RDT Voice в обычном окне браузера. Если вы уже используете обычное окно, разрешите сайту использовать хранилище и попробуйте снова."
 }

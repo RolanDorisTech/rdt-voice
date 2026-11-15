@@ -1350,5 +1350,6 @@
   "Find loaded tab": "ຊອກຫາແທັບທີ່ໂຫຼດໂມເດວໄວ້",
   "Tiny may occasionally omit punctuation.": "Tiny ອາດຂ້າມເຄື່ອງໝາຍວັກຕອນບາງຄັ້ງ",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper ຖືກປິດໃຊ້ງານເພື່ອຄວາມປອດໄພ ແລະ ຄວາມເປັນສ່ວນຕົວຂອງທ່ານ",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "ເພື່ອປົກປ້ອງຄວາມເປັນສ່ວນຕົວຂອງທ່ານ EasyWhisper ຈຶ່ງຖືກປິດໃຊ້ງານໃນ RDT Voice ເວີຊັນອອບລາຍທີ່ RDT Connect ໃຊ້. ຫາກຕ້ອງການໃຊ້ EasyWhisper ແລະ ໂມເດວຂອງມັນ ກະລຸນາເຂົ້າເວັບໄຊທາງການຂອງ RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "ເພື່ອປົກປ້ອງຄວາມເປັນສ່ວນຕົວຂອງທ່ານ EasyWhisper ຈຶ່ງຖືກປິດໃຊ້ງານໃນ RDT Voice ເວີຊັນອອບລາຍທີ່ RDT Connect ໃຊ້. ຫາກຕ້ອງການໃຊ້ EasyWhisper ແລະ ໂມເດວຂອງມັນ ກະລຸນາເຂົ້າເວັບໄຊທາງການຂອງ RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "ບໍ່ຮອງຮັບການເບິ່ງແບບສ່ວນຕົວ. ເປີດ RDT Voice ໃນໜ້າຕ່າງບຣາວເຊີປົກກະຕິ. ຖ້າທ່ານໃຊ້ໜ້າຕ່າງປົກກະຕິຢູ່ແລ້ວ ໃຫ້ອະນຸຍາດໃຫ້ເວັບໄຊທ໌ໃຊ້ບ່ອນເກັບຂໍ້ມູນ ແລ້ວລອງອີກຄັ້ງ."
 }

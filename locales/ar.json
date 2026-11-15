@@ -1350,5 +1350,6 @@
   "Find loaded tab": "العثور على تبويب النموذج المحمَّل",
   "Tiny may occasionally omit punctuation.": "قد يحذف Tiny علامات الترقيم أحيانًا.",
   "EasyWhisper is disabled for your security and privacy": "تم تعطيل EasyWhisper حفاظًا على أمانك وخصوصيتك",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "لحماية خصوصيتك، تم تعطيل EasyWhisper في إصدار RDT Voice غير المتصل بالإنترنت الذي يستخدمه RDT Connect. لاستخدام EasyWhisper ونماذجه، يُرجى زيارة الموقع الرسمي لـ RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "لحماية خصوصيتك، تم تعطيل EasyWhisper في إصدار RDT Voice غير المتصل بالإنترنت الذي يستخدمه RDT Connect. لاستخدام EasyWhisper ونماذجه، يُرجى زيارة الموقع الرسمي لـ RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "التصفح الخاص غير مدعوم. افتح RDT Voice في نافذة متصفح عادية. إذا كنت تستخدم نافذة عادية بالفعل، فاسمح للموقع باستخدام مساحة التخزين ثم حاول مرة أخرى."
 }

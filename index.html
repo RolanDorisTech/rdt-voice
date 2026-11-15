@@ -14102,7 +14102,7 @@ useEffect(()=>{
               lastSavedBrowserRecordingRef.current=savedCopy ? {id:savedCopy.id,name:savedCopy.name,duration:Number(actualDur||dur)||0,blob} : null;
             }catch(saveErr){
               rdtClearTranscriptionGuardIfIdle("batch-recorder-reset"); resetRecordingUiState();
-              setConfirm({action:"recordingFailure",title:tr("Recording could not be saved yet"),desc:"Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.",payload:blob,dur:actualDur||dur});
+              setConfirm({action:"recordingFailure",title:tr("Recording could not be saved yet"),desc:tr("Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again."),payload:blob,dur:actualDur||dur});
               return;
             }
           }

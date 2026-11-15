@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Cari tab model yang dimuat",
   "Tiny may occasionally omit punctuation.": "Tiny kadang dapat melewatkan tanda baca.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper dinonaktifkan demi keamanan dan privasi Anda",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Untuk melindungi privasi Anda, EasyWhisper dinonaktifkan dalam versi offline RDT Voice yang digunakan oleh RDT Connect. Untuk menggunakan EasyWhisper dan modelnya, kunjungi situs web resmi RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Untuk melindungi privasi Anda, EasyWhisper dinonaktifkan dalam versi offline RDT Voice yang digunakan oleh RDT Connect. Untuk menggunakan EasyWhisper dan modelnya, kunjungi situs web resmi RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Penjelajahan privat tidak didukung. Buka RDT Voice di jendela browser biasa. Jika Anda sudah menggunakan jendela biasa, izinkan penyimpanan situs lalu coba lagi."
 }

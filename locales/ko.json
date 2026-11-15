@@ -1350,5 +1350,6 @@
   "Find loaded tab": "불러온 모델 탭 찾기",
   "Tiny may occasionally omit punctuation.": "Tiny는 가끔 구두점을 생략할 수 있습니다.",
   "EasyWhisper is disabled for your security and privacy": "보안 및 개인정보 보호를 위해 EasyWhisper가 비활성화되었습니다",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "개인정보를 보호하기 위해 RDT Connect에서 사용하는 RDT Voice 오프라인 버전에서는 EasyWhisper가 비활성화되어 있습니다. EasyWhisper와 해당 모델을 사용하려면 RDT Voice 공식 웹사이트를 방문하세요."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "개인정보를 보호하기 위해 RDT Connect에서 사용하는 RDT Voice 오프라인 버전에서는 EasyWhisper가 비활성화되어 있습니다. EasyWhisper와 해당 모델을 사용하려면 RDT Voice 공식 웹사이트를 방문하세요.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "비공개 브라우징은 지원되지 않습니다. 일반 브라우저 창에서 RDT Voice를 여세요. 이미 일반 창을 사용 중이라면 사이트 저장소 사용을 허용한 다음 다시 시도하세요."
 }

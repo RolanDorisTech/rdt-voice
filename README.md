@@ -91,13 +91,15 @@ Open `http://localhost:5173/`. The root `index.html` is the current app. The exi
 
 RDT Connect is optional. You can also use RDT Voice directly in a supported browser.
 
+**Private / incognito mode is not supported.** RDT Voice and RDT Connect do not work in a browser's private or incognito mode. RDT Connect is a native desktop app, but the RDT Voice session it opens runs in a browser; use a normal, non-private browser window and profile. RDT Voice used directly in a browser also requires a normal browser profile.
+
 ## RDT Connect Downloads
 
-Dev 11 packages are **prereleases**. Complete the applicable release qualification before treating them as final production releases.
+The macOS Dev 12 Build 1D35 package and the listed Dev 11 Windows/Linux packages are development prereleases. Platform-specific qualification is not interchangeable; use the release notes for the applicable build.
 
 | Platform | Download | Version | Build | Size |
 |:---|:---:|:---:|:---:|---:|
-| macOS | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) · [Guide](docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html) | `0.2.0-dev.11` | `1D04` | 235.7&nbsp;MB |
+| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d35/RDT_Connect_0.2.0-dev.12.1D35_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d35) | `0.2.0-dev.12.1D35` | `1D35` | 248.2 MB |
 | Windows&nbsp;ARM64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `2A07` | 102.0&nbsp;MB |
 | Windows&nbsp;x64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `3A03` | 137.4&nbsp;MB |
 | Linux&nbsp;ARM64 | Not&nbsp;yet&nbsp;published | `0.2.0-dev.11` | `4L001` | 78.39&nbsp;MiB |
@@ -113,7 +115,9 @@ Dev 11 packages are **prereleases**. Complete the applicable release qualificati
 
 <p align="center"><a href="docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html"><img src="assets/RDT_Connect_Installation_Guide.png" alt="Open the complete RDT Connect macOS installation guide" width="100%"></a></p>
 
-**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. The published Build 1D04 DMG is available for macOS Apple Silicon. The development updater feed provides the corrected signed 1D04 updater archive and matching signature for eligible existing installations.
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. Build 1D35 is for Apple Silicon, not Intel Macs. The macOS updater feed and version-selection fix are included in 1D35 and are designed to support subsequent same-platform builds.
+
+**Known 1D04 updater issue:** the macOS updater feed used by Build 1D04 was broken, so 1D04 may not discover the 1D35 update in-app. If you are still on 1D04, download and install Build 1D35 manually using the DMG above; do not rely on 1D04's in-app updater to find it.
 
 ### Windows
 
@@ -348,6 +352,18 @@ The following are observations from development and real-device testing, not uni
 ### Browser testing scope
 
 RDT Voice has been tested to varying degrees in Chrome, Firefox, and Safari; there has also been more limited checking in Edge, Brave, and Opera. This is not exhaustive certification across all versions or devices. Differences in microphone permissions, MediaRecorder formats, local storage, background-tab behavior, downloads, and model memory use remain possible.
+
+### Choosing the right diagnostic report
+
+RDT Voice has separate diagnostics for its two inference paths. Run the report that matches the mode you are troubleshooting; a successful report for one path does not validate the other.
+
+- **Local Server / Local Whisper:** open the Local Server setup/settings area and use its diagnostics controls. Collect the report, then use **COPY DIAGNOSTIC REPORT** or **DOWNLOAD DIAGNOSTIC JSON** to share or save it. The report checks the configured endpoint and reports scheme-aware target information, browser/network state, backend health and model-list probe results, and relevant connectivity findings. It can help distinguish an incorrect URL or scheme, an unavailable endpoint, mixed-content restrictions, TLS/certificate trust, browser permissions, CORS/origin configuration, and token-configuration problems. A successful health probe alone does not prove that every authenticated transcription request will work.
+
+- **EasyWhisper:** use **RUN DIAGNOSTICS** in the EasyWhisper interface, then use **COPY DIAGNOSTIC REPORT** or **DOWNLOAD DIAGNOSTIC JSON**. This report focuses on the browser inference path, including page and worker status and worker failures. Use it for model/runtime loading, model selection or download, browser worker startup, and in-browser inference problems. EasyWhisper performs inference in the browser; it does not send transcription audio to the configured Local Server. A Local Server connectivity failure is therefore not, by itself, an explanation for an EasyWhisper worker or model failure.
+
+- **If a worker does not respond:** the EasyWhisper diagnostic may still capture a page report and explicitly report that the worker did not respond. Include that result when reporting a repeatable failure; do not describe it as a successful worker diagnostic.
+
+Review diagnostic output before sharing it. The Local Server report is designed not to include audio, transcript, or token values, but hostnames and environment details can still disclose information. Do not attach credentials, bearer tokens, private URLs, or unredacted sensitive environment details to a public issue.
 
 ## Troubleshooting
 

@@ -1,0 +1,36 @@
+{
+  "schema": "rdt-connect-user-voice-benchmark-v1",
+  "fixture_id": "rdt-user-voice-21s-50w-01",
+  "name": "Original self-recorded RDT Connect benchmark",
+  "source_filename": "benchmark_audio_21_sec.wav",
+  "source_sha256": "060ce7a72e16521bb90a646015b27bc714c662a155f3bd78371ed66c264d1938",
+  "audio_filename": "benchmark-21s.wav",
+  "sha256": "59f1fd5caa3b3a73daf7f45eb6e9fe7ac658b59c283a474f99d18c4c6969a21e",
+  "duration_seconds": 20.72575,
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "sample_format": "signed 16-bit PCM",
+  "transcript_origin": "Original script written for this benchmark",
+  "transcript": "Every morning, a traveler checks the weather, packs a light bag, and walks along the river. A nearby train slows at the station; people step onto the platform. They greet their friends and find a quiet seat. Before heading home, the traveler writes a note and saves it for tomorrow.",
+  "reference_word_count": 50,
+  "first_run_transcript": "Every morning, a traveler checks the weather, packs a light bag, and walks along the river. A nearby train slows at the station; people step onto the platform.",
+  "first_run_reference_word_count": 28,
+  "answer_keys": {
+    "full": "reference-50-words.txt",
+    "first_run": "reference-28-words.txt"
+  },
+  "processing": {
+    "type": "linear gain only",
+    "active_rms_before_dbfs": -24.641,
+    "peak_before_dbfs": -1.094,
+    "gain_applied_db": 0.094,
+    "active_rms_after_dbfs": -24.552,
+    "peak_after_dbfs": -1.0,
+    "target_active_rms_dbfs": -20.0,
+    "peak_ceiling_dbfs": -1.0,
+    "compression": false,
+    "noise_reduction": false,
+    "time_stretch": false,
+    "silence_removed": false
+  }
+}

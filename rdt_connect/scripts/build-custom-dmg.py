@@ -89,6 +89,19 @@ def find_dmgbuild():
     return candidates[0]
 
 
+def resolve_app_bundle(product, marker, app_override=None, cargo_target_dir=None):
+    """Resolve the marker-isolated app bundle; never default to shared src-tauri/target."""
+    if app_override:
+        return Path(app_override).expanduser().resolve()
+
+    target_root = (
+        Path(cargo_target_dir).expanduser().resolve()
+        if cargo_target_dir
+        else BUILD / f"rdt-connect-{marker}-cargo-target"
+    )
+    return target_root / "release" / "bundle" / "macos" / f"{product}.app"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -172,10 +185,19 @@ def main():
     verify_canonical_versions(ROOT, version)
 
     marker = MARKER_FILE.read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"[0-9][A-Z]\d{2,}", marker):
+    if not re.fullmatch(r"1[A-Z]\d{2}", marker):
         stop(f"invalid build marker: {marker!r}")
 
-    bundle = ROOT / "src-tauri" / "target/release/bundle/macos" / f"{product}.app"
+    app_override = os.environ.get("RDT_DMG_APP")
+    bundle = resolve_app_bundle(
+        product,
+        marker,
+        app_override=app_override,
+        cargo_target_dir=os.environ.get("RDT_CARGO_TARGET_DIR"),
+    )
+    if app_override and bundle.name != f"{product}.app":
+        stop(f"RDT_DMG_APP must point to {product}.app: {bundle}")
+    print(f"App bundle: {bundle}")
     info_path = bundle / "Contents" / "Info.plist"
     executable = bundle / "Contents" / "MacOS" / "rdt-connect-desktop"
     if not bundle.is_dir() or not info_path.is_file() or not executable.is_file():
@@ -285,6 +307,22 @@ icon_locations = {{
 
         mounted_app = mount / f"{product}.app"
         mounted_guide = mount / "Installation_Guide.html"
+
+        # Verify the actual mounted distribution, not only the source app.
+        mlx_check = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "dedupe-macos-mlx-metallib.py"),
+                str(mounted_app),
+                "--verify-only",
+                "--max-app-mib",
+                "610",
+            ],
+            check=False,
+        )
+        if mlx_check.returncode != 0:
+            stop("mounted custom DMG failed the MLX metallib layout/size invariant.")
+        print("PASS: mounted custom DMG contains one physical MLX metallib and two relative symlinks.")
         mounted_assets = mount / ".rdt-connect-install-guide-assets"
         mounted_exec = mounted_app / "Contents" / "MacOS" / "rdt-connect-desktop"
 

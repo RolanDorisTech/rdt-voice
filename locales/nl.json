@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Tabblad met geladen model zoeken",
   "Tiny may occasionally omit punctuation.": "Tiny laat soms leestekens weg.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper is uitgeschakeld voor uw veiligheid en privacy",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Om uw privacy te beschermen, is EasyWhisper uitgeschakeld in de offlineversie van RDT Voice die door RDT Connect wordt gebruikt. Ga naar de officiële website van RDT Voice om EasyWhisper en de bijbehorende modellen te gebruiken."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Om uw privacy te beschermen, is EasyWhisper uitgeschakeld in de offlineversie van RDT Voice die door RDT Connect wordt gebruikt. Ga naar de officiële website van RDT Voice om EasyWhisper en de bijbehorende modellen te gebruiken.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Priv browsen wordt niet ondersteund. Open RDT Voice in een normaal browservenster. Gebruikt u al een normaal venster, geef de website dan toestemming om opslag te gebruiken en probeer het opnieuw."
 }

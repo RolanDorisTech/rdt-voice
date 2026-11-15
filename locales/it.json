@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Trova la scheda del modello caricato",
   "Tiny may occasionally omit punctuation.": "Tiny può occasionalmente omettere la punteggiatura.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper è disattivato per proteggere la tua sicurezza e la tua privacy",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Per proteggere la tua privacy, EasyWhisper è disattivato nella versione offline di RDT Voice utilizzata da RDT Connect. Per usare EasyWhisper e i relativi modelli, visita il sito ufficiale di RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Per proteggere la tua privacy, EasyWhisper è disattivato nella versione offline di RDT Voice utilizzata da RDT Connect. Per usare EasyWhisper e i relativi modelli, visita il sito ufficiale di RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "La navigazione privata non è supportata. Apri RDT Voice in una normale finestra del browser. Se stai già usando una finestra normale, consenti l'archiviazione dei dati del sito e riprova."
 }

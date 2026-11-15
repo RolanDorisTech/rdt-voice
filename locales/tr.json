@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Yüklü modelin sekmesini bul",
   "Tiny may occasionally omit punctuation.": "Tiny zaman zaman noktalama işaretlerini atlayabilir.",
   "EasyWhisper is disabled for your security and privacy": "Güvenliğiniz ve gizliliğiniz için EasyWhisper devre dışı bırakıldı",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Gizliliğinizi korumak için EasyWhisper, RDT Connect tarafından kullanılan çevrimdışı RDT Voice sürümünde devre dışı bırakılmıştır. EasyWhisper'ı ve modellerini kullanmak için resmi RDT Voice web sitesini ziyaret edin."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Gizliliğinizi korumak için EasyWhisper, RDT Connect tarafından kullanılan çevrimdışı RDT Voice sürümünde devre dışı bırakılmıştır. EasyWhisper'ı ve modellerini kullanmak için resmi RDT Voice web sitesini ziyaret edin.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Gizli gezinme desteklenmiyor. RDT Voice'u normal bir tarayıcı penceresinde açın. Zaten normal bir pencere kullanıyorsanız sitenin depolama alanını kullanmasına izin verip tekrar deneyin."
 }

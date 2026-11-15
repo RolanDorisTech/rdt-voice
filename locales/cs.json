@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Najít kartu s načteným modelem",
   "Tiny may occasionally omit punctuation.": "Tiny občas vynechává interpunkci.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper je z bezpečnostních důvodů a kvůli ochraně soukromí vypnut",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "V zájmu ochrany vašeho soukromí je EasyWhisper vypnutý v offline verzi RDT Voice používané aplikací RDT Connect. Chcete-li používat EasyWhisper a jeho modely, navštivte oficiální web RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "V zájmu ochrany vašeho soukromí je EasyWhisper vypnutý v offline verzi RDT Voice používané aplikací RDT Connect. Chcete-li používat EasyWhisper a jeho modely, navštivte oficiální web RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Soukromé prohlížení není podporováno. Otevřete RDT Voice v běžném okně prohlížeče. Pokud už běžné okno používáte, povolte webu ukládání dat a zkuste to znovu."
 }

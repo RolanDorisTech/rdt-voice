@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Znajdź kartę z załadowanym modelem",
   "Tiny may occasionally omit punctuation.": "Tiny może czasami pomijać interpunkcję.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper został wyłączony ze względów bezpieczeństwa i ochrony prywatności",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Aby chronić Twoją prywatność, EasyWhisper jest wyłączony w wersji offline RDT Voice używanej przez RDT Connect. Aby korzystać z EasyWhisper i jego modeli, odwiedź oficjalną stronę RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Aby chronić Twoją prywatność, EasyWhisper jest wyłączony w wersji offline RDT Voice używanej przez RDT Connect. Aby korzystać z EasyWhisper i jego modeli, odwiedź oficjalną stronę RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Tryb prywatny nie jest obsługiwany. Otwórz RDT Voice w zwykłym oknie przeglądarki. Jeśli korzystasz już ze zwykłego okna, zezwól witrynie na korzystanie z pamięci i spróbuj ponownie."
 }

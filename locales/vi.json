@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Tìm tab đã tải mô hình",
   "Tiny may occasionally omit punctuation.": "Tiny đôi khi có thể bỏ qua dấu câu.",
   "EasyWhisper is disabled for your security and privacy": "EasyWhisper đã bị tắt để bảo vệ an toàn và quyền riêng tư của bạn",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Để bảo vệ quyền riêng tư của bạn, EasyWhisper đã bị tắt trong phiên bản ngoại tuyến của RDT Voice được RDT Connect sử dụng. Để sử dụng EasyWhisper và các mô hình của nó, hãy truy cập trang web chính thức của RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Để bảo vệ quyền riêng tư của bạn, EasyWhisper đã bị tắt trong phiên bản ngoại tuyến của RDT Voice được RDT Connect sử dụng. Để sử dụng EasyWhisper và các mô hình của nó, hãy truy cập trang web chính thức của RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Chế độ duyệt web riêng tư không được hỗ trợ. Hãy mở RDT Voice trong cửa sổ trình duyệt thông thường. Nếu bạn đã dùng cửa sổ thông thường, hãy cho phép trang web sử dụng bộ nhớ rồi thử lại."
 }

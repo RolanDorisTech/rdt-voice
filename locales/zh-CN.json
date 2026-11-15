@@ -1350,5 +1350,6 @@
   "Find loaded tab": "查找已加载模型的标签页",
   "Tiny may occasionally omit punctuation.": "Tiny 偶尔可能省略标点。",
   "EasyWhisper is disabled for your security and privacy": "出于安全和隐私考虑，EasyWhisper 已禁用",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "为保护您的隐私，RDT Connect 使用的 RDT Voice 离线版本已禁用 EasyWhisper。如需使用 EasyWhisper 及其模型，请访问 RDT Voice 官方网站。"
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "为保护您的隐私，RDT Connect 使用的 RDT Voice 离线版本已禁用 EasyWhisper。如需使用 EasyWhisper 及其模型，请访问 RDT Voice 官方网站。",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "不支持隐私浏览。请在普通浏览器窗口中打开 RDT Voice。如果您已经使用普通窗口，请允许网站使用存储空间，然后重试。"
 }

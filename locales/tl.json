@@ -1350,5 +1350,6 @@
   "Find loaded tab": "Hanapin ang tab ng na-load na model",
   "Tiny may occasionally omit punctuation.": "Minsan maaaring laktawan ng Tiny ang bantas.",
   "EasyWhisper is disabled for your security and privacy": "Naka-disable ang EasyWhisper para sa iyong seguridad at privacy",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Para protektahan ang iyong privacy, naka-disable ang EasyWhisper sa offline na bersyon ng RDT Voice na ginagamit ng RDT Connect. Para magamit ang EasyWhisper at ang mga modelo nito, bisitahin ang opisyal na website ng RDT Voice."
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "Para protektahan ang iyong privacy, naka-disable ang EasyWhisper sa offline na bersyon ng RDT Voice na ginagamit ng RDT Connect. Para magamit ang EasyWhisper at ang mga modelo nito, bisitahin ang opisyal na website ng RDT Voice.",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "Hindi suportado ang pribadong pagba-browse. Buksan ang RDT Voice sa normal na window ng browser. Kung normal na window na ang ginagamit mo, payagan ang site na gumamit ng storage at subukan muli."
 }

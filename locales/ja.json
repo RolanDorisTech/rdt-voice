@@ -1350,5 +1350,6 @@
   "Find loaded tab": "読み込み済みのタブを探す",
   "Tiny may occasionally omit punctuation.": "Tiny は句読点を省略することがあります。",
   "EasyWhisper is disabled for your security and privacy": "セキュリティとプライバシー保護のため、EasyWhisperは無効になっています",
-  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "プライバシー保護のため、RDT Connectで使用されるRDT Voiceのオフライン版ではEasyWhisperが無効になっています。EasyWhisperとそのモデルを使用するには、RDT Voiceの公式ウェブサイトをご覧ください。"
+  "To protect your privacy, EasyWhisper is disabled in the offline version of RDT Voice used by RDT Connect. To use EasyWhisper and its models, visit the official RDT Voice website.": "プライバシー保護のため、RDT Connectで使用されるRDT Voiceのオフライン版ではEasyWhisperが無効になっています。EasyWhisperとそのモデルを使用するには、RDT Voiceの公式ウェブサイトをご覧ください。",
+  "Private browsing isn't supported. Open RDT Voice in a regular browser window. If you're already using one, allow site storage and try again.": "プライベートブラウジングには対応していません。通常のブラウザーウィンドウで RDT Voice を開いてください。すでに通常のウィンドウを使用している場合は、サイトのストレージを許可してから、もう一度お試しください。"
 }

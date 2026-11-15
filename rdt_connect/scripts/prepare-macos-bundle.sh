@@ -5,10 +5,30 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="${1:-}"
 if [[ -z "$REPO_ROOT" ]]; then echo "Usage: bash scripts/prepare-macos-bundle.sh /path/to/rdt-voice-repository" >&2; exit 2; fi
 REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
+VOICE_WEB_SOURCE="${RDT_VOICE_WEB_SOURCE:-$HOME/dev/rdt-voice/alpha_testing}"
+VOICE_WEB_SOURCE="$(cd "$VOICE_WEB_SOURCE" && pwd)"
+OFFLINE_RUNTIME_TOOL="$SCRIPT_DIR/prepare-offline-runtime.py"
+if [[ ! -s "$OFFLINE_RUNTIME_TOOL" ]]; then
+  echo "ERROR: pinned offline runtime preparation tool is missing." >&2
+  exit 4
+fi
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then echo "ERROR: Build this macOS MLX bundle on an Apple Silicon Mac using native arm64 Python." >&2; exit 2; fi
-for required in index.html worker.js pcm-worklet.js models.manifest.json backend/apple/server.py backend/rdt_model_lock.json locales assets/opencc-js-1.4.2-full.js assets/rdt_logo_BIG_yellow_halo_trans_bg.png; do
-  if [[ ! -e "$REPO_ROOT/$required" ]]; then echo "ERROR: Required repository item is missing: $REPO_ROOT/$required" >&2; exit 2; fi
+for required in index.html worker.js pcm-worklet.js models.manifest.json locales assets/opencc-js-1.4.2-full.js; do
+  if [[ ! -e "$VOICE_WEB_SOURCE/$required" ]]; then echo "ERROR: current Alpha Testing item missing: $VOICE_WEB_SOURCE/$required" >&2; exit 2; fi
 done
+for required in backend/rdt_model_lock.json assets/rdt_logo_BIG_yellow_halo_trans_bg.png; do
+  if [[ ! -e "$REPO_ROOT/$required" ]]; then echo "ERROR: Connect build source item missing: $REPO_ROOT/$required" >&2; exit 2; fi
+done
+
+CONNECT_BACKEND_SOURCE="$PROJECT_DIR/backend/apple/server.py"
+if [[ ! -s "$CONNECT_BACKEND_SOURCE" ]]; then
+  echo "ERROR: RDT Connect backend source missing: $CONNECT_BACKEND_SOURCE" >&2
+  exit 2
+fi
+if ! grep -Fq 'def _rdt_frozen_helper_guard' "$CONNECT_BACKEND_SOURCE"; then
+  echo "ERROR: RDT Connect backend is missing the frozen-helper guard." >&2
+  exit 4
+fi
 DEFAULT_PY="$HOME/dev/testing/RDT_Voice_Desktop_POC/.venv/bin/python"
 if [[ ! -x "$DEFAULT_PY" ]]; then DEFAULT_PY="$HOME/dev/rdt-secure/servers/whisper/.venv/bin/python"; fi
 if [[ ! -x "$DEFAULT_PY" ]]; then DEFAULT_PY="$HOME/mlx-env/bin/python"; fi
@@ -28,16 +48,28 @@ except importlib.metadata.PackageNotFoundError:
 if version != "0.4.3":
  raise SystemExit(f"Expected locked mlx-whisper==0.4.3, found {version}; align the build venv before packaging.")
 PY
+BUILD_STAGING_ROOT="${RDT_MACOS_BUILD_STAGING_ROOT:-$PROJECT_DIR/build}"
 RESOURCES="$PROJECT_DIR/src-tauri/resources"
-NEXT_RESOURCES="$PROJECT_DIR/build/desktop-resources-new"
-OLD_RESOURCES="$PROJECT_DIR/build/desktop-resources-old"
+NEXT_RESOURCES="$BUILD_STAGING_ROOT/desktop-resources-new"
+OLD_RESOURCES="$BUILD_STAGING_ROOT/desktop-resources-old"
 WEB="$NEXT_RESOURCES/rdt_voice_web"; BACKEND="$NEXT_RESOURCES/rdt_voice_backend"; NOTICES="$NEXT_RESOURCES/third_party_notices"
-STAGE="$PROJECT_DIR/build/desktop-backend-stage"; WORK="$PROJECT_DIR/build/pyinstaller-work"; SPEC="$PROJECT_DIR/build/pyinstaller-spec"
+STAGE="$BUILD_STAGING_ROOT/desktop-backend-stage"; WORK="$BUILD_STAGING_ROOT/pyinstaller-work"; SPEC="$BUILD_STAGING_ROOT/pyinstaller-spec"
 # Build everything in staging. Do not destroy the current runnable resources until the replacement succeeds.
 rm -rf "$NEXT_RESOURCES" "$OLD_RESOURCES" "$STAGE" "$WORK" "$SPEC"
-mkdir -p "$WEB" "$BACKEND" "$NOTICES" "$STAGE" "$WORK" "$SPEC" "$PROJECT_DIR/build" "$PROJECT_DIR/public"
-cp "$REPO_ROOT/index.html" "$WEB/index.html"; cp "$REPO_ROOT/worker.js" "$WEB/worker.js"; cp "$REPO_ROOT/pcm-worklet.js" "$WEB/pcm-worklet.js"
-cp "$REPO_ROOT/models.manifest.json" "$WEB/models.manifest.json"; cp -R "$REPO_ROOT/locales" "$WEB/locales"; cp -R "$REPO_ROOT/assets" "$WEB/assets"
+mkdir -p "$WEB" "$BACKEND" "$NOTICES" "$STAGE" "$WORK" "$SPEC" "$BUILD_STAGING_ROOT" "$PROJECT_DIR/public"
+mkdir -p "$WEB/assets"
+cp -R "$REPO_ROOT/assets/." "$WEB/assets/"
+find "$VOICE_WEB_SOURCE" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak' ! -name '*.bak.*' -exec cp -p {} "$WEB/" \;
+cp -R "$VOICE_WEB_SOURCE/locales" "$WEB/locales"
+# Exclude Alpha editor backups from the packaged locale tree.
+find "$WEB/locales" -type f \( -name "*.bak" -o -name "*.bak.*" \) -delete
+# Retain Connect-specific offline help and UI images from the existing resource set.
+for app_asset in RDT_Connect_Installation_Guide.png rdt-connect-server-running.png rdt-connect-server-stopped.png rdt-connect-windows-installation.png rdt-voice-EasySetup.png rdt-voice-ui.png rdt_logo_BIG_yellow_halo_trans_bg.png; do
+  if [[ -f "$RESOURCES/rdt_voice_web/assets/$app_asset" ]]; then
+    cp -p "$RESOURCES/rdt_voice_web/assets/$app_asset" "$WEB/assets/$app_asset"
+  fi
+done
+
 LOGO_SOURCE="$REPO_ROOT/assets/rdt_logo_BIG_yellow_halo_trans_bg.png"
 cp "$LOGO_SOURCE" "$PROJECT_DIR/public/rdt-brand-icon.png"
 TAURI_CLI="$PROJECT_DIR/node_modules/.bin/tauri"
@@ -45,11 +77,19 @@ if [[ ! -x "$TAURI_CLI" ]]; then echo "ERROR: Tauri CLI missing. Run npm install
 ICON_DIR="$PROJECT_DIR/src-tauri/icons"; mkdir -p "$ICON_DIR"
 "$TAURI_CLI" icon "$LOGO_SOURCE" --output "$ICON_DIR"
 for icon_file in icon.png icon.icns 32x32.png 128x128.png 128x128@2x.png; do if [[ ! -s "$ICON_DIR/$icon_file" ]]; then echo "ERROR: Tauri icon generation did not create $ICON_DIR/$icon_file." >&2; exit 4; fi; done
-"$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$REPO_ROOT/backend/apple/server.py" "$STAGE/server.py"
-ARGS=(--noconfirm --clean --onedir --add-data "$REPO_ROOT/backend/rdt_model_lock.json:." --name rdt_voice_backend --distpath "$NEXT_RESOURCES" --workpath "$WORK" --specpath "$SPEC" --collect-all mlx --collect-data mlx_whisper --collect-all fastapi --collect-all uvicorn --collect-all huggingface_hub --collect-all qrcode --collect-all multipart --hidden-import qrcode.image.svg --exclude-module torch)
+"$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$CONNECT_BACKEND_SOURCE" "$STAGE/server.py"
+if ! grep -Fq 'def _rdt_frozen_helper_guard' "$STAGE/server.py"; then
+  echo "ERROR: staged backend lost the frozen-helper guard." >&2
+  exit 4
+fi
+echo "PASS: staged backend uses RDT Connect source and retains frozen-helper guard."
+ARGS=(--runtime-hook "$SCRIPT_DIR/pyi_rth_rdt_resource_tracker.py" --noconfirm --clean --onedir --add-data "$REPO_ROOT/backend/rdt_model_lock.json:." --name rdt_voice_backend --distpath "$NEXT_RESOURCES" --workpath "$WORK" --specpath "$SPEC" --collect-all mlx --collect-data mlx_whisper --collect-all fastapi --collect-all uvicorn --collect-all huggingface_hub --collect-all qrcode --collect-all multipart --hidden-import qrcode.image.svg --exclude-module torch)
 if "$PY" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("mlx_metal") else 1)'; then ARGS+=(--collect-all mlx_metal); fi
 "$PY" -m PyInstaller "${ARGS[@]}" "$STAGE/server.py"
 if [[ ! -x "$BACKEND/rdt_voice_backend" ]]; then echo "ERROR: PyInstaller output missing; preserving previous resources." >&2; exit 4; fi
+
+# Keep both MLX dylib lookup paths while storing each identical library once.
+"$PY" "$SCRIPT_DIR/dedupe-macos-mlx-dylibs.py" "$BACKEND/_internal"
 FFMPEG_SOURCE="$("$PY" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')"
 if [[ ! -x "$FFMPEG_SOURCE" ]]; then echo "ERROR: bundled FFmpeg not executable; preserving previous resources." >&2; exit 4; fi
 cp -f "$FFMPEG_SOURCE" "$BACKEND/ffmpeg"; chmod 755 "$BACKEND/ffmpeg"
@@ -78,20 +118,29 @@ if [[ ! -s "$BACKEND/_internal/libomp.dylib" ]]; then
   echo "ERROR: failed to bundle libomp.dylib." >&2
   exit 4
 fi
-FOUND_METALLIB="$(find "$BACKEND" -type f -name mlx.metallib -print -quit || true)"
-if [[ -z "$FOUND_METALLIB" ]]; then echo "ERROR: frozen backend has no mlx.metallib; preserving previous resources." >&2; exit 4; fi
-while IFS= read -r native; do target="$(dirname "$native")/mlx.metallib"; if [[ "$target" != "$FOUND_METALLIB" ]]; then cp -f "$FOUND_METALLIB" "$target"; fi; done < <(find "$BACKEND" -type f \( -name 'core*.so' -o -name 'libmlx.dylib' \) -print)
-# RDT Connect MLX default-metallib path fix (packaging).
-# PyInstaller may expose libmlx.dylib at _internal/libmlx.dylib. MLX looks for
-# its default Metal shader beside that loaded library, so provide the sibling
-# path in addition to the copies beside the nested MLX native libraries.
-MLX_INTERNAL="$BACKEND/_internal"
-if [[ -s "$MLX_INTERNAL/mlx/mlx.metallib" ]]; then
-  ln -sfn "mlx/mlx.metallib" "$MLX_INTERNAL/mlx.metallib"
-else
-  echo "ERROR: Required MLX shader missing: $MLX_INTERNAL/mlx/mlx.metallib; preserving previous resources." >&2
+OMPPOOL_RPATH_DIR="$(cd "$(dirname "$OMPPOOL")/../../.." && pwd)"
+if ! /usr/bin/otool -l "$OMPPOOL" | grep -Fq 'path @loader_path/../../..'; then
+  echo "ERROR: Numba omppool is missing its verified relative libomp runpath." >&2
   exit 4
 fi
+if [[ "$OMPPOOL_RPATH_DIR" != "$(cd "$BACKEND/_internal" && pwd)" ]] ||
+   ! cmp -s "$LIBOMP_SOURCE" "$BACKEND/_internal/libomp.dylib"; then
+  echo "ERROR: bundled libomp does not match Numba's resolved _internal runtime." >&2
+  exit 4
+fi
+echo "PASS: Numba @rpath resolves to the bundled arm64 libomp.dylib."
+# Normalize the frozen backend: one physical shader beside top-level libmlx.dylib.
+MLX_INTERNAL="$BACKEND/_internal"
+FOUND_METALLIB="$(find "$MLX_INTERNAL" -type f -name mlx.metallib -print -quit || true)"
+if [[ -z "$FOUND_METALLIB" ]]; then
+  echo "ERROR: frozen backend has no physical mlx.metallib; preserving previous resources." >&2
+  exit 4
+fi
+if ! python3 "$SCRIPT_DIR/dedupe-macos-mlx-metallib.py" --internal-dir "$MLX_INTERNAL"; then
+  echo "ERROR: could not normalize frozen-backend MLX shader copies." >&2
+  exit 4
+fi
+
 if [[ -d "$REPO_ROOT/licenses/third-party/opencc-js" ]]; then mkdir -p "$NOTICES/opencc-js"; cp -R "$REPO_ROOT/licenses/third-party/opencc-js/." "$NOTICES/opencc-js/"; else echo "ERROR: OpenCC license notices missing; preserving previous resources." >&2; exit 2; fi
 LIBOMP_CELLAR="$(brew --cellar libomp 2>/dev/null || true)"
 LIBOMP_LICENSE_SOURCE=""
@@ -114,10 +163,36 @@ Model weights are not bundled in the installer. The selected model is resolved o
 This is not a complete transitive license audit. Public distribution still requires license review, clean-Mac testing, code signing and notarization.
 EOF
 "$PY" -m py_compile "$STAGE/server.py"
+
+# Fail closed against the exact current Alpha Testing runtime and Connect support assets.
+python3 "$SCRIPT_DIR/verify-alpha-r81-staging.py" \
+  "$VOICE_WEB_SOURCE" "$WEB" "$RESOURCES/rdt_voice_web/assets" \
+  "${RDT_VOICE_BUNDLE_VERSION:-alpha-testing-current}" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
+
+# Bundle pinned local Transformers.js and ONNX Runtime assets for offline inference.
+"$PY" "$OFFLINE_RUNTIME_TOOL" \
+  --repo-root "$PROJECT_DIR/.." \
+  --web-root "$WEB" \
+  --notices "$NOTICES"
+
+for runtime_file in \
+  assets/rdt-offline-runtime/modern/transformers.min.js \
+  assets/rdt-offline-runtime/modern/ort.bundle.min.mjs \
+  assets/rdt-offline-runtime/modern/ort-wasm-simd-threaded.jsep.wasm \
+  assets/rdt-offline-runtime/modern/rdt-easywhisper-compat-sequential-r71.min.js \
+  assets/rdt-offline-runtime/legacy/ort.wasm.min.js \
+  assets/rdt-offline-runtime/legacy/ort-wasm.wasm; do
+  if [[ ! -s "$WEB/$runtime_file" ]]; then
+    echo "ERROR: offline runtime asset missing after preparation: $runtime_file" >&2
+    exit 4
+  fi
+done
+echo "PASS: staged RDT Voice worker uses locally bundled inference runtime."
+
 mkdir -p "$RESOURCES" "$OLD_RESOURCES"
 # Promote all staged resources. If any move fails, roll back every resource already promoted.
 PROMOTED=""
-for name in rdt_voice_web rdt_voice_backend third_party_notices; do
+for name in rdt_voice_web rdt_voice_backend third_party_notices rdt_voice_web_manifest.json; do
   if [[ -e "$RESOURCES/$name" ]]; then mv "$RESOURCES/$name" "$OLD_RESOURCES/$name"; fi
   if ! mv "$NEXT_RESOURCES/$name" "$RESOURCES/$name"; then
     echo "ERROR: Promotion failed for $name; restoring the previous resource set." >&2

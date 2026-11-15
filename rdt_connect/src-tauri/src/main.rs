@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod updater_version_policy;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::blocking::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
@@ -5023,14 +5024,19 @@ fn open_voice_window(
     let parsed_local_url = url::Url::parse(&backend_url)
         .map_err(|e| format!("The active local server URL is invalid: {e}"))?;
     if !matches!(parsed_local_url.scheme(), "http" | "https")
-        || !matches!(parsed_local_url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))
+        || !matches!(
+            parsed_local_url.host_str(),
+            Some("127.0.0.1" | "localhost" | "::1")
+        )
         || parsed_local_url.port().is_none()
         || !parsed_local_url.username().is_empty()
         || parsed_local_url.password().is_some()
         || parsed_local_url.query().is_some()
         || parsed_local_url.fragment().is_some()
     {
-        return Err("The active local server URL is not a valid loopback HTTP(S) endpoint.".to_string());
+        return Err(
+            "The active local server URL is not a valid loopback HTTP(S) endpoint.".to_string(),
+        );
     }
     let mut local_launch_url = parsed_local_url;
     local_launch_url.set_path("/");
@@ -6079,7 +6085,17 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .default_version_comparator(|current, remote| {
+                    updater_version_policy::candidate_is_acceptable(
+                        &current.to_string(),
+                        BUILD_ID,
+                        &remote.version.to_string(),
+                    )
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let resources = resolve_resource_dir(app.handle()).map_err(std::io::Error::other)?;

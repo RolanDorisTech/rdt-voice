@@ -66,6 +66,10 @@ let rdtDeepHashLargeOnNextLegacyRetry = false;
 // Keep the current load request's manifest file metadata available to all pipeline rebuilds.
 // Worker jobs are serialized; this lets a WASM fallback/retry reuse the exact pinned file list.
 let rdtActiveExpectedModelFiles = [];
+// Set only by the disposable EasyWhisper benchmark worker. It survives the
+// load/run lifecycle so missing model assets and normal cache-repair paths can
+// never download, delete, or replace cached model files during a benchmark.
+let rdtBenchmarkCacheOnlyActive = false;
 
 function rdtCacheKeyUrl(key) {
   try { if (key && typeof key.url === "string") return key.url; } catch {}
@@ -172,12 +176,28 @@ async function rdtResponseLooksLikeHtml(response) {
   }
 }
 
+function rdtIsBenchmarkBlockedModelUrl(value) {
+  let candidate=value;
+  try { if(candidate && typeof candidate==="object" && typeof candidate.url==="string") candidate=candidate.url; } catch {}
+  let parsed=null;
+  try { parsed=new URL(String(candidate)); } catch {}
+  return !!(parsed &&
+    ((parsed.origin === "https://huggingface.co" && /\/resolve\//i.test(parsed.pathname)) ||
+     (parsed.origin === RDT_HF_PROXY_ORIGIN && /^\/hf\/.+\/resolve\//i.test(parsed.pathname))));
+}
+
 async function rdtHfAwareFetch(input, init) {
   let req;
   try {
     req = input instanceof Request ? new Request(input, init) : new Request(input, init);
   } catch {
+    if (rdtBenchmarkCacheOnlyActive && rdtIsBenchmarkBlockedModelUrl(input)) {
+      throw new Error("RDT_EASYWHISPER_BENCHMARK_CACHE_ONLY_BLOCKED: missing model asset was not fetched; model cache is unchanged.");
+    }
     return RDT_NATIVE_FETCH(input, init);
+  }
+  if (rdtBenchmarkCacheOnlyActive && rdtIsBenchmarkBlockedModelUrl(req.url)) {
+    throw new Error("RDT_EASYWHISPER_BENCHMARK_CACHE_ONLY_BLOCKED: missing model asset was not fetched; model cache is unchanged.");
   }
   const proxyUrl = rdtHfProxyUrl(req.url);
   if (!proxyUrl) {
@@ -394,7 +414,7 @@ async function rdtPrepareRuntimeForDevice(device, forceLegacyNoSimd = false, rea
   }
 }
 
-const WORKER_VERSION = "2026-10-22-v38-tiny-sequential-compat";
+const WORKER_VERSION = "2026-11-01-v40-easywhisper-benchmark-cache-fallback";
 
 console.info("[RDT worker] version", WORKER_VERSION);
 
@@ -499,7 +519,8 @@ function rdtBeginOperation(id, type, payload) {
       requestedDevice: safePayload.device || "webgpu",
       variant: safePayload.variant || null,
       revision: safePayload.revision || null,
-      expectedFileCount: Array.isArray(safePayload.expected) ? safePayload.expected.length : null
+      expectedFileCount: Array.isArray(safePayload.expected) ? safePayload.expected.length : null,
+      cacheOnly: safePayload.cacheOnly === true
     });
   } else if (type === "run") {
     const audio = safePayload.audio;
@@ -750,18 +771,6 @@ async function rdtSelectWebGPUAdapter(powerPreference) {
     rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason: "adapter-cannot-request-device", adapterInfo }));
     webGPUAdapterProbeReason = "adapter-cannot-request-device";
     return false;
-  }
-  let device = null;
-  try {
-    device = await rdtAwaitGPUResult(adapter.requestDevice(), "WebGPU " + preference + " device request", true);
-    if (!device) throw new Error("device-request-returned-empty");
-  } catch (err) {
-    const reason = /timed out/i.test(String(err && err.message || err)) ? "device-request-timeout" : "device-request-error";
-    rdtWebGPUAdapterAttempts.push(rdtGpuAttemptSummary(preference, "unavailable", { reason, adapterInfo }));
-    webGPUAdapterProbeReason = reason;
-    return false;
-  } finally {
-    try { if (device && typeof device.destroy === "function") device.destroy(); } catch {}
   }
   try {
     if (!onnxEnv || typeof onnxEnv !== "object") throw new Error("onnx-webgpu-config-unavailable");
@@ -1081,16 +1090,39 @@ self.onmessage = (ev) => {
           const modelId = String(p.modelId || "");
           const revision = String(p.revision || "");
           if (!modelId || !/^[0-9a-f]{40}$/i.test(revision)) throw new Error("pinned-model-revision-required");
-          const device = p.device || "wasm";
-          const variant = p.variant || null;
+          const requestedDevice = p.device || "wasm";
+          let device = requestedDevice;
+          let variant = p.variant || null;
+          let adapterAvailable = null;
+          let adapterProbeReason = null;
+          if (p.probeAdapter === true && requestedDevice === "webgpu") {
+            adapterAvailable = await rdtHasUsableWebGPUAdapter();
+            adapterProbeReason = webGPUAdapterProbeReason || null;
+            if (!adapterAvailable) {
+              device = "wasm";
+              variant = null;
+            }
+          }
           const files = expectedFilesForVariant(modelId, device, variant, p.expected);
-          const inspection = await inspectModelCache(modelId, revision, files);
+          let inspection;
+          if (p.readOnly === true) {
+            if (!self.caches || typeof caches.has !== "function") {
+              inspection = { state: "unavailable", checked: 0, missing: [] };
+            } else if (!(await caches.has("transformers-cache"))) {
+              inspection = { state: "miss", checked: 0, missing: Array.isArray(files) ? files.map(file => file && file.path).filter(Boolean) : [] };
+            } else {
+              inspection = await inspectModelCache(modelId, revision, files);
+            }
+          } else {
+            inspection = await inspectModelCache(modelId, revision, files);
+          }
           const manifestFiles = Array.isArray(files) ? files.filter(f => f && f.path) : [];
           const metadataListed = manifestFiles.some(f => !String(f.path).startsWith("onnx/"));
           const expectedFileCount = manifestFiles.length + (metadataListed ? 0 : REQUIRED_META.length);
           const missing = Array.isArray(inspection.missing) ? inspection.missing : [];
           reply({ id, type: "cache-status", cacheStatus: {
-            modelId, revision, device, variant,
+            modelId, revision, requestedDevice, device, variant,
+            adapterAvailable, adapterProbeReason,
             state: String(inspection.state || "unknown"),
             expectedFileCount,
             presentFileCount: Math.max(0, expectedFileCount - missing.length),
@@ -1317,6 +1349,8 @@ function expectedFilesForVariant(modelId, device, variant, expected) {
 
 async function handleLoad(id, payload) {
 
+  if (payload && payload.cacheOnly === true) rdtBenchmarkCacheOnlyActive = true;
+
   const modelId  = payload.modelId;
 
   const revision = payload.revision;
@@ -1360,9 +1394,24 @@ async function handleLoad(id, payload) {
 
   const cacheExpected = expectedFilesForVariant(modelId, effectiveDevice, variant, expected);
 
+  // Cache-only benchmark loads must not create an empty Cache Storage bucket,
+  // much less fetch model assets. Refuse safely if CacheStorage.has is absent.
+  if (payload.cacheOnly === true) {
+    if (!self.caches || typeof caches.has !== "function" || !(await caches.has("transformers-cache"))) {
+      throw new Error("EasyWhisper benchmark is cache-only. The model cache does not exist or cannot be inspected without mutation. No model files were downloaded.");
+    }
+  }
+
   rdtSetOperationStage("inspect-model-cache", { effectiveDevice, expectedFileCount: Array.isArray(cacheExpected) ? cacheExpected.length : null });
   const cache = await inspectModelCache(modelId, revision, cacheExpected);
   const cached = cache.state === "full";
+
+  // Developer benchmark runs are strictly cache-only. This guard is enforced
+  // inside the worker as well as in the UI so a missing model can never trigger
+  // a silent model-weight download from a benchmark request.
+  if (payload.cacheOnly === true && !cached) {
+    throw new Error("EasyWhisper benchmark is cache-only. The resolved model/device variant is not fully cached (state: " + String(cache.state || "unknown") + "). No model files were downloaded.");
+  }
 
   const online = typeof navigator === "undefined" ? true : navigator.onLine !== false;
   rdtModelCacheSummary = {
@@ -1505,7 +1554,38 @@ async function handleLoad(id, payload) {
     }
 
     const loadErrorMessage = String(err && err.message || err || "");
-    let cacheIntegrityRecovered = false;
+    let benchmarkFallbackRecovered = false;
+    if (rdtBenchmarkCacheOnlyActive) {
+      // Preserve the app's WebGPU-to-WASM resilience without permitting any
+      // cache mutation: fallback is attempted only after a read-only inspection
+      // proves the complete pinned WASM profile is already present.
+      if (initialDevice === "webgpu" && !rdtIsRemoteFetchFailure(err) && !rdtIsMemoryPressureFailure(err)) {
+        const wasmExpected = expectedFilesForVariant(modelId, "wasm", null, expected);
+        let wasmCache = { state: "unavailable", missing: [] };
+        try { wasmCache = await inspectModelCache(modelId, revision, wasmExpected); }
+        catch (cacheError) { wasmCache = { state: "unavailable", missing: [], error: String(cacheError && cacheError.message || cacheError).slice(0, 180) }; }
+        if (wasmCache.state === "full") {
+          reply({ id, type: "progress", phase: "benchmark-cache-only-fallback", fallbackReason: "webgpu-initialization-failed", note: "WebGPU model initialization failed. A read-only check confirmed the complete pinned WASM profile is cached; testing the existing CPU/WASM fallback without downloading or changing cache files." });
+          rdtSetOperationStage("benchmark-cache-only-wasm-fallback", { fromDevice: "webgpu", toDevice: "wasm", cacheState: wasmCache.state, sourceError: loadErrorMessage.slice(0, 180) });
+          transcriber = null; currentModelId = null; currentDevice = null;
+          wasmPreferredModels.add(modelKey);
+          try {
+            const fallbackProfile = rdtWasmCompatibilityPreferredModels.has(modelKey) ? "legacy-android-basic" : "standard";
+            await buildPipeline(id, modelId, revision, "wasm", null, fallbackProfile);
+            lastLoad = { ...(lastLoad || {}), device: "wasm", requestedDevice, effectiveDevice: "wasm", variant: null, dtype: pickDtype("wasm", modelId, null), webgpuPowerPreference: null, wasmExecutionProfile: rdtIsLegacyNonSimdRuntime() ? "legacy-non-simd" : fallbackProfile, benchmarkFallbackFromDevice: "webgpu", benchmarkFallbackReason: "webgpu-initialization-failed", benchmarkFallbackError: loadErrorMessage.slice(0, 320), benchmarkFallbackCacheState: "full" };
+            benchmarkFallbackRecovered = true;
+          } catch (fallbackError) {
+            throw new Error("EasyWhisper benchmark WebGPU initialization failed and the fully cached WASM fallback also failed. No cache repair, eviction, or model downloads were attempted. WebGPU: " + loadErrorMessage.slice(0, 220) + " | WASM: " + String(fallbackError && fallbackError.message || fallbackError).slice(0, 220));
+          }
+        } else {
+          throw new Error("EasyWhisper benchmark WebGPU initialization failed. A read-only check found no complete pinned WASM fallback (cache state: " + String(wasmCache.state || "unknown") + "). No cache repair, eviction, or model downloads were attempted. Details: " + loadErrorMessage.slice(0, 280));
+        }
+      } else {
+        const reason = rdtIsMemoryPressureFailure(err) ? "memory-pressure" : (rdtIsRemoteFetchFailure(err) ? "runtime-or-network-fetch-failure" : "unsupported-runtime-fallback");
+        throw new Error("EasyWhisper benchmark model initialization failed (" + reason + "). Cache repair, eviction, and model-download retries are disabled; the existing model cache was left unchanged. Details: " + loadErrorMessage.slice(0, 320));
+      }
+    }
+    let cacheIntegrityRecovered = benchmarkFallbackRecovered;
     // If a mobile Tiny variant is missing on the relay, try the published standard
     // Tiny WebGPU pair before declaring a download failure. Other 403/404/network
     // errors still fail promptly with their diagnostic details.
@@ -1910,6 +1990,21 @@ async function rdtRefreshModelCacheSummary(modelId, revision, device, variant, e
 }
 
 async function rdtEnsureLegacyWasmArtifactsCached(id, modelId, revision, variant, expected) {
+  if (rdtBenchmarkCacheOnlyActive) {
+    // handleLoad has already verified every manifest-selected file is present.
+    // A benchmark must skip the normal legacy prefetch path entirely, even when
+    // cached, rather than opening Cache Storage or performing repair/download work.
+    const cacheOnlyReport = {
+      capturedAt: new Date().toISOString(),
+      modelId: String(modelId || "").slice(0, 120),
+      revision: /^[0-9a-f]{40}$/i.test(String(revision || "")) ? String(revision) : null,
+      strategy: "benchmark-cache-only-readonly",
+      files: [], evictedFiles: [], prefetchAttempts: [],
+      preflight: { started: false, completed: true, skipped: "benchmark-cache-only; full cache inspection already succeeded" }
+    };
+    rdtLastOnnxArtifactCacheCheck = cacheOnlyReport;
+    return cacheOnlyReport;
+  }
   const report = {
     capturedAt: new Date().toISOString(),
     modelId: String(modelId || "").slice(0, 120),
@@ -2846,9 +2941,13 @@ async function handleRun(id, payload) {
 
   if (!audio.length) throw new Error("run: audio is empty");
 
-  for (let i = 0; i < audio.length; i += 8192) {
+  if (!(audio instanceof Int16Array)) {
 
-    if (!Number.isFinite(audio[i])) throw new Error("run: audio buffer contains invalid samples");
+    for (let i = 0; i < audio.length; i += 8192) {
+
+      if (!Number.isFinite(audio[i])) throw new Error("run: audio buffer contains invalid samples");
+
+    }
 
   }
 

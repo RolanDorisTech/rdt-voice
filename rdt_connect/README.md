@@ -6,11 +6,11 @@ RDT Connect is an optional desktop companion for [RDT Voice](https://rolandorist
 
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg) | `0.2.0-dev.11.1D04` | `1D04` | 235,712,825 bytes |
+| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d42/RDT_Connect_0.2.0-dev.12.1D42_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d42) | `0.2.0-dev.12.1D42` | `1D42` | 227,767,296 bytes |
 | Windows (ARM64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) | `0.2.0-dev.11.2A07` | `2A07` | 101979239 bytes |
 | Windows (x64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) | `0.2.0-dev.11.3A03` | `3A03` | 137365296 bytes |
 
-**SHA-256 (Build 1D04):** `93b8442447e083e1e328904f06ec3ff3e8dd1f13df9fe28de1b6ae8e775ac39f`
+**SHA-256 (Build 1D42):** `992df7b380e00b36b1e11f5952c32ef81c1c67c2d5943ea97a00cf0cde14aefd`
 
 **Platform notes**
 

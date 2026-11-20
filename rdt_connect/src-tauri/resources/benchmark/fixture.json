@@ -1,0 +1,11 @@
+{
+  "schema": "rdt-connect-benchmark-fixture-v1",
+  "fixture_id": "rdt-user-voice-manual-21s-v1",
+  "name": "RDT Connect user-recorded manual benchmark",
+  "source": "User-provided voice recording",
+  "audio_filename": "user-voice-21s.wav",
+  "sha256": "060ce7a72e16521bb90a646015b27bc714c662a155f3bd78371ed66c264d1938",
+  "sample_rate_hz": 16000,
+  "duration_seconds": 20.72575,
+  "transcript": "Every morning, a traveler checks the weather, packs a light bag, and walks along the river. A nearby train slows at the station; people step onto the platform. They greet their friends and find a quiet seat. Before heading home, the traveler writes a note and saves it for tomorrow."
+}

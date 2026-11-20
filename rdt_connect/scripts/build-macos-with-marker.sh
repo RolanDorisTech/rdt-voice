@@ -155,6 +155,41 @@ if [[ "${RDT_SKIP_RESOURCE_PREPARATION:-0}" == "1" ]]; then
       exit 4
     fi
   done
+
+  # Rust include_str!/include_image! inputs must exist before Cargo starts.
+  for item in \
+    "$ROOT/backend/rdt_model_lock.json" \
+    "$ROOT/src-tauri/icons/rdt-menu-bar-update-light-down-arrow.png" \
+    "$ROOT/src-tauri/icons/rdt-menu-bar-update-dark-down-arrow.png" \
+    "$ROOT/src-tauri/icons/rdt-menu-bar-update-light-arrow-upward.png" \
+    "$ROOT/src-tauri/icons/rdt-menu-bar-update-dark-arrow-upward.png"; do
+    if [[ ! -s "$item" ]]; then
+      echo "ERROR: required Rust compile input missing: $item" >&2
+      exit 4
+    fi
+    echo "PASS: Rust compile input present: ${item#"$ROOT/"}"
+  done
+
+  python3 "$ROOT/scripts/test-no-librispeech-assets.py"
+  python3 "$(cd "$(dirname "$0")" && pwd)/test-benchmark-fixtures.py"
+  python3 "$(cd "$(dirname "$0")" && pwd)/test-offline-launch-contract.py"
+  python3 "$(cd "$(dirname "$0")" && pwd)/test-update-success-popup-1d40.py"
+  python3 "$(cd "$(dirname "$0")" && pwd)/test-hardware-preview-contract.py"
+  python3 "$(cd "$(dirname "$0")" && pwd)/test-desktop-browser-handoff.py"
+  python3 "$(cd "$(dirname "$0")" && pwd)/test-connect-benchmark-api.py"
+
+  # Tauri declares these Connect benchmark directories as bundle resources.
+  # Fail here, before frontend/Rust compilation, if any resource is absent.
+  for name in benchmark native-benchmark first-run-benchmark user-voice-benchmark; do
+    dir="$ROOT/src-tauri/resources/$name"
+    first_file="$(find "$dir" -type f -print -quit 2>/dev/null || true)"
+    if [[ ! -d "$dir" || -z "$first_file" ]]; then
+      echo "ERROR: required benchmark bundle resource is missing or empty: $dir" >&2
+      exit 4
+    fi
+    echo "PASS: benchmark bundle resource present: $name"
+  done
+
   for item in \
     assets/rdt-offline-runtime/modern/transformers.min.js \
     assets/rdt-offline-runtime/modern/ort.bundle.min.mjs \
@@ -171,7 +206,7 @@ if [[ "${RDT_SKIP_RESOURCE_PREPARATION:-0}" == "1" ]]; then
     "$ROOT/src-tauri/resources/rdt_voice_backend/_internal"
   python3 "$ROOT/scripts/dedupe-macos-mlx-metallib.py" --internal-dir \
     "$ROOT/src-tauri/resources/rdt_voice_backend/_internal" --verify-only
-  echo "PASS: preserved staging and promoted 1D15 resources verified."
+  echo "PASS: promoted RDT Voice R82 and Connect benchmark resources verified."
 else
   npm run prepare:desktop-resources
   STAGED_INTERNAL="$ROOT/src-tauri/resources/rdt_voice_backend/_internal"
@@ -352,7 +387,7 @@ if ! python3 "$ROOT/scripts/dedupe-macos-mlx-metallib.py" "$APP_BUNDLE"; then
 fi
 if ! python3 "$ROOT/scripts/dedupe-macos-mlx-metallib.py" \
   "$APP_BUNDLE" --verify-only \
-  --max-app-mib "610" \
+  --max-app-mib "590" \
   --target-app-mib "560"; then
   echo "ERROR: completed app bundle has duplicate MLX shaders or exceeds the configured macOS app-size limit." >&2
   exit 4
@@ -573,5 +608,6 @@ fi
 # Use the repository's approved custom DMG builder and existing Finder layout.
 # The builder resolves the app from this isolated marker-specific Cargo target.
 echo "Building approved custom DMG with mounted-app MLX verification."
+python3 "$ROOT/scripts/test-dmg-guide-source-contract.py"
 RDT_CARGO_TARGET_DIR="$CARGO_TARGET_DIR" \
   python3 "$ROOT/scripts/build-custom-dmg.py"

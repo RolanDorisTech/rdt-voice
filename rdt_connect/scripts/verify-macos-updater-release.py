@@ -147,7 +147,20 @@ def main():
         + (result.stderr.strip() or result.stdout.strip()),
     )
 
-    run_visible(["tar", "-tzf", str(archive)], ROOT)
+    listing = subprocess.run(
+        ["tar", "-tzf", str(archive)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    require(listing.returncode == 0, "updater archive listing failed: " + listing.stderr.strip())
+    members = listing.stdout.splitlines()
+    require(bool(members), "updater archive is empty")
+    require(
+        not any("librispeech" in item.lower() for item in members),
+        "LibriSpeech content found in updater archive",
+    )
+    print(f"PASS: updater archive readable ({len(members)} entries); no LibriSpeech content")
     run_visible(["hdiutil", "verify", str(dmg)], ROOT)
 
     print("PASS: app version and marker resolve consistently")

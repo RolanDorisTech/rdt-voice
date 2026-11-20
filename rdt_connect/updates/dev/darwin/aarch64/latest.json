@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0-dev.12.1D35",
-  "notes": "RDT Connect 0.2.0-dev.12.1D35 for macOS Apple Silicon.",
-  "pub_date": "2026-11-15T18:46:21Z",
+  "version": "0.2.0-dev.12.1D42",
+  "notes": "RDT Connect 0.2.0-dev.12.1D42 (Build 1D42): verified Apple Silicon benchmark recovery, bundled RDT Voice R82 offline runtime, localized update guidance, and post-update version/build confirmation.",
+  "pub_date": "2026-11-20T21:23:52Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d35/RDT.Connect.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzJ1NWFRYWRXQk5XK1RRSVh0M092aXIvQWw2cGlrcmNpVjY4NHdrYXY4bjlxS2hXd0YrVmRxd1pVSFJ2TTl4bzNlc21HcDJZR0tmMjNYbnoydUtKK3dvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NzY2NTA4CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMi4xRDM1Ck1lV0tPRkJiM0lkbGVCNHhISXBpVnFoMUYvb1lEMml6cWlXTDFZR2NDeHEvT0sxNzd0aU1tR2ZvUUkxTGJBYno4MDNhM2xIQ0RHTFYrVUxncHo4WURBPT0K"
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d42/RDT.Connect.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzJEZjllRThVWkZVVlZOcnhTUG1ZM3Z6SlRGWGJsWHZGVENVTnR6OVRsKzRZR1M0Um04NSsvSnVUVFY0U1ZWOVFvSTN4UnhpbndMdmIrRmZoVHdoVGdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjA4OTU1CWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMi4xRDQyCmRSenZ5NWNEL2FqQmUvNHllN1pMUFQxSmRsNUZoVEd2VzlLbDhJS2ZlUUZSbnVvaVA0OU1iQWNvdnhVUVc2NEtjMWhvM205SUsvR1N0YkdmL0srZERRPT0K"
     }
   }
 }

@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import englishCatalog from "./locales/en.json";
 /** Native RDT Connect localization runtime.
  *
  * Translates existing user-facing DOM strings from the frozen English catalog,
@@ -16,14 +17,26 @@ const PREFERENCE_KEY = "rdt_connect_app_language";
 const LANGUAGE_ORDER = [
   "en", "zh-CN", "zh-TW", "fr", "es", "ko", "ja", "de", "th", "vi", "tl", "id", "hi", "ms", "pt", "ru", "it", "lo", "ar", "tr", "pl", "nl", "uk", "sv", "cs", "no",
 ];
-const localeModules = import.meta.glob("./locales/*.json", { eager: true, import: "default" }) as Record<string, LocaleCatalog>;
-const catalogs = new Map<string, LocaleCatalog>();
-for (const [path, catalog] of Object.entries(localeModules)) {
-  const code = path.slice("./locales/".length, -".json".length);
-  if (catalog && catalog._meta?.locale === code && catalog.messages) catalogs.set(code, catalog);
-}
+const LANGUAGE_NAMES: Record<string, string> = {
+  "en": "English", "zh-CN": "简体中文", "zh-TW": "繁體中文",
+  "fr": "Français", "es": "Español", "ko": "한국어",
+  "ja": "日本語", "de": "Deutsch", "th": "ไทย", "vi": "Tiếng Việt",
+  "tl": "Filipino", "id": "Bahasa Indonesia", "hi": "हिन्दी",
+  "ms": "Bahasa Melayu", "pt": "Português", "ru": "Русский",
+  "it": "Italiano", "lo": "ລາວ", "ar": "العربية", "tr": "Türkçe",
+  "pl": "Polski", "nl": "Nederlands", "uk": "Українська",
+  "sv": "Svenska", "cs": "Čeština", "no": "Norsk",
+};
+const localeLoaders = import.meta.glob(["./locales/*.json", "!./locales/en.json"], {
+  import: "default",
+}) as Record<string, () => Promise<LocaleCatalog>>;
+const catalogs = new Map<string, LocaleCatalog>([
+  ["en", englishCatalog as LocaleCatalog],
+]);
 const english = catalogs.get("en");
-if (!english) throw new Error("RDT Connect English locale is missing; cannot initialize localization safely.");
+if (!english || english._meta?.locale !== "en" || !english.messages) {
+  throw new Error("RDT Connect English locale is missing or invalid.");
+}
 
 const exactIndexes = new Map<string, Map<string, string>>();
 const templateIndexes = new Map<string, TemplateMatcher[]>();
@@ -72,7 +85,31 @@ function buildIndex(locale: string): void {
   exactIndexes.set(locale, exact);
   templateIndexes.set(locale, templates);
 }
-for (const code of catalogs.keys()) buildIndex(code);
+
+const pendingLocaleLoads = new Map<string, Promise<void>>();
+async function loadLocaleCatalog(locale: string): Promise<boolean> {
+  if (!LANGUAGE_ORDER.includes(locale)) return false;
+  if (catalogs.has(locale)) {
+    buildIndex(locale);
+    return true;
+  }
+  const path = `./locales/${locale}.json`;
+  const loader = localeLoaders[path];
+  if (!loader) return false;
+  let pending = pendingLocaleLoads.get(locale);
+  if (!pending) {
+    pending = loader().then((catalog) => {
+      if (!catalog || catalog._meta?.locale !== locale || !catalog.messages) {
+        throw new Error(`Invalid RDT Connect locale catalog: ${locale}`);
+      }
+      catalogs.set(locale, catalog);
+      buildIndex(locale);
+    }).finally(() => pendingLocaleLoads.delete(locale));
+    pendingLocaleLoads.set(locale, pending);
+  }
+  await pending;
+  return true;
+}
 
 function findMatch(locale: string, value: string): Match | null {
   buildIndex(locale);
@@ -113,6 +150,29 @@ function shouldIgnoreElement(element: Element | null): boolean {
 }
 function inRichMessage(element: Element | null): boolean {
   return !!element?.closest("[data-l10n-rich]");
+}
+function localizeKeyedText(element: Element, targetLocale: string): boolean {
+  if (element.childElementCount > 0) return false;
+  const key = element.getAttribute("data-l10n-key");
+  if (!key) return false;
+  const raw = element.textContent ?? "";
+  const parts = splitWhitespace(raw);
+  if (!parts.core) return false;
+  let params: Record<string, string> | null = null;
+  for (const [locale] of catalogs) {
+    const match = findMatch(locale, parts.core);
+    if (match?.key === key) {
+      params = match.params;
+      break;
+    }
+  }
+  if (!params) params = {};
+  const template = catalogs.get(targetLocale)?.messages[key] ?? english!.messages[key];
+  if (typeof template !== "string") return false;
+  const translated = interpolate(template, params);
+  const next = parts.leading + translated + parts.trailing;
+  if (next !== raw) element.textContent = next;
+  return true;
 }
 function splitWhitespace(value: string): { leading: string; core: string; trailing: string } {
   const leading = value.match(/^\s*/)?.[0] ?? "";
@@ -168,6 +228,7 @@ function localizeSubtree(node: Node, targetLocale: string): void {
     renderRichMessage(node, targetLocale);
     return;
   }
+  if (localizeKeyedText(node, targetLocale)) return;
   for (const child of Array.from(node.childNodes)) localizeSubtree(child, targetLocale);
 }
 function renderRichMessage(element: HTMLElement, targetLocale: string): void {
@@ -219,77 +280,103 @@ function detectSystemLocale(): string {
     const tag = String(raw).trim().replace(/_/g, "-").toLowerCase();
     if (!tag) continue;
     if (tag === "zh" || tag.startsWith("zh-")) {
-      if (/(?:^|-)hant(?:-|$)/.test(tag) || /^zh-(?:tw|hk|mo)(?:-|$)/.test(tag)) return catalogs.has("zh-TW") ? "zh-TW" : "en";
-      if (/(?:^|-)hans(?:-|$)/.test(tag) || /^zh-(?:cn|sg)(?:-|$)/.test(tag) || tag === "zh") return catalogs.has("zh-CN") ? "zh-CN" : "en";
-      // Unknown Chinese region variants prefer Simplified Chinese instead of falling straight to English.
-      return catalogs.has("zh-CN") ? "zh-CN" : "en";
+      if (/(?:^|-)hant(?:-|$)/.test(tag) || /^zh-(?:tw|hk|mo)(?:-|$)/.test(tag)) return "zh-TW";
+      return "zh-CN";
     }
-    const exact = [...catalogs.keys()].find((code) => code.toLowerCase() === tag);
+    const exact = LANGUAGE_ORDER.find((code) => code.toLowerCase() === tag);
     if (exact) return exact;
     const base = tag.split("-")[0];
     const normalized = ({ fil: "tl", nb: "no", nn: "no" } as Record<string, string>)[base] || base;
-    const match = [...catalogs.keys()].find((code) => code.toLowerCase() === normalized);
+    const match = LANGUAGE_ORDER.find((code) => code.toLowerCase() === normalized);
     if (match) return match;
   }
   return "en";
 }
+
 function populateLanguageSelect(): void {
   const select = document.getElementById("app-language") as HTMLSelectElement | null;
   if (!select) return;
   select.replaceChildren();
-  const ordered = LANGUAGE_ORDER.filter((code) => catalogs.has(code));
-  for (const code of ordered) {
-    const catalog = catalogs.get(code)!;
+  for (const code of LANGUAGE_ORDER) {
     const option = document.createElement("option");
     option.value = code;
-    option.textContent = catalog._meta.languageName;
+    option.textContent = LANGUAGE_NAMES[code] || code;
     select.appendChild(option);
   }
 }
-export function initializeLocalization(): string {
-  if (initialized) return activeLocale;
-  initialized = true;
-  populateLanguageSelect();
-  let saved = "";
-  try { saved = localStorage.getItem(PREFERENCE_KEY) || ""; } catch { /* Browser storage may be unavailable. */ }
-  activeLocale = catalogs.has(saved) ? saved : detectSystemLocale();
-  localizeDocument(activeLocale);
-  observer = new MutationObserver((records) => {
-    if (!document.body) return;
-    for (const record of records) {
-      const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      if (shouldIgnoreElement(target) || inRichMessage(target)) continue;
-      if (record.type === "characterData" && record.target instanceof Text) {
-        localizeTextNode(record.target, activeLocale);
-      } else if (record.type === "attributes" && record.target instanceof Element && record.attributeName && TRANSLATABLE_ATTRIBUTES.includes(record.attributeName)) {
-        localizeAttribute(record.target, record.attributeName, activeLocale);
-      } else if (record.type === "childList") {
-        for (const added of Array.from(record.addedNodes)) localizeSubtree(added, activeLocale);
-      } else if (record.type === "attributes" && record.target instanceof HTMLElement && record.attributeName === "data-l10n-rich") {
-        renderRichMessage(record.target, activeLocale);
-      }
+
+let initializationPromise: Promise<string> | null = null;
+let localeRequestVersion = 0;
+
+export function initializeLocalization(): Promise<string> {
+  if (initialized) return Promise.resolve(activeLocale);
+  if (initializationPromise) return initializationPromise;
+  initializationPromise = (async () => {
+    populateLanguageSelect();
+    let saved = "";
+    try { saved = localStorage.getItem(PREFERENCE_KEY) || ""; } catch { /* Storage is optional. */ }
+    let selected = LANGUAGE_ORDER.includes(saved) ? saved : detectSystemLocale();
+    try {
+      if (!await loadLocaleCatalog(selected)) selected = "en";
+    } catch (error) {
+      console.warn(`Could not load locale ${selected}; using English.`, error);
+      selected = "en";
     }
-  });
-  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...TRANSLATABLE_ATTRIBUTES, "data-l10n-rich"] });
-  return activeLocale;
+    activeLocale = selected;
+    localizeDocument(activeLocale);
+    observer = new MutationObserver((records) => {
+      if (!document.body) return;
+      for (const record of records) {
+        const target = record.target instanceof Element ? record.target : record.target.parentElement;
+        if (shouldIgnoreElement(target) || inRichMessage(target)) continue;
+        if (record.type === "characterData" && record.target instanceof Text) {
+          localizeTextNode(record.target, activeLocale);
+        } else if (record.type === "attributes" && record.target instanceof Element && record.attributeName && TRANSLATABLE_ATTRIBUTES.includes(record.attributeName)) {
+          localizeAttribute(record.target, record.attributeName, activeLocale);
+        } else if (record.type === "childList") {
+          for (const added of Array.from(record.addedNodes)) localizeSubtree(added, activeLocale);
+        } else if (record.type === "attributes" && record.target instanceof HTMLElement && record.attributeName === "data-l10n-key") {
+          localizeSubtree(record.target, activeLocale);
+        } else if (record.type === "attributes" && record.target instanceof HTMLElement && record.attributeName === "data-l10n-rich") {
+          renderRichMessage(record.target, activeLocale);
+        }
+      }
+    });
+    observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...TRANSLATABLE_ATTRIBUTES, "data-l10n-rich", "data-l10n-key"] });
+    initialized = true;
+    return activeLocale;
+  })();
+  return initializationPromise;
 }
-export function setActiveLocale(locale: string, persist = false): string {
-  const normalized = catalogs.has(locale) ? locale : "en";
-  if (!initialized) initializeLocalization();
-  localizeDocument(normalized);
-  activeLocale = normalized;
+
+export async function setActiveLocale(locale: string, persist = false): Promise<string> {
+  const requestVersion = ++localeRequestVersion;
+  const normalized = LANGUAGE_ORDER.includes(locale) ? locale : "en";
+  await initializeLocalization();
+  let loaded = false;
+  try {
+    loaded = await loadLocaleCatalog(normalized);
+  } catch (error) {
+    console.warn(`Could not switch to locale ${normalized}; using English.`, error);
+  }
+  const target = loaded ? normalized : "en";
+  if (requestVersion !== localeRequestVersion) return activeLocale;
+  localizeDocument(target);
+  activeLocale = target;
   if (persist) {
-    try { localStorage.setItem(PREFERENCE_KEY, normalized); } catch { /* Preference is optional. */ }
+    try { localStorage.setItem(PREFERENCE_KEY, target); } catch { /* Preference is optional. */ }
   }
   const languageSelect = document.getElementById("app-language") as HTMLSelectElement | null;
-  if (languageSelect) languageSelect.value = normalized;
-  window.dispatchEvent(new CustomEvent("rdt-connect-language-changed", { detail: { locale: normalized } }));
-  return normalized;
+  if (languageSelect) languageSelect.value = target;
+  window.dispatchEvent(new CustomEvent("rdt-connect-language-changed", { detail: { locale: target } }));
+  return target;
 }
+
 export function getActiveLocale(): string { return activeLocale; }
 export function getLocaleChoices(): Array<{ code: string; languageName: string }> {
-  return LANGUAGE_ORDER.filter((code) => catalogs.has(code)).map((code) => ({ code, languageName: catalogs.get(code)!._meta.languageName }));
+  return LANGUAGE_ORDER.map((code) => ({ code, languageName: LANGUAGE_NAMES[code] || code }));
 }
+
 export function translateKey(key: string, params: Record<string, string | number> = {}, locale = activeLocale): string {
   const template = catalogs.get(locale)?.messages[key] ?? english!.messages[key] ?? key;
   return template.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (whole, name: string) => name in params ? String(params[name]) : whole);

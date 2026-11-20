@@ -20,15 +20,12 @@ for required in backend/rdt_model_lock.json assets/rdt_logo_BIG_yellow_halo_tran
   if [[ ! -e "$REPO_ROOT/$required" ]]; then echo "ERROR: Connect build source item missing: $REPO_ROOT/$required" >&2; exit 2; fi
 done
 
-CONNECT_BACKEND_SOURCE="$PROJECT_DIR/backend/apple/server.py"
+CONNECT_BACKEND_SOURCE="${RDT_VOICE_BACKEND_SOURCE:-$HOME/dev/rdt-voice/backend/server.py}"
 if [[ ! -s "$CONNECT_BACKEND_SOURCE" ]]; then
-  echo "ERROR: RDT Connect backend source missing: $CONNECT_BACKEND_SOURCE" >&2
+  echo "ERROR: canonical RDT Voice backend source missing: $CONNECT_BACKEND_SOURCE" >&2
   exit 2
 fi
-if ! grep -Fq 'def _rdt_frozen_helper_guard' "$CONNECT_BACKEND_SOURCE"; then
-  echo "ERROR: RDT Connect backend is missing the frozen-helper guard." >&2
-  exit 4
-fi
+echo "PASS: using canonical RDT Voice backend source."
 DEFAULT_PY="$HOME/dev/testing/RDT_Voice_Desktop_POC/.venv/bin/python"
 if [[ ! -x "$DEFAULT_PY" ]]; then DEFAULT_PY="$HOME/dev/rdt-secure/servers/whisper/.venv/bin/python"; fi
 if [[ ! -x "$DEFAULT_PY" ]]; then DEFAULT_PY="$HOME/mlx-env/bin/python"; fi
@@ -53,6 +50,80 @@ RESOURCES="$PROJECT_DIR/src-tauri/resources"
 NEXT_RESOURCES="$BUILD_STAGING_ROOT/desktop-resources-new"
 OLD_RESOURCES="$BUILD_STAGING_ROOT/desktop-resources-old"
 WEB="$NEXT_RESOURCES/rdt_voice_web"; BACKEND="$NEXT_RESOURCES/rdt_voice_backend"; NOTICES="$NEXT_RESOURCES/third_party_notices"
+
+# Resume-only mode: promote an already verified staging tree without rerunning PyInstaller.
+if [[ "${RDT_PROMOTE_STAGED_ONLY:-0}" == "1" ]]; then
+  [[ -d "$WEB" && -d "$BACKEND" && -d "$NOTICES" ]] || {
+    echo "ERROR: staged frontend, backend, or notices directory is missing." >&2
+    exit 4
+  }
+  [[ -f "$NEXT_RESOURCES/rdt_voice_web_manifest.json" ]] || {
+    echo "ERROR: staged R82 manifest is missing." >&2
+    exit 4
+  }
+
+  python3 "$SCRIPT_DIR/verify-alpha-r82-staging.py" \
+    "$VOICE_WEB_SOURCE" "$WEB" "$WEB/assets" \
+    "${RDT_VOICE_BUNDLE_VERSION:-alpha-testing-current}" \
+    "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
+
+  for item in \
+    "$WEB/index.html" \
+    "$WEB/worker.js" \
+    "$BACKEND/rdt_voice_backend" \
+    "$BACKEND/ffmpeg" \
+    "$BACKEND/_internal/libomp.dylib" \
+    "$BACKEND/_internal/mlx/lib/mlx.metallib" \
+    "$NOTICES/BUILD-NOTICES.md" \
+    "$NOTICES/libomp/LICENSE.TXT"; do
+    [[ -s "$item" ]] || {
+      echo "ERROR: staged resource missing or empty: $item" >&2
+      exit 4
+    }
+  done
+
+  [[ ! -e "$OLD_RESOURCES" ]] || {
+    echo "ERROR: backup destination already exists; preserving it: $OLD_RESOURCES" >&2
+    exit 4
+  }
+
+  mkdir -p "$RESOURCES" "$OLD_RESOURCES"
+  PROMOTED=()
+  BACKED_UP=()
+
+  rollback_promotion() {
+    local name
+    for ((i=${#PROMOTED[@]}-1; i>=0; i--)); do
+      name="${PROMOTED[$i]}"
+      if [[ -e "$RESOURCES/$name" ]]; then
+        mv "$RESOURCES/$name" "$NEXT_RESOURCES/$name"
+      fi
+    done
+    for ((i=${#BACKED_UP[@]}-1; i>=0; i--)); do
+      name="${BACKED_UP[$i]}"
+      if [[ -e "$OLD_RESOURCES/$name" ]]; then
+        mv "$OLD_RESOURCES/$name" "$RESOURCES/$name"
+      fi
+    done
+  }
+
+  for name in rdt_voice_web rdt_voice_backend third_party_notices rdt_voice_web_manifest.json; do
+    if [[ -e "$RESOURCES/$name" ]]; then
+      mv "$RESOURCES/$name" "$OLD_RESOURCES/$name"
+      BACKED_UP+=("$name")
+    fi
+    if ! mv "$NEXT_RESOURCES/$name" "$RESOURCES/$name"; then
+      echo "ERROR: promotion failed for $name; rolling back." >&2
+      rollback_promotion
+      exit 5
+    fi
+    PROMOTED+=("$name")
+  done
+
+  echo "PASS: R82 resources promoted using guarded resume path."
+  echo "Previous resources backup retained at: $OLD_RESOURCES"
+  exit 0
+fi
 STAGE="$BUILD_STAGING_ROOT/desktop-backend-stage"; WORK="$BUILD_STAGING_ROOT/pyinstaller-work"; SPEC="$BUILD_STAGING_ROOT/pyinstaller-spec"
 # Build everything in staging. Do not destroy the current runnable resources until the replacement succeeds.
 rm -rf "$NEXT_RESOURCES" "$OLD_RESOURCES" "$STAGE" "$WORK" "$SPEC"
@@ -63,6 +134,7 @@ find "$VOICE_WEB_SOURCE" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak'
 cp -R "$VOICE_WEB_SOURCE/locales" "$WEB/locales"
 # Exclude Alpha editor backups from the packaged locale tree.
 find "$WEB/locales" -type f \( -name "*.bak" -o -name "*.bak.*" \) -delete
+cp -p "$RESOURCES/rdt_voice_web_manifest.json" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
 # Retain Connect-specific offline help and UI images from the existing resource set.
 for app_asset in RDT_Connect_Installation_Guide.png rdt-connect-server-running.png rdt-connect-server-stopped.png rdt-connect-windows-installation.png rdt-voice-EasySetup.png rdt-voice-ui.png rdt_logo_BIG_yellow_halo_trans_bg.png; do
   if [[ -f "$RESOURCES/rdt_voice_web/assets/$app_asset" ]]; then
@@ -78,11 +150,11 @@ ICON_DIR="$PROJECT_DIR/src-tauri/icons"; mkdir -p "$ICON_DIR"
 "$TAURI_CLI" icon "$LOGO_SOURCE" --output "$ICON_DIR"
 for icon_file in icon.png icon.icns 32x32.png 128x128.png 128x128@2x.png; do if [[ ! -s "$ICON_DIR/$icon_file" ]]; then echo "ERROR: Tauri icon generation did not create $ICON_DIR/$icon_file." >&2; exit 4; fi; done
 "$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$CONNECT_BACKEND_SOURCE" "$STAGE/server.py"
-if ! grep -Fq 'def _rdt_frozen_helper_guard' "$STAGE/server.py"; then
-  echo "ERROR: staged backend lost the frozen-helper guard." >&2
+if ! grep -Fq '@app.get("/assets/{asset_path:path}")' "$STAGE/server.py"; then
+  echo "ERROR: staged backend is missing the Connect same-origin asset route." >&2
   exit 4
 fi
-echo "PASS: staged backend uses RDT Connect source and retains frozen-helper guard."
+echo "PASS: canonical Voice backend staged with Connect desktop adaptations."
 ARGS=(--runtime-hook "$SCRIPT_DIR/pyi_rth_rdt_resource_tracker.py" --noconfirm --clean --onedir --add-data "$REPO_ROOT/backend/rdt_model_lock.json:." --name rdt_voice_backend --distpath "$NEXT_RESOURCES" --workpath "$WORK" --specpath "$SPEC" --collect-all mlx --collect-data mlx_whisper --collect-all fastapi --collect-all uvicorn --collect-all huggingface_hub --collect-all qrcode --collect-all multipart --hidden-import qrcode.image.svg --exclude-module torch)
 if "$PY" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("mlx_metal") else 1)'; then ARGS+=(--collect-all mlx_metal); fi
 "$PY" -m PyInstaller "${ARGS[@]}" "$STAGE/server.py"
@@ -164,10 +236,6 @@ This is not a complete transitive license audit. Public distribution still requi
 EOF
 "$PY" -m py_compile "$STAGE/server.py"
 
-# Fail closed against the exact current Alpha Testing runtime and Connect support assets.
-python3 "$SCRIPT_DIR/verify-alpha-r81-staging.py" \
-  "$VOICE_WEB_SOURCE" "$WEB" "$RESOURCES/rdt_voice_web/assets" \
-  "${RDT_VOICE_BUNDLE_VERSION:-alpha-testing-current}" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
 
 # Bundle pinned local Transformers.js and ONNX Runtime assets for offline inference.
 "$PY" "$OFFLINE_RUNTIME_TOOL" \
@@ -188,6 +256,11 @@ for runtime_file in \
   fi
 done
 echo "PASS: staged RDT Voice worker uses locally bundled inference runtime."
+
+# Fail closed against the exact current Alpha Testing runtime and Connect support assets.
+python3 "$SCRIPT_DIR/verify-alpha-r82-staging.py" \
+  "$VOICE_WEB_SOURCE" "$WEB" "$RESOURCES/rdt_voice_web/assets" \
+  "${RDT_VOICE_BUNDLE_VERSION:-alpha-testing-current}" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
 
 mkdir -p "$RESOURCES" "$OLD_RESOURCES"
 # Promote all staged resources. If any move fails, roll back every resource already promoted.

@@ -11,6 +11,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import struct
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -140,7 +141,107 @@ def main():
             stop(f"approved asset hash mismatch: {p}")
         verified_assets += 1
 
-    source_guide = ASSETS / "Guide" / "Installation_Guide.html"
+    source_guide = ROOT / "assets" / "macos-dmg-template" / "Installation_Guide.html"
+    if not source_guide.is_file():
+        stop(f"approved repository Installation_Guide.html is missing: {source_guide}")
+    TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
+    # Preserve the checked-in guide's macOS FinderInfo and ResourceFork.
+    # Path.write_bytes() silently drops both extended attributes.
+    def read_xattr_bytes(path, attr, label):
+        result = subprocess.run(
+            ["/usr/bin/xattr", "-px", attr, str(path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            stop(f"{label} is missing required metadata: {attr}")
+        try:
+            return bytes.fromhex(result.stdout)
+        except ValueError:
+            stop(f"could not decode {attr} metadata for {label}")
+
+    copy_result = subprocess.run(
+        [
+            "/usr/bin/ditto", "--rsrc", "--extattr", "--acl",
+            str(source_guide), str(TEMPLATE),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if copy_result.returncode != 0:
+        stop(f"could not stage Installation_Guide.html with metadata: {copy_result.stderr.strip()}")
+
+    for attr in ("com.apple.FinderInfo", "com.apple.ResourceFork"):
+        source_value = read_xattr_bytes(source_guide, attr, "repository guide")
+        staged_value = read_xattr_bytes(TEMPLATE, attr, "staged guide")
+        if source_value != staged_value:
+            stop(f"staged guide metadata differs from repository source: {attr}")
+    print("PASS: staged Installation Guide preserves FinderInfo and ResourceFork exactly.")
+    print(f"Staged approved Installation Guide: {TEMPLATE}")
+    # Apply the permanent repository icon to the staged guide, never Downloads.
+    guide_icon = ROOT / "assets" / "macos-dmg-template" / "rdt_connect_guide_icon_240.png"
+    icon_helper = ROOT / "scripts" / "apply-macos-file-icon.swift"
+    if not guide_icon.is_file():
+        stop(f"permanent Installation Guide icon is missing: {guide_icon}")
+    if not icon_helper.is_file():
+        stop(f"native Finder icon helper is missing: {icon_helper}")
+
+    icon_bytes = guide_icon.read_bytes()
+    if len(icon_bytes) < 24 or icon_bytes[:8] != bytes.fromhex("89504e470d0a1a0a"):
+        stop("Installation Guide icon is not a valid PNG.")
+    icon_width = int.from_bytes(icon_bytes[16:20], "big")
+    icon_height = int.from_bytes(icon_bytes[20:24], "big")
+    if (icon_width, icon_height) != (240, 240):
+        stop(f"expected the permanent 240x240 guide icon, got {icon_width}x{icon_height}.")
+
+    run(["swift", str(icon_helper), str(guide_icon), str(TEMPLATE)])
+
+    finder_info = read_xattr_bytes(TEMPLATE, "com.apple.FinderInfo", "iconized staged guide")
+    if len(finder_info) != 32 or not (int.from_bytes(finder_info[8:10], "big") & 0x0400):
+        stop("staged Installation Guide does not have Finder's custom-icon flag.")
+
+    resource_fork = read_xattr_bytes(TEMPLATE, "com.apple.ResourceFork", "iconized staged guide")
+    if len(resource_fork) < 28:
+        stop("staged Installation Guide custom icon resource fork is missing.")
+    data_offset, map_offset, data_length, map_length = struct.unpack(">IIII", resource_fork[:16])
+    if data_offset + data_length > len(resource_fork) or map_offset + map_length > len(resource_fork):
+        stop("staged Installation Guide custom icon resource fork has invalid bounds.")
+    resource_map = resource_fork[map_offset:map_offset + map_length]
+    type_base = int.from_bytes(resource_map[24:26], "big")
+    if type_base + 2 > len(resource_map):
+        stop("staged Installation Guide custom icon resource map is invalid.")
+    type_count = int.from_bytes(resource_map[type_base:type_base + 2], "big") + 1
+    icon_verified = False
+    for index in range(type_count):
+        entry = type_base + 2 + index * 8
+        if entry + 8 > len(resource_map):
+            stop("staged Installation Guide resource type list is truncated.")
+        kind = resource_map[entry:entry + 4]
+        count = int.from_bytes(resource_map[entry + 4:entry + 6], "big") + 1
+        refs = type_base + int.from_bytes(resource_map[entry + 6:entry + 8], "big")
+        if kind != b"icns":
+            continue
+        for item in range(count):
+            ref = refs + item * 12
+            if ref + 12 > len(resource_map):
+                stop("staged Installation Guide ICNS reference is truncated.")
+            resource_id = int.from_bytes(resource_map[ref:ref + 2], "big", signed=True)
+            relative = int.from_bytes(resource_map[ref + 5:ref + 8], "big")
+            position = data_offset + relative
+            if position + 4 > len(resource_fork):
+                stop("staged Installation Guide ICNS resource offset is invalid.")
+            payload_size = int.from_bytes(resource_fork[position:position + 4], "big")
+            payload = resource_fork[position + 4:position + 4 + payload_size]
+            if resource_id == -16455 and payload[:4] == b"icns" and int.from_bytes(payload[4:8], "big") == len(payload):
+                icon_verified = True
+    if not icon_verified:
+        stop("staged Installation Guide is missing Finder's valid custom ICNS resource.")
+    print("PASS: permanent 240x240 PNG applied; Finder flag and ICNS resource verified.")
+
     guide_assets = ASSETS / "Guide" / ".rdt-connect-install-guide-assets"
     background = ASSETS / layout["background"]
 
@@ -255,6 +356,15 @@ def main():
     staged_assets = staging / ".rdt-connect-install-guide-assets"
 
     run(["/usr/bin/ditto", "--rsrc", "--extattr", "--acl", bundle, staged_app])
+    # RDT Connect staged-app MLX normalization v1
+    # ditto may materialize relative metallib symlinks as regular files.
+    # Normalize only the disposable DMG staging copy, never the built app.
+    mlx_tool = ROOT / "scripts" / "dedupe-macos-mlx-metallib.py"
+    if not mlx_tool.is_file():
+        stop(f"required MLX metallib normalizer is missing: {mlx_tool}")
+    run([sys.executable, str(mlx_tool), str(staged_app)])
+    run([sys.executable, str(mlx_tool), str(staged_app), "--verify-only"])
+
     run(["/usr/bin/ditto", "--rsrc", "--extattr", "--acl", TEMPLATE, staged_guide])
     run(["/usr/bin/ditto", "--rsrc", "--extattr", "--acl", guide_assets, staged_assets])
 
@@ -316,7 +426,7 @@ icon_locations = {{
                 str(mounted_app),
                 "--verify-only",
                 "--max-app-mib",
-                "610",
+                "590",
             ],
             check=False,
         )
@@ -350,14 +460,11 @@ icon_locations = {{
             stop("the mounted app does not register rdtconnect.")
 
         for attr in ("com.apple.FinderInfo", "com.apple.ResourceFork"):
-            result = subprocess.run(
-                ["/usr/bin/xattr", "-p", attr, str(mounted_guide)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
-            if result.returncode != 0:
-                stop(f"custom guide icon metadata missing after packaging: {attr}")
+            staged_value = read_xattr_bytes(TEMPLATE, attr, "iconized staged guide")
+            mounted_value = read_xattr_bytes(mounted_guide, attr, "mounted DMG guide")
+            if staged_value != mounted_value:
+                stop(f"custom guide icon metadata differs after DMG packaging: {attr}")
+        print("PASS: mounted guide FinderInfo and ResourceFork match iconized staged guide.")
 
         print("PASS: disk image verified, app hash matches, URL scheme present,")
         print("      Applications link, Finder background, guide and icon metadata checked.")

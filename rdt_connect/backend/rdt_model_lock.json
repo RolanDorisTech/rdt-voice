@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "mlx_whisper_version": "0.4.3",
+  "official_endpoint": "https://huggingface.co",
+  "models": {
+    "mlx-community/whisper-tiny-mlx": {
+      "revision": "c7878c3b3d70dfdf4489bd36016335857141627b",
+      "weight_file": "weights.npz",
+      "sha256": "0e03a5993d6eea43b07ee2dcc772b0e4cef5bb227257dacc24bf289387d49186",
+      "size_estimate_bytes": 74418540
+    },
+    "mlx-community/whisper-base-mlx": {
+      "revision": "66c3d673f9c572cbc511ee97e884580b4ad80982",
+      "weight_file": "weights.npz",
+      "sha256": "2f57d5f3ef473054c638961f90716f4ee415e8108de81313eccb2c5fd62eff0b",
+      "size_estimate_bytes": 144000000
+    },
+    "mlx-community/whisper-small-mlx": {
+      "revision": "eb52dbc58f50f19eb8c87b54b7c621633c67b7e0",
+      "weight_file": "weights.npz",
+      "sha256": "55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5",
+      "size_estimate_bytes": 481000000
+    },
+    "mlx-community/whisper-large-v3-turbo": {
+      "revision": "f7f36a552f0b2fe385e92622c39b334c817c08d4",
+      "weight_file": "weights.npz",
+      "sha256": "43d428f9d61dc1fe3dc823c5c77455ec5a69e846177328fb7dcb2dfb5a269477",
+      "size_estimate_bytes": 1614089376
+    },
+    "mlx-community/whisper-large-v3-mlx": {
+      "revision": "c3d0fa94996c3f745c5e7f185b232ecc741070f1",
+      "weight_file": "weights.npz",
+      "sha256": "05ff791ce3630fae47e7c51004e9666204d786246ec07cac6110af768099b40d",
+      "size_estimate_bytes": 3083520416
+    }
+  }
+}

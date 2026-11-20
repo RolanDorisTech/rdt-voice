@@ -140,9 +140,10 @@
     "assets/rdt-voice-ui.png": "dbdf9559025e69e45c0e57311914ed37e36ceb8f965a16fe2a58ae1409d2d461",
     "assets/rdt_logo_BIG_yellow_halo_trans_bg.png": "02a6425f42de6d24a51bf174a434ae541542db370ccaf68dcd687d22d1badd26"
   },
-  "file_count": 78,
+  "file_count": 79,
   "files": {
     "assets/RDT_Connect_Installation_Guide.png": "380c8cd5f179b65830338c01804e6186a57cade3d99c0e361568eb142c4d3012",
+    "assets/badges/windows.svg": "3ace915fa6c2dfbb08e49888c9567cda53d6ff5f0f4a2a8cb4a16eabac0e7093",
     "assets/logo.png": "7716e498ccc1e25719db1df34f8fb1d909595b53112d41d970a59f377b4f2128",
     "assets/opencc-js-1.4.2-full.js": "95b04abf136d9c28263773bb7d357eac80b7954d101efd23c4d09c737d3d379e",
     "assets/rdt-connect-server-running.png": "9686e687d1d041446e439488a4ec2d501f5e372cedb7c5c485011f35a6c3a690",

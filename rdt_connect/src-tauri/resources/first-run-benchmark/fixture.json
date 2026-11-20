@@ -1,0 +1,19 @@
+{
+  "schema": "rdt-connect-benchmark-fixture-v1",
+  "fixture_id": "rdt-user-voice-first-run-12s-v1",
+  "name": "RDT Connect user voice first-run benchmark",
+  "source": "User-provided voice recording",
+  "language": "en",
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "sample_format": "signed 16-bit PCM",
+  "transcript": "Every morning, a traveler checks the weather, packs a light bag, and walks along the river. A nearby train slows at the station; people step onto the platform.",
+  "duration_seconds": 12.0294375,
+  "sample_width_bytes": 2,
+  "frames": 192471,
+  "sha256": "55c7b7d3b127a50ce6943a08e0078ff3aa67f42ca926814201a819654914450a",
+  "reference_sha256": "c2a2654a48f82a06d23928bd46b85a5801fb40935bcaa3fbfb356ccbd75aca56",
+  "transformations": [
+    "User-created word-boundary excerpt; no further trimming or audio transformation."
+  ]
+}

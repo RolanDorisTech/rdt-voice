@@ -1,0 +1,21 @@
+{
+  "fixture_id": "rdt-user-voice-manual-21s-v1",
+  "dataset": "User-provided voice recording",
+  "dataset_subset": "manual-comparison",
+  "source_recording_id": "user-owned-21s",
+  "source_audio_relative_path": "benchmark.wav",
+  "source_transcript_relative_path": "reference.txt",
+  "source": "User-provided voice recording",
+  "language": "en",
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "sample_format": "signed 16-bit PCM",
+  "license": "User-owned recording; no third-party corpus license.",
+  "attribution": "User-provided voice recording.",
+  "frames": 331612,
+  "duration_seconds": 20.72575,
+  "sample_width_bytes": 2,
+  "audio_sha256": "060ce7a72e16521bb90a646015b27bc714c662a155f3bd78371ed66c264d1938",
+  "reference_sha256": "dccad93bc419616aa333a82f44672673d00bd9dc6da12b696909224ff652baef",
+  "transcript": "Every morning, a traveler checks the weather, packs a light bag, and walks along the river. A nearby train slows at the station; people step onto the platform. They greet their friends and find a quiet seat. Before heading home, the traveler writes a note and saves it for tomorrow."
+}

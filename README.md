@@ -5,7 +5,7 @@
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
   <p><strong>Available for macOS and Windows; Linux packages are untested prereleases</strong></p>
   <p>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-1d04/RDT_Connect_0.2.0-dev.11.1D04_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d42/RDT_Connect_0.2.0-dev.12.1D42_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS"></a>
   <a href="#rdt-connect-downloads"><img src="assets/badges/windows.svg" alt="Windows" height="28"></a><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe"><img src="https://img.shields.io/badge/Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows x64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="Ubuntu ARM64"></a>
@@ -95,11 +95,11 @@ RDT Connect is optional. You can also use RDT Voice directly in a supported brow
 
 ## RDT Connect Downloads
 
-The macOS Dev 12 Build 1D35 package and the listed Dev 11 Windows/Linux packages are development prereleases. Platform-specific qualification is not interchangeable; use the release notes for the applicable build.
+The macOS Dev 12 Build 1D42 package and the listed Dev 11 Windows/Linux packages are development prereleases. Platform-specific qualification is not interchangeable; use the release notes for the applicable build.
 
 | Platform | Download | Version | Build | Size |
 |:---|:---:|:---:|:---:|---:|
-| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d35/RDT_Connect_0.2.0-dev.12.1D35_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d35) | `0.2.0-dev.12.1D35` | `1D35` | 248.2 MB |
+| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d42/RDT_Connect_0.2.0-dev.12.1D42_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d42) | `0.2.0-dev.12.1D42` | `1D42` | 227.8 MB |
 | Windows&nbsp;ARM64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `2A07` | 102.0&nbsp;MB |
 | Windows&nbsp;x64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `3A03` | 137.4&nbsp;MB |
 | Linux&nbsp;ARM64 | Not&nbsp;yet&nbsp;published | `0.2.0-dev.11` | `4L001` | 78.39&nbsp;MiB |
@@ -115,9 +115,9 @@ The macOS Dev 12 Build 1D35 package and the listed Dev 11 Windows/Linux packages
 
 <p align="center"><a href="docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html"><img src="assets/RDT_Connect_Installation_Guide.png" alt="Open the complete RDT Connect macOS installation guide" width="100%"></a></p>
 
-**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. Build 1D35 is for Apple Silicon, not Intel Macs. The macOS updater feed and version-selection fix are included in 1D35 and are designed to support subsequent same-platform builds.
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. Build 1D42 is for Apple Silicon, not Intel Macs. The macOS updater feed and version-selection fix are included in 1D42 and are designed to support subsequent same-platform builds.
 
-**Known 1D04 updater issue:** the macOS updater feed used by Build 1D04 was broken, so 1D04 may not discover the 1D35 update in-app. If you are still on 1D04, download and install Build 1D35 manually using the DMG above; do not rely on 1D04's in-app updater to find it.
+**Known 1D04 updater issue:** the macOS updater feed used by Build 1D04 was broken, so 1D04 may not discover the 1D42 update in-app. If you are still on 1D04, download and install Build 1D42 manually using the DMG above; do not rely on 1D04's in-app updater to find it.
 
 ### Windows
 

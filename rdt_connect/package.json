@@ -1,7 +1,7 @@
 {
   "name": "rdt-connect-desktop",
   "private": true,
-  "version": "0.2.0-dev.12.1D46",
+  "version": "0.2.0-dev.12.1D47",
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/check-embedded-rdt-voice.mjs",

@@ -513,7 +513,7 @@ function setDeveloperOptions(enabled: boolean) {
   syncDeveloperToggleButton();
   try { localStorage.setItem("rdt_connect_developer_options", String(enabled)); } catch { /* optional preference */ }
   localPortTools.classList.toggle("hidden", !enabled);
-  inferenceBenchmarkCard.classList.remove("hidden");
+  inferenceBenchmarkCard.classList.toggle("hidden", !developerOptionsEnabled);
   if (!enabled && localServerDetails) localServerDetails.open = false;
   if (!enabled && document.getElementById("view-developer")?.classList.contains("hidden") === false) setAppView("local");
   // Keep the model panel in sync immediately when Developer Options changes.
@@ -760,7 +760,7 @@ const inferenceBenchmarkCard = $("inference-benchmark-card");
 const openNativeBenchmarkButton = $("open-native-benchmark-button") as HTMLButtonElement;
 const trayTestPhraseStatus = document.querySelector<HTMLElement>("#tray-test-phrase-status");
 localPortTools.classList.toggle("hidden", !developerOptionsEnabled);
-inferenceBenchmarkCard.classList.remove("hidden");
+inferenceBenchmarkCard.classList.toggle("hidden", !developerOptionsEnabled);
 if (!developerOptionsEnabled && localServerDetails) localServerDetails.open = false;
 const portHelp = $("port-help");
 const displayPort = $("display-port");
@@ -4438,12 +4438,12 @@ const UPDATE_SUCCESS_STORAGE_KEY = "rdt_connect_pending_update_success_1d40";
 type PendingUpdateSuccess = { version: string; buildId: string; installedAt: number };
 
 function recordSuccessfulUpdateInstall(version: unknown): void {
-  if (typeof version !== "string" || !/^.+\.1D\.\d+$/i.test(version)) return;
-  const marker = version.match(/\.1D\.(\d+)$/i);
+  if (typeof version !== "string") return;
+  const marker = version.trim().match(/(?:^|\.)([0-9][A-Z][0-9]{2})$/i);
   if (!marker) return;
   const record: PendingUpdateSuccess = {
-    version,
-    buildId: `1D${marker[1]}`,
+    version: version.trim(),
+    buildId: marker[1].toUpperCase(),
     installedAt: Date.now(),
   };
   try {
@@ -4453,6 +4453,11 @@ function recordSuccessfulUpdateInstall(version: unknown): void {
   }
 }
 
+function normalizeUpdateVersionForComparison(version: string): string {
+  return version.trim()
+    .replace(/^v/i, "")
+    .replace(/\.[0-9][A-Z][0-9]{2}$/i, "");
+}
 function showUpdateSuccessDialog(version: string, buildId: string): void {
   const overlay = document.getElementById("rdt-update-success-dialog");
   const versionValue = document.getElementById("rdt-update-success-version");
@@ -4490,28 +4495,47 @@ function showUpdateSuccessDialog(version: string, buildId: string): void {
 }
 
 function consumePendingUpdateSuccess(actualVersion: string, actualBuildId: string): void {
-  let raw: string | null = null;
   try {
-    raw = localStorage.getItem(UPDATE_SUCCESS_STORAGE_KEY);
+    const raw = localStorage.getItem(UPDATE_SUCCESS_STORAGE_KEY);
     if (!raw) return;
-    // Consume before display so reloads and repeated metadata refreshes cannot show it twice.
-    localStorage.removeItem(UPDATE_SUCCESS_STORAGE_KEY);
+
     const record = JSON.parse(raw) as Partial<PendingUpdateSuccess>;
-    if (
-      typeof record.version !== "string" ||
-      typeof record.buildId !== "string" ||
-      typeof record.installedAt !== "number" ||
-      !Number.isFinite(record.installedAt) ||
-      Date.now() - record.installedAt < 0 ||
-      Date.now() - record.installedAt > 30 * 24 * 60 * 60 * 1000
-    ) return;
-    if (record.version !== actualVersion || record.buildId !== actualBuildId) return;
+    const now = Date.now();
+    const validRecord =
+      typeof record.version === "string" &&
+      record.version.trim().length > 0 &&
+      typeof record.buildId === "string" &&
+      /^\d[A-Z]\d{2}$/i.test(record.buildId) &&
+      typeof record.installedAt === "number" &&
+      Number.isFinite(record.installedAt) &&
+      now - record.installedAt >= 0 &&
+      now - record.installedAt <= 30 * 24 * 60 * 60 * 1000;
+
+    if (!validRecord) {
+      localStorage.removeItem(UPDATE_SUCCESS_STORAGE_KEY);
+      return;
+    }
+
+    const pendingVersion = record.version as string;
+    const pendingBuildId = record.buildId as string;
+    const versionMatches =
+      normalizeUpdateVersionForComparison(pendingVersion) ===
+      normalizeUpdateVersionForComparison(actualVersion);
+    const buildMatches =
+      pendingBuildId.toUpperCase() === actualBuildId.trim().toUpperCase();
+
+    if (!versionMatches || !buildMatches) return;
+
+    localStorage.removeItem(UPDATE_SUCCESS_STORAGE_KEY);
     showUpdateSuccessDialog(actualVersion, actualBuildId);
   } catch {
-    try { localStorage.removeItem(UPDATE_SUCCESS_STORAGE_KEY); } catch { /* best effort */ }
+    try {
+      localStorage.removeItem(UPDATE_SUCCESS_STORAGE_KEY);
+    } catch {
+      // Best-effort cleanup.
+    }
   }
 }
-
 async function refreshAppBuildInfo() {
   try {
     const info = await invoke<AppBuildInfo>("get_app_build_info");

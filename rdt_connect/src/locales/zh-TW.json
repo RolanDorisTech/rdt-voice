@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "已跳過硬體比較",
     "msg.benchmark_slower.1d20": "慢點",
     "msg.benchmark_test_order.1d22": "測試訂單",
-    "msg.benchmark_timing_limit.1d22": "將每個硬體選擇的基準計時限制為 60 秒",
+    "msg.benchmark_timing_limit.1d22": "為每種硬體套用時間限制",
+    "msg.benchmark_audio_label.1d23": "基準測試音訊",
+    "msg.benchmark_audio_12s.1d23": "12 秒錄音 · 每種硬體 60 秒",
+    "msg.benchmark_audio_21s.1d23": "20.7 秒錄音 · 每種硬體 120 秒",
     "msg.benchmark_title.1d22": "釋放您的硬體",
     "msg.benchmark_tooltip_faster_context.1d20": "根據測量的即時因素更快，但是",
     "msg.benchmark_tooltip_near_tie_context.1d20": "速度接近平局，但是",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "更新已成功安裝。您現在正在使用此版本。",
     "msg.update_success_version.1d40": "版本",
     "msg.update_success_build.1d40": "組建編號",
-    "msg.update_success_continue.1d40": "繼續"
+    "msg.update_success_continue.1d40": "繼續",
+    "msg.open_model_storage_folder.1d43": "開啟",
+    "msg.stop_server_to_change_default_folder.1d43": "請先停止伺服器，再變更預設資料夾。",
+    "msg.could_not_open_model_storage_folder.1d43": "無法開啟此資料夾：{error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "下次重新啟動時自動安裝更新",
   "msg.install_verified_updates_on_app_restart.1d30": "當您選擇重新啟動 RDT Connect 時，應用程式會先下載並驗證可用更新，再重新開啟。應用程式絕不會自行重新啟動。"

@@ -139,8 +139,396 @@ def _rdt_benchmark_lease_release(
 '''
 
 
+
+def _rdt_extract_top_level_function(source_text: str, name: str) -> str:
+    tree = ast.parse(source_text)
+    matches = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    ]
+    if len(matches) != 1:
+        raise SystemExit(
+            f"STOP: expected exactly one reference function {name}; found {len(matches)}."
+        )
+    lines = source_text.splitlines(keepends=True)
+    return "".join(lines[matches[0].lineno - 1:matches[0].end_lineno]).rstrip() + "\n"
+
+
+def _rdt_function_is_revision_pinned(source_text: str, name: str) -> bool:
+    tree = ast.parse(source_text)
+    matches = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    ]
+    if len(matches) != 1:
+        return False
+
+    function = matches[0]
+
+    def is_locked_revision(value):
+        return (
+            isinstance(value, ast.Subscript)
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "model_spec"
+            and isinstance(value.slice, ast.Constant)
+            and value.slice.value == "revision"
+        )
+
+    def expanded_dict_is_pinned(call, argument_name):
+        assignments = []
+        for node in ast.walk(function):
+            if not isinstance(node, ast.Assign) or node.lineno >= call.lineno:
+                continue
+            if any(
+                isinstance(target, ast.Name) and target.id == argument_name
+                for target in node.targets
+            ):
+                assignments.append(node)
+
+        if not assignments:
+            return False
+
+        latest = max(assignments, key=lambda node: node.lineno)
+        if not isinstance(latest.value, ast.Dict):
+            return False
+
+        for key, value in zip(latest.value.keys, latest.value.values):
+            if (
+                isinstance(key, ast.Constant)
+                and key.value == "revision"
+                and is_locked_revision(value)
+            ):
+                return True
+        return False
+
+    calls = []
+    for node in ast.walk(function):
+        if not isinstance(node, ast.Call):
+            continue
+        called_name = (
+            node.func.id if isinstance(node.func, ast.Name)
+            else node.func.attr if isinstance(node.func, ast.Attribute)
+            else None
+        )
+        if called_name == "snapshot_download":
+            calls.append(node)
+
+    if not calls:
+        return False
+
+    for call in calls:
+        revision = next(
+            (kw.value for kw in call.keywords if kw.arg == "revision"),
+            None,
+        )
+        if is_locked_revision(revision):
+            continue
+
+        expanded = any(
+            kw.arg is None
+            and isinstance(kw.value, ast.Name)
+            and expanded_dict_is_pinned(call, kw.value.id)
+            for kw in call.keywords
+        )
+        if not expanded:
+            return False
+
+    return True
+
+
+def _rdt_replace_top_level_function(
+    source_text: str, name: str, replacement: str
+) -> str:
+    tree = ast.parse(source_text)
+    matches = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    ]
+    if len(matches) != 1:
+        raise SystemExit(
+            f"STOP: expected exactly one target function {name}; found {len(matches)}."
+        )
+
+    node = matches[0]
+    lines = source_text.splitlines(keepends=True)
+    replacement_lines = (replacement.rstrip() + "\n").splitlines(keepends=True)
+    lines[node.lineno - 1:node.end_lineno] = replacement_lines
+    return "".join(lines)
+
+
+def _apply_connect_model_reliability(text: str) -> str:
+    reference_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "backend" / "apple" / "server.py"
+    )
+    if not reference_path.is_file():
+        raise SystemExit(
+            "STOP: Connect's reviewed Apple model-lock reference is missing."
+        )
+
+    reference = reference_path.read_text(encoding="utf-8")
+    helper_names = (
+        "_rdt_load_model_lock",
+        "_rdt_model_spec",
+        "_rdt_marker_path",
+        "_rdt_marker_is_current",
+        "_rdt_write_verified_marker",
+        "_rdt_model_snapshot_is_complete",
+        "_rdt_resolve_model_snapshot",
+    )
+
+    # Fail closed if the reviewed reference ever loses its pinned downloader contract.
+    if not _rdt_function_is_revision_pinned(reference, "_download_model_only"):
+        raise SystemExit(
+            "STOP: Apple reference downloader no longer pins every snapshot_download call."
+        )
+
+    target_tree = ast.parse(text)
+    target_names = {
+        node.name for node in target_tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    present = set(helper_names).intersection(target_names)
+
+    if present and present != set(helper_names):
+        raise SystemExit(
+            "STOP: staged source has only part of the Connect model-lock helper set."
+        )
+
+    if not present:
+        # The canonical Voice backend intentionally remains unmodified. Connect adds
+        # its private lock resolver only to the staged backend copy.
+        imports_tree = ast.parse(text)
+        has_sys = any(
+            isinstance(node, ast.Import) and
+            any(alias.name == "sys" for alias in node.names)
+            for node in imports_tree.body
+        )
+        if not has_sys:
+            typing_anchor = "from typing import"
+            if text.count(typing_anchor) != 1:
+                raise SystemExit("STOP: cannot safely add the frozen-resource sys import.")
+            text = text.replace(typing_anchor, "import sys\n" + typing_anchor, 1)
+
+        anchor = (
+            'MODEL_ID = os.getenv("WHISPER_MODEL_ID", '
+            '"mlx-community/whisper-large-v3-turbo")'
+        )
+        if text.count(anchor) != 1:
+            raise SystemExit("STOP: expected one canonical Voice MODEL_ID declaration.")
+
+        functions = [
+            _rdt_extract_top_level_function(reference, name)
+            for name in helper_names
+        ]
+        declarations = (
+            "_RDT_MODEL_LOCK_CACHE: Optional[dict] = None\n"
+            "_RDT_MODEL_LOCK_PATH: Optional[pathlib.Path] = None"
+        )
+        injected = declarations + "\n\n" + "\n\n".join(functions)
+        text = text.replace(anchor, anchor + "\n\n" + injected, 1)
+
+    # Replace the moving-main downloader with the exact reviewed implementation.
+    if not _rdt_function_is_revision_pinned(text, "_download_model_only"):
+        pinned_downloader = _rdt_extract_top_level_function(
+            reference, "_download_model_only"
+        )
+        text = _rdt_replace_top_level_function(
+            text, "_download_model_only", pinned_downloader
+        )
+
+    if not _rdt_function_is_revision_pinned(text, "_download_model_only"):
+        raise SystemExit("STOP: staged downloader is not fully revision-pinned.")
+
+    # Both warm-up and real transcription must resolve the same verified local snapshot.
+    direct_calls = "path_or_hf_repo=MODEL_ID"
+    resolved_calls = (
+        "path_or_hf_repo=_rdt_resolve_model_snapshot(MODEL_ID)"
+    )
+    direct_count = text.count(direct_calls)
+    resolved_count = text.count(resolved_calls)
+
+    if direct_count == 2 and resolved_count == 0:
+        text = text.replace(direct_calls, resolved_calls)
+    elif direct_count == 0 and (resolved_count == 2 or (resolved_count == 1 and "_warm_path" not in text)):
+        pass
+    else:
+        raise SystemExit(
+            "STOP: expected exactly two model inference resolver call sites; "
+            f"found direct={direct_count}, resolved={resolved_count}."
+        )
+
+    try:
+        compile(text, "<staged-rdt-connect-backend>", "exec")
+    except SyntaxError as exc:
+        raise SystemExit(f"STOP: staged model-reliability source is invalid: {exc}") from None
+
+    return text
+
+
+_CONNECT_SINGLE_PROCESS_GUARD = r"""
+# RDT Connect single-process guard restored from the 1D34 baseline.
+import sys as _rdt_sys
+import sys
+import threading
+import multiprocessing.resource_tracker as _rdt_resource_tracker
+
+def _rdt_disable_resource_tracking(*_args, **_kwargs):
+    return None
+
+_rdt_resource_tracker.register = _rdt_disable_resource_tracking
+_rdt_resource_tracker.unregister = _rdt_disable_resource_tracking
+_rdt_tracker = _rdt_resource_tracker._resource_tracker
+_rdt_tracker.register = _rdt_disable_resource_tracking
+_rdt_tracker.unregister = _rdt_disable_resource_tracking
+_rdt_tracker.ensure_running = _rdt_disable_resource_tracking
+
+def _rdt_frozen_helper_guard(argv):
+    try:
+        index = argv.index("-c", 1)
+    except ValueError:
+        return
+    command = argv[index + 1] if index + 1 < len(argv) else ""
+    helpers = (
+        "from multiprocessing.resource_tracker import main",
+        "from multiprocessing.forkserver import main",
+        "import sys; from multiprocessing.forkserver import main",
+    )
+    if command.startswith(helpers):
+        raise SystemExit(0)
+    _rdt_sys.stderr.write(
+        "[RDT] refusing an unexpected frozen Python -c invocation\n"
+    )
+    raise SystemExit(64)
+
+if __name__ == "__main__":
+    _rdt_frozen_helper_guard(_rdt_sys.argv)
+
+try:
+    from tqdm import tqdm as _rdt_std_tqdm
+    _rdt_std_tqdm.set_lock(threading.RLock())
+except ImportError:
+    _rdt_std_tqdm = None
+"""
+
+def _apply_connect_single_process_guard(text: str) -> str:
+    marker = "# RDT Connect single-process guard restored from the 1D34 baseline."
+    required = (
+        "_rdt_resource_tracker.register = _rdt_disable_resource_tracking",
+        "_rdt_tracker.ensure_running = _rdt_disable_resource_tracking",
+        "from multiprocessing.forkserver import main",
+        "_rdt_std_tqdm.set_lock(threading.RLock())",
+    )
+    if marker in text:
+        if not all(item in text for item in required):
+            raise SystemExit("STOP: existing single-process guard is incomplete.")
+        return text
+
+    tree = ast.parse(text)
+    body = tree.body
+    if not body:
+        raise SystemExit("STOP: backend source has no module body.")
+
+    insertion_line = 0
+    index = 0
+    if (
+        isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
+        insertion_line = body[0].end_lineno
+        index = 1
+
+    while index < len(body):
+        node = body[index]
+        if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+            insertion_line = max(insertion_line, node.end_lineno)
+            index += 1
+            continue
+        break
+
+    if insertion_line == 0:
+        insertion_line = body[0].lineno - 1
+
+    lines = text.splitlines(keepends=True)
+    offset = sum(len(line) for line in lines[:insertion_line])
+    guard = _CONNECT_SINGLE_PROCESS_GUARD.strip()
+    result = text[:offset] + "\n" + guard + "\n\n" + text[offset:]
+    compile(result, "<connect-single-process-guard>", "exec")
+    return result
+
+
+def _remove_connect_startup_warmup(text: str) -> str:
+    start_marker = "# Warmup\n"
+    end_marker = "\ndef clean_transcript_enhanced"
+    if start_marker not in text:
+        return text
+    if text.count(start_marker) != 1:
+        raise SystemExit("STOP: ambiguous startup warmup block.")
+    start = text.index(start_marker)
+    end = text.find(end_marker, start)
+    if end < 0:
+        raise SystemExit("STOP: startup warmup end marker not found.")
+    result = (
+        text[:start]
+        + "# RDT Connect: defer model loading until real transcription.\n"
+        + text[end + 1:]
+    )
+    if "_warm_path" in result:
+        raise SystemExit("STOP: synthetic warmup path remains after removal.")
+    compile(result, "<connect-without-startup-warmup>", "exec")
+    return result
+
+
+
+
+def _apply_connect_tiny_download_model_id(text: str) -> str:
+    """Align Connect's staged download CLI with the shared Tiny model-lock ID."""
+    tree = ast.parse(text)
+    matches = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "add_argument" or not node.args:
+            continue
+        arg = node.args[0]
+        if isinstance(arg, ast.Constant) and arg.value == "--download-model":
+            choices = next((kw.value for kw in node.keywords if kw.arg == "choices"), None)
+            matches.append((node, choices))
+    if len(matches) != 1 or not isinstance(matches[0][1], ast.List):
+        raise SystemExit("STOP: expected one literal --download-model choices list.")
+
+    node, choices = matches[0]
+    old_id = "mlx-community/whisper-tiny"
+    new_id = "mlx-community/whisper-tiny-mlx"
+    values = [
+        x.value for x in choices.elts
+        if isinstance(x, ast.Constant) and isinstance(x.value, str)
+    ]
+    if new_id in values and old_id not in values:
+        return text
+    if values.count(old_id) != 1 or new_id in values:
+        raise SystemExit("STOP: Tiny model IDs in CLI allowlist are ambiguous.")
+
+    lines = text.splitlines(keepends=True)
+    block = "".join(lines[node.lineno - 1:node.end_lineno])
+    literal = '"mlx-community/whisper-tiny"'
+    if block.count(literal) != 1:
+        raise SystemExit("STOP: Tiny source literal is not unique.")
+    lines[node.lineno - 1:node.end_lineno] = [
+        block.replace(literal, '"mlx-community/whisper-tiny-mlx"', 1)
+    ]
+    result = "".join(lines)
+    compile(result, "<connect-tiny-cli-adapter>", "exec")
+    return result
+
+
 def patch(source: pathlib.Path) -> str:
     text = source.read_text(encoding="utf-8")
+    text = _apply_connect_tiny_download_model_id(text)
+    text = _apply_connect_single_process_guard(text)
+    text = _apply_connect_model_reliability(text)
+    text = _remove_connect_startup_warmup(text)
     exchange_route = '@app.post("/v1/browser-handoff/exchange")'
     audio_route = '@app.post("/v1/audio/transcriptions")'
     if text.count(exchange_route) != 1 or text.count(audio_route) != 1:
@@ -449,7 +837,102 @@ def _rdt_desktop_loopback_origin(origin, host):
         ast.parse(text)
         compile(text, str(source), "exec")
 
-    return text
+    return patch_socket_first_uvicorn_startup(text)
+
+
+
+def patch_socket_first_uvicorn_startup(text: str) -> str:
+    """Bind the Rust-selected listener before Uvicorn runs ASGI lifespan."""
+    tree = ast.parse(text)
+    parents = {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+    launches = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "uvicorn"
+        and node.func.attr == "run"
+    ]
+    if not launches:
+        if "uvicorn.Server(_rdt_uvicorn_config).run(sockets=[_rdt_listen_socket])" in text:
+            return text
+        raise SystemExit("STOP: production Uvicorn launch was not found.")
+    if len(launches) != 1:
+        raise SystemExit(f"STOP: expected one production uvicorn.run call; found {len(launches)}.")
+
+    call = launches[0]
+    if len(call.args) != 1 or not isinstance(call.args[0], ast.Name) or call.args[0].id != "app":
+        raise SystemExit("STOP: Uvicorn launch app argument changed.")
+    keywords = {item.arg: item.value for item in call.keywords if item.arg is not None}
+    has_kwargs = any(
+        item.arg is None and isinstance(item.value, ast.Name) and item.value.id == "kwargs"
+        for item in call.keywords
+    )
+    if set(keywords) != {"host", "port"} or not has_kwargs:
+        raise SystemExit("STOP: Uvicorn host/port/TLS kwargs contract changed.")
+    if ast.dump(keywords["host"]) != ast.dump(ast.Name(id="_bind_host", ctx=ast.Load())):
+        raise SystemExit("STOP: Uvicorn bind-host source changed.")
+    expected_port = ast.Attribute(value=ast.Name(id="_args", ctx=ast.Load()),
+                                   attr="port", ctx=ast.Load())
+    if ast.dump(keywords["port"]) != ast.dump(expected_port):
+        raise SystemExit("STOP: Uvicorn port is no longer the Rust-selected CLI port.")
+
+    ancestor = call
+    in_main_guard = False
+    while ancestor in parents:
+        ancestor = parents[ancestor]
+        if isinstance(ancestor, ast.If):
+            test_node = ancestor.test
+            if (isinstance(test_node, ast.Compare)
+                and isinstance(test_node.left, ast.Name)
+                and test_node.left.id == "__name__"
+                and len(test_node.comparators) == 1
+                and isinstance(test_node.comparators[0], ast.Constant)
+                and test_node.comparators[0].value == "__main__"):
+                in_main_guard = True
+                break
+    if not in_main_guard:
+        raise SystemExit("STOP: Uvicorn launch is not inside the __main__ guard.")
+
+    lines = text.splitlines(keepends=True)
+    original = lines[call.lineno - 1]
+    indent = original[:len(original) - len(original.lstrip())]
+    block = [
+        "# Bind before Uvicorn's ASGI lifespan can initialize the model/GPU.",
+        "import socket as _rdt_socket",
+        "_rdt_family = _rdt_socket.AF_INET6 if ':' in _bind_host else _rdt_socket.AF_INET",
+        "_rdt_listen_socket = _rdt_socket.socket(_rdt_family, _rdt_socket.SOCK_STREAM)",
+        "try:",
+        "    if hasattr(_rdt_socket, 'SO_EXCLUSIVEADDRUSE'):",
+        "        _rdt_listen_socket.setsockopt(_rdt_socket.SOL_SOCKET, _rdt_socket.SO_EXCLUSIVEADDRUSE, 1)",
+        "    else:",
+        "        _rdt_listen_socket.setsockopt(_rdt_socket.SOL_SOCKET, _rdt_socket.SO_REUSEADDR, 1)",
+        "    try:",
+        "        _rdt_listen_socket.bind((_bind_host, _args.port))",
+        "        _rdt_listen_socket.listen(2048)",
+        "    except OSError as _rdt_bind_error:",
+        "        print(f'[RDT] listener bind failed on {_bind_host}:{_args.port}: {_rdt_bind_error}', file=sys.stderr, flush=True)",
+        "        raise",
+        "    _rdt_listen_socket.setblocking(False)",
+        "    _rdt_uvicorn_config = uvicorn.Config(app, host=_bind_host, port=_args.port, **kwargs)",
+        "    uvicorn.Server(_rdt_uvicorn_config).run(sockets=[_rdt_listen_socket])",
+        "finally:",
+        "    _rdt_listen_socket.close()",
+    ]
+    replacement = "\n".join(indent + item for item in block) + "\n"
+    lines[call.lineno - 1:call.end_lineno] = [replacement]
+    updated = "".join(lines)
+    parsed = ast.parse(updated)
+    compile(parsed, "<rdt-connect-staged-backend>", "exec")
+    if "uvicorn.run(" in updated or "SO_REUSEPORT" in updated:
+        raise SystemExit("STOP: unsafe or duplicate Uvicorn listener path remains.")
+    if updated.count("uvicorn.Server(_rdt_uvicorn_config).run(sockets=[_rdt_listen_socket])") != 1:
+        raise SystemExit("STOP: socket handoff was not emitted exactly once.")
+    return updated
 
 
 def main() -> int:

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "ข้ามการเปรียบเทียบฮาร์ดแวร์",
     "msg.benchmark_slower.1d20": "ช้าลง",
     "msg.benchmark_test_order.1d22": "คำสั่งทดสอบ",
-    "msg.benchmark_timing_limit.1d22": "จำกัดเวลาการวัดประสิทธิภาพไว้ที่ 60 วินาทีต่อการเลือกฮาร์ดแวร์",
+    "msg.benchmark_timing_limit.1d22": "ใช้การจำกัดเวลาต่อฮาร์ดแวร์",
+    "msg.benchmark_audio_label.1d23": "เสียงสำหรับทดสอบ",
+    "msg.benchmark_audio_12s.1d23": "เสียง 12 วินาที · 60 วินาทีต่อฮาร์ดแวร์",
+    "msg.benchmark_audio_21s.1d23": "เสียง 20.7 วินาที · 120 วินาทีต่อฮาร์ดแวร์",
     "msg.benchmark_title.1d22": "ปลดปล่อยฮาร์ดแวร์ของคุณ",
     "msg.benchmark_tooltip_faster_context.1d20": "เร็วขึ้นด้วยการวัดปัจจัยแบบเรียลไทม์ แต่",
     "msg.benchmark_tooltip_near_tie_context.1d20": "ความเร็วใกล้จะเสมอกัน แต่.",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "ติดตั้งการอัปเดตเรียบร้อยแล้ว ขณะนี้คุณกำลังใช้เวอร์ชันนี้",
     "msg.update_success_version.1d40": "เวอร์ชัน",
     "msg.update_success_build.1d40": "หมายเลขบิลด์",
-    "msg.update_success_continue.1d40": "ดำเนินการต่อ"
+    "msg.update_success_continue.1d40": "ดำเนินการต่อ",
+    "msg.open_model_storage_folder.1d43": "เปิด",
+    "msg.stop_server_to_change_default_folder.1d43": "หยุดเซิร์ฟเวอร์ก่อนเพื่อเปลี่ยนโฟลเดอร์เริ่มต้น",
+    "msg.could_not_open_model_storage_folder.1d43": "ไม่สามารถเปิดโฟลเดอร์นี้ได้: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "ติดตั้งการอัปเดตโดยอัตโนมัติเมื่อเริ่มใหม่ครั้งถัดไป",
   "msg.install_verified_updates_on_app_restart.1d30": "เมื่อเลือกเริ่ม RDT Connect ใหม่ ระบบจะดาวน์โหลดและตรวจสอบการอัปเดตก่อนเปิดแอปอีกครั้ง แอปจะไม่เริ่มใหม่เอง"

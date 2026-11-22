@@ -361,6 +361,7 @@ struct BackendInner {
     process_group: Option<u32>,
     port: Option<u16>,
     model: Option<String>,
+    applied_inference_device_preference: Option<String>,
     uses_https: bool,
     managed_serve_port: Option<u16>,
     // Holds an OS-level flock for as long as this manager owns a backend.
@@ -377,6 +378,7 @@ struct BackendState {
     model_download_pid: Arc<Mutex<Option<ProcessSnapshot>>>,
     model_download_log_path: Arc<Mutex<Option<PathBuf>>>,
     model_download_cancel_requested: Arc<AtomicBool>,
+    model_download_finalization: Arc<Mutex<()>>,
     resource_dir: PathBuf,
     token_path: PathBuf,
     log_path: PathBuf,
@@ -402,6 +404,7 @@ struct BackendStatus {
     pid: Option<u32>,
     port: Option<u16>,
     model: Option<String>,
+    applied_inference_device_preference: Option<String>,
     local_url: Option<String>,
     log_path: String,
 }
@@ -699,6 +702,7 @@ impl BackendState {
             model_download_pid: Arc::new(Mutex::new(None)),
             model_download_log_path: Arc::new(Mutex::new(None)),
             model_download_cancel_requested: Arc::new(AtomicBool::new(false)),
+            model_download_finalization: Arc::new(Mutex::new(())),
             resource_dir,
             token_path,
             log_path,
@@ -740,6 +744,7 @@ impl BackendState {
             inner.process_group = None;
             inner.port = None;
             inner.model = None;
+            inner.applied_inference_device_preference = None;
             inner.managed_serve_port = None;
             inner.uses_https = false;
             inner.managed_lock = None;
@@ -754,6 +759,7 @@ impl BackendState {
                 .or(inner.process_group),
             port: inner.port,
             model: inner.model.clone(),
+            applied_inference_device_preference: inner.applied_inference_device_preference.clone(),
             local_url: inner.port.map(|p| {
                 format!(
                     "{}://127.0.0.1:{p}",
@@ -828,7 +834,15 @@ impl BackendState {
 
     fn stop(&self) -> Result<BackendStatus, String> {
         let _lifecycle = self.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
-        let (mut child, process_group, managed_serve_port, managed_lock, old_port, old_model) = {
+        let (
+            mut child,
+            process_group,
+            managed_serve_port,
+            managed_lock,
+            old_port,
+            old_model,
+            old_applied_inference_device_preference,
+        ) = {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             (
                 inner.child.take(),
@@ -837,6 +851,7 @@ impl BackendState {
                 inner.managed_lock.take(),
                 inner.port,
                 inner.model.clone(),
+                inner.applied_inference_device_preference.clone(),
             )
         };
         // Remember the actual managed listener before releasing process ownership.
@@ -870,6 +885,8 @@ impl BackendState {
             inner.process_group = group;
             inner.port = old_port;
             inner.model = old_model;
+            inner.applied_inference_device_preference =
+                old_applied_inference_device_preference.clone();
             inner.managed_serve_port = managed_serve_port;
             inner.managed_lock = managed_lock;
             return Err(format!("Stop did not complete: managed process group {} is still alive after termination was requested. Ownership was retained; retry Stop or inspect the process details.", group.unwrap_or(0)));
@@ -884,6 +901,8 @@ impl BackendState {
                 inner.process_group = group;
                 inner.port = old_port;
                 inner.model = old_model;
+                inner.applied_inference_device_preference =
+                    old_applied_inference_device_preference.clone();
                 inner.managed_serve_port = managed_serve_port;
                 inner.managed_lock = managed_lock;
                 return Err(format!(
@@ -896,6 +915,7 @@ impl BackendState {
         inner.process_group = None;
         inner.port = None;
         inner.model = None;
+        inner.applied_inference_device_preference = None;
         inner.uses_https = false;
         drop(inner);
         // Release the process-wide lock only after the complete process group is gone.
@@ -923,19 +943,18 @@ fn process_group_alive(group_id: u32) -> bool {
 
 #[cfg(windows)]
 fn process_group_alive(group_id: u32) -> bool {
-    let snapshot = process_snapshot();
-    // An empty snapshot means process enumeration failed, not that the group
-    // was proven absent. Fail closed so Stop cannot report success on uncertainty.
-    if snapshot.is_empty() {
-        return true;
+    match process_snapshot_result() {
+        Ok(snapshot) => {
+            snapshot
+                .iter()
+                .any(|item| item.pid == group_id && !item.stat.starts_with('Z'))
+                || snapshot
+                    .iter()
+                    .any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+                || !windows_descendant_pids(group_id, &snapshot).is_empty()
+        }
+        Err(_) => true,
     }
-    snapshot
-        .iter()
-        .any(|item| item.pid == group_id && !item.stat.starts_with('Z'))
-        || snapshot
-            .iter()
-            .any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
-        || !windows_descendant_pids(group_id, &snapshot).is_empty()
 }
 
 #[cfg(windows)]
@@ -988,12 +1007,7 @@ fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
         return Err("Safety check refused to signal an invalid Windows process ID.".into());
     }
 
-    let snapshot = process_snapshot();
-    if snapshot.is_empty() {
-        return Err(
-            "Could not inspect the Windows process table; no termination request was sent.".into(),
-        );
-    }
+    let snapshot = process_snapshot_result()?;
     let process_is_present = snapshot
         .iter()
         .any(|item| item.pid == pid && !item.stat.starts_with('Z'));
@@ -1045,12 +1059,7 @@ fn send_signal_checked(target: i32, signal: i32) -> Result<(), String> {
         return Ok(());
     }
 
-    let after = process_snapshot();
-    if after.is_empty() {
-        return Err(format!(
-            "Windows taskkill did not confirm termination of PID {pid}, and RDT Connect could not inspect the process table to verify the result."
-        ));
-    }
+    let after = process_snapshot_result()?;
     let still_present = if is_tree {
         after
             .iter()
@@ -1110,13 +1119,6 @@ fn terminate_process_group(group_id: u32, mut child: Option<&mut Child>) -> bool
         thread::sleep(Duration::from_millis(100));
     }
     !process_group_alive(group_id)
-}
-
-#[cfg(unix)]
-fn process_group_has_live_member(group_id: u32) -> bool {
-    process_snapshot()
-        .iter()
-        .any(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
 }
 
 #[cfg(windows)]
@@ -1729,39 +1731,177 @@ fn candidate_listener_ownership_verified(
     }
 }
 
+fn checked_process_snapshot_output<Parse>(
+    command_name: &str,
+    command_output: Result<(bool, String), String>,
+    parse: Parse,
+) -> Result<Vec<ProcessSnapshot>, String>
+where
+    Parse: FnOnce(&str) -> Result<Vec<ProcessSnapshot>, String>,
+{
+    let (successful, stdout) = command_output.map_err(|error| {
+        format!("Could not launch process-table inspection ({command_name}): {error}")
+    })?;
+
+    if !successful {
+        return Err(format!(
+            "Process-table inspection ({command_name}) exited unsuccessfully."
+        ));
+    }
+
+    let snapshot = parse(&stdout)?;
+    if snapshot.is_empty() {
+        return Err(format!(
+            "Process-table inspection ({command_name}) returned no process records."
+        ));
+    }
+
+    Ok(snapshot)
+}
+
+fn parse_unix_process_snapshot(output: &str) -> Result<Vec<ProcessSnapshot>, String> {
+    let mut snapshot = Vec::new();
+
+    for (line_index, line) in output.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 10 {
+            return Err(format!(
+                "The Unix process table contains a malformed row {}.",
+                line_index + 1
+            ));
+        }
+
+        let parse_number = |index: usize, name: &str| {
+            fields[index].parse::<u32>().map_err(|_| {
+                format!(
+                    "The Unix process table has an invalid {name} in row {}.",
+                    line_index + 1
+                )
+            })
+        };
+
+        snapshot.push(ProcessSnapshot {
+            pid: parse_number(0, "PID")?,
+            ppid: parse_number(1, "parent PID")?,
+            pgid: parse_number(2, "process-group ID")?,
+            stat: fields[3].to_string(),
+            started: fields[4..9].join(" "),
+            command: fields[9..].join(" "),
+        });
+    }
+
+    if snapshot.is_empty() {
+        return Err("The Unix process table was empty.".into());
+    }
+
+    Ok(snapshot)
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_windows_process_u32(row: &Value, field: &str, row_number: usize) -> Result<u32, String> {
+    let value = row
+        .get(field)
+        .ok_or_else(|| format!("Windows process-table row {row_number} is missing {field}."))?;
+
+    let number = value
+        .as_u64()
+        .or_else(|| value.as_str().and_then(|text| text.parse::<u64>().ok()))
+        .ok_or_else(|| format!("Windows process-table row {row_number} has invalid {field}."))?;
+
+    u32::try_from(number)
+        .map_err(|_| format!("Windows process-table row {row_number} has out-of-range {field}."))
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_windows_process_snapshot(value: Value) -> Result<Vec<ProcessSnapshot>, String> {
+    let rows: Vec<&Value> = match &value {
+        Value::Array(rows) => rows.iter().collect(),
+        Value::Object(_) => vec![&value],
+        _ => {
+            return Err("Windows process-table output was not a JSON object or array.".into());
+        }
+    };
+
+    if rows.is_empty() {
+        return Err("The Windows process table was empty.".into());
+    }
+
+    let mut snapshot = Vec::with_capacity(rows.len());
+
+    for (index, row) in rows.into_iter().enumerate() {
+        let row_number = index + 1;
+        if !row.is_object() {
+            return Err(format!(
+                "Windows process-table row {row_number} was not an object."
+            ));
+        }
+
+        let pid = parse_windows_process_u32(row, "ProcessId", row_number)?;
+        let ppid = parse_windows_process_u32(row, "ParentProcessId", row_number)?;
+        let started = row
+            .get("CreationDate")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("Windows process-table row {row_number} has no creation time."))?
+            .to_string();
+
+        let exe = row
+            .get("ExecutablePath")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let args = row
+            .get("CommandLine")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+
+        let command = if exe.is_empty() {
+            args.to_string()
+        } else if args.is_empty() {
+            format!("\"{exe}\"")
+        } else {
+            format!("\"{exe}\" {args}")
+        };
+
+        snapshot.push(ProcessSnapshot {
+            pid,
+            ppid,
+            pgid: pid,
+            stat: "R".into(),
+            started,
+            command,
+        });
+    }
+
+    Ok(snapshot)
+}
+
 #[cfg(unix)]
-fn process_snapshot() -> Vec<ProcessSnapshot> {
-    let output = match Command::new("/bin/ps")
-        // lstart lets us distinguish the captured process from a later process
-        // that reuses the same PID and command line.
+fn process_snapshot_result() -> Result<Vec<ProcessSnapshot>, String> {
+    let command_output = Command::new("/bin/ps")
         .args(["-ww", "-axo", "pid=,ppid=,pgid=,stat=,lstart=,command="])
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
-    {
-        Ok(value) if value.status.success() => value,
-        _ => return Vec::new(),
-    };
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            // The ps `lstart` column is five whitespace-delimited words.
-            // Keep the remaining command column separate so spaces in command
-            // arguments do not corrupt process-start identity.
-            if fields.len() < 10 {
-                return None;
-            }
-            Some(ProcessSnapshot {
-                pid: fields[0].parse().ok()?,
-                ppid: fields[1].parse().ok()?,
-                pgid: fields[2].parse().ok()?,
-                stat: fields[3].to_string(),
-                started: fields[4..9].join(" "),
-                command: fields[9..].join(" "),
-            })
+        .map(|output| {
+            (
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+            )
         })
-        .collect()
+        .map_err(|error| error.to_string());
+
+    checked_process_snapshot_output("/bin/ps", command_output, |stdout: &str| {
+        parse_unix_process_snapshot(stdout)
+    })
+}
+
+#[cfg(unix)]
+fn process_snapshot() -> Vec<ProcessSnapshot> {
+    process_snapshot_result().unwrap_or_default()
 }
 
 #[cfg(windows)]
@@ -1805,78 +1945,7 @@ fn is_rdt_manager_command(command: &str) -> bool {
 }
 
 #[cfg(windows)]
-fn process_snapshot() -> Vec<ProcessSnapshot> {
-    // Win32_Process supplies stable process start times and parent IDs. The
-    // synthetic pgid is the outermost RDT backend ancestor PID; this makes the
-    // existing ownership/descendant checks meaningful on Windows without
-    // treating all processes with the same image name as one group.
-    const SCRIPT: &str = "$ErrorActionPreference='Stop'; Get-CimInstance -ClassName Win32_Process | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | ConvertTo-Json -Compress";
-    let mut command = Command::new("powershell.exe");
-    command.creation_flags(0x08000000);
-    let output = match command
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            SCRIPT,
-        ])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-    {
-        Ok(output) if output.status.success() => output,
-        _ => return Vec::new(),
-    };
-    let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) else {
-        return Vec::new();
-    };
-    let rows: Vec<&Value> = match &value {
-        Value::Array(rows) => rows.iter().collect(),
-        Value::Object(_) => vec![&value],
-        _ => return Vec::new(),
-    };
-    let mut snapshot: Vec<ProcessSnapshot> = rows
-        .into_iter()
-        .filter_map(|row| {
-            let pid = row
-                .get("ProcessId")
-                .and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))?
-                as u32;
-            let ppid = row
-                .get("ParentProcessId")
-                .and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))
-                .unwrap_or(0) as u32;
-            let started = row.get("CreationDate").and_then(Value::as_str)?.to_string();
-            let exe = row
-                .get("ExecutablePath")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let args = row
-                .get("CommandLine")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let command = if exe.is_empty() {
-                args.to_string()
-            } else if args.is_empty() {
-                format!("\"{exe}\"")
-            } else {
-                format!("\"{exe}\" {args}")
-            };
-            if command.is_empty() {
-                return None;
-            }
-            Some(ProcessSnapshot {
-                pid,
-                ppid,
-                pgid: pid,
-                stat: "R".into(),
-                started,
-                command,
-            })
-        })
-        .collect();
-
+fn assign_windows_process_groups(snapshot: &mut [ProcessSnapshot]) {
     let parent_map: HashMap<u32, (u32, bool)> = snapshot
         .iter()
         .map(|item| {
@@ -1890,30 +1959,82 @@ fn process_snapshot() -> Vec<ProcessSnapshot> {
             )
         })
         .collect();
-    for item in &mut snapshot {
+
+    for item in snapshot {
         let mut cursor = item.pid;
         let mut group_root = item.pid;
         let mut seen = std::collections::HashSet::new();
+
         for _ in 0..128 {
             if !seen.insert(cursor) {
                 break;
             }
+
             let Some((parent, is_backend)) = parent_map.get(&cursor) else {
                 break;
             };
+
             if *is_backend {
                 group_root = cursor;
             }
+
             if *parent == 0 || *parent == cursor {
                 break;
             }
+
             cursor = *parent;
         }
+
         item.pgid = group_root;
     }
-    snapshot
 }
 
+#[cfg(windows)]
+fn process_snapshot_result() -> Result<Vec<ProcessSnapshot>, String> {
+    const SCRIPT: &str = "$ErrorActionPreference='Stop'; Get-CimInstance -ClassName Win32_Process | Select-Object ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | ConvertTo-Json -Compress";
+
+    let mut command = Command::new("powershell.exe");
+    command.creation_flags(0x08000000);
+
+    let command_output = command
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            SCRIPT,
+        ])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .map(|output| {
+            (
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+            )
+        })
+        .map_err(|error| error.to_string());
+
+    let mut snapshot = checked_process_snapshot_output(
+        "Get-CimInstance Win32_Process",
+        command_output,
+        |stdout: &str| {
+            let value = serde_json::from_str::<Value>(stdout)
+                .map_err(|error| format!("Could not parse the Windows process table: {error}"))?;
+            parse_windows_process_snapshot(value)
+        },
+    )?;
+
+    assign_windows_process_groups(&mut snapshot);
+    Ok(snapshot)
+}
+
+#[cfg(windows)]
+fn process_snapshot() -> Vec<ProcessSnapshot> {
+    process_snapshot_result().unwrap_or_default()
+}
+
+#[cfg(windows)]
 fn process_tree_snapshot(root_pid: u32) -> Vec<ProcessSnapshot> {
     let all = process_snapshot();
     let Some(root) = all.iter().find(|item| item.pid == root_pid).cloned() else {
@@ -1937,17 +2058,6 @@ fn process_tree_snapshot(root_pid: u32) -> Vec<ProcessSnapshot> {
     tree
 }
 
-#[cfg(unix)]
-fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnapshot]) -> bool {
-    current.iter().any(|item| {
-        item.pid == snapshot.pid
-            && item.pgid == snapshot.pgid
-            && item.started == snapshot.started
-            && item.command == snapshot.command
-            && !item.stat.starts_with('Z')
-    })
-}
-
 #[cfg(windows)]
 fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnapshot]) -> bool {
     // Windows pgid is synthesized from the current parent tree; it can change
@@ -1965,6 +2075,7 @@ fn snapshot_process_is_alive(snapshot: &ProcessSnapshot, current: &[ProcessSnaps
 /// owns an isolated group, signal that group too. For legacy processes with a
 /// shared group, signal only the verified backend and descendants captured from
 /// its parent/child tree; never signal the shared process group.
+#[cfg(windows)]
 fn terminate_verified_backend_tree(
     pid: u32,
     group_id: u32,
@@ -2212,6 +2323,381 @@ fn command_is_expected_backend(command: &str, expected_exe: &Path) -> bool {
         })
 }
 
+#[cfg(target_os = "macos")]
+fn process_is_expected_backend(item: &ProcessSnapshot, expected_exe: &Path) -> bool {
+    use std::ffi::CStr;
+
+    #[link(name = "proc")]
+    extern "C" {
+        fn proc_pidpath(
+            pid: libc::c_int,
+            buffer: *mut libc::c_void,
+            buffersize: u32,
+        ) -> libc::c_int;
+    }
+
+    let mut buffer = [0u8; 4096];
+    let written = unsafe {
+        proc_pidpath(
+            item.pid as libc::c_int,
+            buffer.as_mut_ptr().cast(),
+            buffer.len() as u32,
+        )
+    };
+    if written <= 0 {
+        return false;
+    }
+
+    let Ok(path_text) =
+        (unsafe { CStr::from_ptr(buffer.as_ptr().cast::<libc::c_char>()) }).to_str()
+    else {
+        return false;
+    };
+
+    command_is_expected_backend(path_text, expected_exe)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn process_is_expected_backend(item: &ProcessSnapshot, expected_exe: &Path) -> bool {
+    command_is_expected_backend(&item.command, expected_exe)
+}
+
+#[cfg(windows)]
+fn process_is_expected_backend(item: &ProcessSnapshot, expected_exe: &Path) -> bool {
+    command_is_expected_backend(&item.command, expected_exe)
+}
+
+fn verified_backend_process_snapshot(
+    pid: u32,
+    expected_exe: &Path,
+) -> Result<ProcessSnapshot, String> {
+    let snapshot = process_snapshot_result()
+        .map_err(|error| format!("Could not verify the backend process table: {error}"))?;
+
+    let item = snapshot
+        .iter()
+        .find(|item| item.pid == pid)
+        .ok_or_else(|| format!("Backend PID {pid} has already exited. Refresh server status."))?;
+
+    if !item.stat.starts_with('Z') && !process_is_expected_backend(item, expected_exe) {
+        return Err(format!(
+            "Safety check refused PID {pid}: its OS-reported executable does not match this packaged RDT Connect backend. No process was stopped."
+        ));
+    }
+
+    Ok(item.clone())
+}
+
+/// Validate the complete process group before a group-wide signal.
+/// Zombies are retained in the source snapshot but are not live workloads.
+/// The baseline prevents PID reuse or a captured process changing groups.
+fn validate_backend_group_snapshot<F>(
+    snapshot: &[ProcessSnapshot],
+    selected_pid: Option<u32>,
+    group_id: u32,
+    baseline: Option<&[ProcessSnapshot]>,
+    is_expected_backend: F,
+) -> Result<Vec<ProcessSnapshot>, String>
+where
+    F: Fn(&ProcessSnapshot) -> bool,
+{
+    if group_id <= 1 {
+        return Err(format!("Refusing unsafe process group ID {group_id}."));
+    }
+
+    if let Some(pid) = selected_pid {
+        let selected = snapshot
+            .iter()
+            .find(|item| item.pid == pid)
+            .ok_or_else(|| {
+                format!("Selected backend PID {pid} disappeared during verification.")
+            })?;
+
+        if selected.pgid != group_id {
+            return Err(format!(
+                "Selected backend PID {pid} changed process group from {group_id} to {}. No signal sent.",
+                selected.pgid
+            ));
+        }
+
+        if let Some(previous) = baseline.and_then(|items| items.iter().find(|item| item.pid == pid))
+        {
+            if previous.started != selected.started {
+                return Err(format!(
+                    "Selected backend PID {pid} was reused. No signal sent."
+                ));
+            }
+        }
+    }
+
+    if let Some(previous_group) = baseline {
+        for previous in previous_group.iter().filter(|item| item.pgid == group_id) {
+            if let Some(current) = snapshot.iter().find(|item| item.pid == previous.pid) {
+                if current.started != previous.started {
+                    return Err(format!(
+                        "PID {} was reused while verifying process group {group_id}. No further signal sent.",
+                        previous.pid
+                    ));
+                }
+                if current.pgid != group_id {
+                    return Err(format!(
+                        "Captured PID {} moved out of process group {group_id}. No further signal sent.",
+                        previous.pid
+                    ));
+                }
+            }
+        }
+    }
+
+    let mut live = Vec::new();
+    for item in snapshot
+        .iter()
+        .filter(|item| item.pgid == group_id && !item.stat.starts_with('Z'))
+    {
+        if !is_expected_backend(item) {
+            return Err(format!(
+                "Safety check refused process group {group_id}: live PID {} has an unrelated or unverified executable. No group signal sent.",
+                item.pid
+            ));
+        }
+
+        if let Some(previous) =
+            baseline.and_then(|items| items.iter().find(|old| old.pid == item.pid))
+        {
+            if previous.started != item.started {
+                return Err(format!(
+                    "PID {} was reused in process group {group_id}. No signal sent.",
+                    item.pid
+                ));
+            }
+        }
+
+        live.push(item.clone());
+    }
+
+    Ok(live)
+}
+
+#[cfg(unix)]
+fn terminate_verified_backend_tree(
+    pid: u32,
+    group_id: u32,
+    expected_exe: &Path,
+) -> Result<(), String> {
+    if group_id <= 1 || group_id == unsafe { libc::getpgrp() } as u32 {
+        return Err(format!(
+            "Refusing to signal unsafe backend process group {group_id}."
+        ));
+    }
+
+    let initial_snapshot = process_snapshot_result().map_err(|error| {
+        format!("Could not capture a checked process snapshot before Stop: {error}")
+    })?;
+
+    let selected = initial_snapshot
+        .iter()
+        .find(|item| item.pid == pid)
+        .ok_or_else(|| {
+            format!("Verified backend PID {pid} is no longer present. Refresh server status.")
+        })?;
+
+    if selected.pgid != group_id {
+        return Err(format!(
+            "Backend PID {pid} is in PGID {}, not expected PGID {group_id}. No signal sent.",
+            selected.pgid
+        ));
+    }
+
+    let initial_members =
+        validate_backend_group_snapshot(&initial_snapshot, Some(pid), group_id, None, |item| {
+            process_is_expected_backend(item, expected_exe)
+        })?;
+
+    if initial_members.is_empty() {
+        append_stop_trace(format!(
+            "PROCESS GROUP {group_id}: no live backend processes remain; zombie-only group treated as stopped."
+        ));
+        return Ok(());
+    }
+
+    append_stop_trace(format!(
+        "VERIFIED PROCESS GROUP: selected PID={pid}; PGID={group_id}; live verified members={}.",
+        initial_members.len()
+    ));
+
+    // Revalidate all members immediately before SIGTERM. A selected helper PID
+    // need not equal the process-group leader.
+    let before_term = process_snapshot_result()
+        .map_err(|error| format!("Could not recheck process group before SIGTERM: {error}"))?;
+
+    let before_term_members = validate_backend_group_snapshot(
+        &before_term,
+        Some(pid),
+        group_id,
+        Some(&initial_members),
+        |item| process_is_expected_backend(item, expected_exe),
+    )?;
+
+    if before_term_members.is_empty() {
+        return Ok(());
+    }
+
+    send_signal_checked(-(group_id as i32), SIGNAL_TERM)?;
+
+    let term_deadline = Instant::now() + Duration::from_secs(4);
+    loop {
+        let current = process_snapshot_result().map_err(|error| {
+            format!("Could not verify process group during SIGTERM grace period: {error}")
+        })?;
+
+        let remaining = validate_backend_group_snapshot(
+            &current,
+            None,
+            group_id,
+            Some(&initial_members),
+            |item| process_is_expected_backend(item, expected_exe),
+        )?;
+
+        if remaining.is_empty() {
+            append_stop_trace(format!(
+                "SIGTERM RESULT: verified backend process group {group_id} has no live members."
+            ));
+            return Ok(());
+        }
+
+        if Instant::now() >= term_deadline {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    // Never escalate using a stale process list. Verify every live member again.
+    let before_kill = process_snapshot_result()
+        .map_err(|error| format!("Could not recheck process group before SIGKILL: {error}"))?;
+
+    let remaining = validate_backend_group_snapshot(
+        &before_kill,
+        None,
+        group_id,
+        Some(&initial_members),
+        |item| process_is_expected_backend(item, expected_exe),
+    )?;
+
+    if remaining.is_empty() {
+        return Ok(());
+    }
+
+    append_stop_trace(format!(
+        "SIGTERM TIMEOUT: PGID={group_id}; verified live members={}; escalating to SIGKILL.",
+        remaining.len()
+    ));
+    send_signal_checked(-(group_id as i32), SIGNAL_KILL)?;
+
+    let kill_deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let current = process_snapshot_result()
+            .map_err(|error| format!("Could not verify process group after SIGKILL: {error}"))?;
+
+        let remaining = validate_backend_group_snapshot(
+            &current,
+            None,
+            group_id,
+            Some(&initial_members),
+            |item| process_is_expected_backend(item, expected_exe),
+        )?;
+
+        if remaining.is_empty() {
+            append_stop_trace(format!(
+                "SIGKILL RESULT: verified backend process group {group_id} has no live members."
+            ));
+            return Ok(());
+        }
+
+        if Instant::now() >= kill_deadline {
+            let pids = remaining
+                .iter()
+                .map(|item| item.pid.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(format!(
+                "Could not confirm verified backend process group {group_id} stopped. Live PIDs: {pids}. Ownership was not declared released."
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(test)]
+mod verified_backend_group_snapshot_tests {
+    use super::*;
+
+    fn item(pid: u32, ppid: u32, pgid: u32, stat: &str, started: &str) -> ProcessSnapshot {
+        ProcessSnapshot {
+            pid,
+            ppid,
+            pgid,
+            stat: stat.into(),
+            started: started.into(),
+            command: format!("/test/rdt_voice_backend --pid {pid}"),
+        }
+    }
+
+    #[test]
+    fn helper_pid_can_select_and_verify_its_entire_backend_group() {
+        let snapshot = vec![
+            item(500, 1, 500, "S", "leader-start"),
+            item(501, 1, 500, "S", "helper-start"),
+            item(502, 501, 500, "S", "worker-start"),
+        ];
+
+        let members = validate_backend_group_snapshot(&snapshot, Some(501), 500, None, |_| true)
+            .expect("verified helper selection should validate the entire group");
+
+        assert_eq!(members.len(), 3);
+        assert!(members.iter().any(|member| member.pid == 500));
+        assert!(members.iter().any(|member| member.pid == 502));
+    }
+
+    #[test]
+    fn unrelated_live_group_member_refuses_group_signal() {
+        let snapshot = vec![
+            item(600, 1, 600, "S", "backend-start"),
+            item(601, 1, 600, "S", "unrelated-start"),
+        ];
+
+        let result = validate_backend_group_snapshot(&snapshot, Some(600), 600, None, |member| {
+            member.pid == 600
+        });
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn zombie_only_group_is_idempotent_success() {
+        let snapshot = vec![
+            item(700, 1, 700, "Z", "zombie-leader"),
+            item(701, 700, 700, "Z", "zombie-helper"),
+        ];
+
+        let members = validate_backend_group_snapshot(&snapshot, Some(701), 700, None, |_| false)
+            .expect("zombie-only groups have no live workload");
+
+        assert!(members.is_empty());
+    }
+
+    #[test]
+    fn reused_pid_is_rejected_before_escalation() {
+        let baseline = vec![item(800, 1, 800, "S", "original-start")];
+        let current = vec![item(800, 1, 800, "S", "reused-pid-start")];
+
+        let result =
+            validate_backend_group_snapshot(&current, None, 800, Some(&baseline), |_| true);
+
+        assert!(result.is_err());
+    }
+}
+
 fn scan_orphaned_backends(state: &BackendState) -> OrphanScan {
     if state.status().running {
         return OrphanScan {
@@ -2274,28 +2760,18 @@ fn stop_orphaned_backend_safely(state: &BackendState, pid: u32) -> Result<(), St
     if state.status().running {
         return Err("This RDT Connect instance already owns a backend. Stop it with the normal Stop button.".into());
     }
-    // This is a user-confirmed stop of one PID displayed by the orphan scanner.
-    // Do not reject it merely because the old manager is still alive: that was the
-    // reason the in-app button could fail while its own menu-bar Stop worked.
-    // The process executable, PID identity, process group and descendants are still
-    // revalidated below before any signal is sent.
+
     let expected_exe = backend_executable_path(&state.resource_dir);
-    let Some((command, group_id)) = process_command_and_group(pid) else {
-        return Err("That process has already exited. Refresh the server status.".into());
-    };
-    if !command_is_expected_backend(&command, &expected_exe) {
-        return Err("Safety check refused to stop this PID because its command does not match this project's packaged RDT Connect backend. No process was stopped.".into());
+    let first = verified_backend_process_snapshot(pid, &expected_exe)?;
+    let group_id = first.pgid;
+
+    let second = verified_backend_process_snapshot(pid, &expected_exe)?;
+    if second.pgid != group_id || second.started != first.started {
+        return Err(
+            "The backend PID or process group changed during verification. No signal was sent; refresh and retry.".into()
+        );
     }
-    // Recheck identity and process group immediately before walking/killing the tree.
-    let Some((command_again, group_again)) = process_command_and_group(pid) else {
-        return Err("That process has already exited. Refresh the server status.".into());
-    };
-    if command_again != command
-        || group_again != group_id
-        || !command_is_expected_backend(&command_again, &expected_exe)
-    {
-        return Err("The process changed during verification, so no signal was sent. Refresh and inspect again.".into());
-    }
+
     terminate_verified_backend_tree(pid, group_id, &expected_exe)
 }
 
@@ -3316,12 +3792,19 @@ fn local_https_status_from_config(config: &LocalTlsConfig) -> LocalHttpsStatus {
 }
 
 fn local_tls_client(config: &LocalTlsConfig, timeout: Duration) -> Result<Client, String> {
-    let mut builder = Client::builder().timeout(timeout);
+    local_tls_client_with_optional_timeout(config, Some(timeout))
+}
+
+fn local_tls_client_with_optional_timeout(
+    config: &LocalTlsConfig,
+    timeout: Option<Duration>,
+) -> Result<Client, String> {
+    let mut builder = Client::builder();
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
     if config.mode.eq_ignore_ascii_case("https") {
-        // rustls-tls-native-roots loads the Mac's trusted certificates. If the user
-        // linked a private/self-signed root, add that explicit root as well.
-        // Linux deliberately relies on the system trust store alone, so a healthy HTTPS
-        // response proves real OS trust instead of an explicitly injected root.
+        // Preserve the existing local CA trust behavior.
         #[cfg(not(target_os = "linux"))]
         {
             if let Some(trust_path) = config.ca_certificate_path.as_deref() {
@@ -3724,9 +4207,8 @@ fn setup_local_https_certificate_blocking(
 
     // The CA key has completed its only task: signing the loopback server
     // certificate. Retain the public CA certificate and server key only.
-    fs::remove_file(&ca_key).map_err(|e| {
-        format!("Could not remove the temporary local CA signing key: {e}")
-    })?;
+    fs::remove_file(&ca_key)
+        .map_err(|e| format!("Could not remove the temporary local CA signing key: {e}"))?;
     let mut config = load_local_tls_config(&state)?;
     config.mode = "https".into();
     config.certificate_path = Some(cert.display().to_string());
@@ -4253,6 +4735,31 @@ fn apply_model_download_output_line(
         return;
     }
 
+    if let Some((exception_name, _detail)) = trimmed.split_once(": ") {
+        let simple_name = exception_name.rsplit('.').next().unwrap_or(exception_name);
+        let safe_name = !simple_name.is_empty()
+            && simple_name.len() <= 64
+            && simple_name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
+        if safe_name
+            && (simple_name.ends_with("Error")
+                || simple_name.ends_with("Exception")
+                || simple_name.ends_with("Timeout"))
+        {
+            let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+                "GGML Whisper"
+            } else {
+                "MLX Whisper"
+            };
+            let message = format!(
+                "{family} model download failed: Python exception {simple_name} during preflight. The model is not marked Downloaded; retry the download."
+            );
+            publish_model_download_status(app, store, "failed", &message, true);
+        }
+        return;
+    }
+
     let Some(stage) = trimmed.strip_prefix("RDT_MODEL_DOWNLOAD_STAGE:") else {
         return;
     };
@@ -4317,11 +4824,95 @@ fn consume_model_download_log(
     Ok(saw_complete)
 }
 
-fn create_model_download_log() -> Result<(PathBuf, File), String> {
-    let temp = std::env::temp_dir();
+fn model_download_diagnostics_directory(state: &BackendState) -> Result<PathBuf, String> {
+    let support = state.app_language_pref_path.parent().ok_or_else(|| {
+        "Could not locate RDT Connect app support for model diagnostics.".to_string()
+    })?;
+
+    let support_meta = fs::symlink_metadata(support)
+        .map_err(|error| format!("Could not inspect app support for model diagnostics: {error}"))?;
+    if support_meta.file_type().is_symlink() || !support_meta.is_dir() {
+        return Err(
+            "RDT Connect app support is not a real directory; model diagnostics are disabled."
+                .into(),
+        );
+    }
+
+    let directory = support.join("model-download-diagnostics");
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("Could not create private model-download diagnostics: {error}"))?;
+    set_private_permissions(&directory, 0o700)
+        .map_err(|error| format!("Could not secure model-download diagnostics: {error}"))?;
+
+    let metadata = fs::symlink_metadata(&directory)
+        .map_err(|error| format!("Could not inspect model-download diagnostics: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Model-download diagnostics path is not a real directory.".into());
+    }
+
+    let support_canonical = fs::canonicalize(support)
+        .map_err(|error| format!("Could not resolve app support: {error}"))?;
+    let directory_canonical = fs::canonicalize(&directory)
+        .map_err(|error| format!("Could not resolve model diagnostics directory: {error}"))?;
+    if directory_canonical.parent() != Some(support_canonical.as_path()) {
+        return Err("Model-download diagnostics directory escaped app support.".into());
+    }
+    Ok(directory_canonical)
+}
+
+fn model_download_log_path_is_safe(directory: &Path, path: &Path) -> bool {
+    if path.parent() != Some(directory) {
+        return false;
+    }
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if !name.starts_with("rdt-connect-model-download-") || !name.ends_with(".log") {
+        return false;
+    }
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return false;
+    }
+    fs::canonicalize(path)
+        .ok()
+        .and_then(|canonical| canonical.parent().map(Path::to_path_buf))
+        .as_deref()
+        == Some(directory)
+}
+
+fn prune_model_download_logs(directory: &Path, preserve: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| model_download_log_path_is_safe(directory, path))
+        .collect();
+    files.sort_by_key(|path| path.file_name().map(|name| name.to_os_string()));
+
+    while files.len() > 5 {
+        let Some(index) = files.iter().position(|path| path != preserve) else {
+            break;
+        };
+        let stale = files.remove(index);
+        let _ = fs::remove_file(stale);
+    }
+}
+
+fn create_model_download_log(directory: &Path) -> Result<(PathBuf, File), String> {
+    let metadata = fs::symlink_metadata(directory)
+        .map_err(|error| format!("Could not inspect private model log directory: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Private model log directory is not a real directory.".into());
+    }
+
     let stamp = unix_epoch_millis();
     for attempt in 0..16u8 {
-        let path = temp.join(format!(
+        let path = directory.join(format!(
             "rdt-connect-model-download-{}-{stamp}-{attempt}.log",
             std::process::id()
         ));
@@ -4333,27 +4924,345 @@ fn create_model_download_log() -> Result<(PathBuf, File), String> {
             options.mode(0o600);
         }
         match options.open(&path) {
-            Ok(file) => return Ok((path, file)),
+            Ok(file) => {
+                prune_model_download_logs(directory, &path);
+                return Ok((path, file));
+            }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
                 return Err(format!(
-                    "Could not create a private model-download progress log: {error}"
+                    "Could not create a private model-download log: {error}"
                 ));
             }
         }
     }
-    Err("Could not allocate a unique model-download progress log. Close any stale RDT Connect download attempt and retry.".into())
+    Err("Could not allocate a unique model-download diagnostics log.".into())
+}
+
+fn retain_model_download_log_path(store: &Arc<Mutex<Option<PathBuf>>>, expected_path: &Path) {
+    match store.lock() {
+        Ok(mut current) => {
+            if current.as_deref() == Some(expected_path) {
+                *current = None;
+            }
+        }
+        Err(_) => {
+            eprintln!("RDT Connect retained model-download log; log-path mutex is poisoned.");
+        }
+    }
+}
+
+fn append_model_download_process_snapshot(
+    log_path: &Path,
+    event: &str,
+    identity: &ProcessSnapshot,
+    expected_exe: &Path,
+) {
+    let Some(directory) = log_path.parent() else {
+        return;
+    };
+    if !model_download_log_path_is_safe(directory, log_path) {
+        return;
+    }
+
+    let Ok(snapshot) = process_snapshot_result() else {
+        if let Ok(mut file) = OpenOptions::new().append(true).open(log_path) {
+            let _ = writeln!(
+                file,
+                "RDT_CONNECT_PROCESS_SNAPSHOT:event={event};snapshot_ok=false"
+            );
+        }
+        return;
+    };
+
+    let mut file = match OpenOptions::new().append(true).open(log_path) {
+        Ok(file) => file,
+        Err(_) => return,
+    };
+    let leader = snapshot.iter().find(|item| item.pid == identity.pid);
+    let leader_state = match leader {
+        None => "leader_absent",
+        Some(item) if item.pgid != identity.pgid => "leader_pid_outside_original_group",
+        Some(item) if item.started != identity.started => "leader_start_time_changed_inside_group",
+        Some(item) if item.command != identity.command => "leader_command_changed_inside_group",
+        Some(_) => "leader_identity_matches",
+    };
+    let group_count = snapshot
+        .iter()
+        .filter(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'))
+        .count();
+    let _ = writeln!(
+        file,
+        "RDT_CONNECT_PROCESS_SNAPSHOT:event={event};snapshot_ok=true;leader_state={leader_state};live_group_members={group_count}"
+    );
+
+    for item in snapshot
+        .iter()
+        .filter(|item| item.pid == identity.pid || item.pgid == identity.pgid)
+        .take(12)
+    {
+        let command_hash = format!("{:x}", Sha256::digest(item.command.as_bytes()));
+        let expected = command_is_expected_backend(&item.command, expected_exe);
+        let _ = writeln!(
+            file,
+            "RDT_CONNECT_PROCESS_SNAPSHOT:event={event};pid={};ppid={};pgid={};stat={};started={};command_sha256={};expected_backend={expected}",
+            item.pid, item.ppid, item.pgid, item.stat, item.started, command_hash
+        );
+    }
+}
+
+fn model_download_diagnostic_path_label(path: &Path) -> String {
+    if let Ok(home) = home_dir() {
+        if let Ok(relative) = path.strip_prefix(home.as_path()) {
+            return format!("~/{}", relative.display());
+        }
+    }
+    path.display().to_string()
+}
+
+fn model_download_diagnostics_report(state: &BackendState) -> Vec<String> {
+    let mut lines = vec![
+        "MODEL DOWNLOAD DIAGNOSTICS (read-only; no download or inference started):".to_string(),
+    ];
+
+    let status = match state.model_download_status.lock() {
+        Ok(status) => status.clone(),
+        Err(_) => {
+            lines.push("Attempt status: unavailable (status mutex poisoned).".into());
+            ModelDownloadStatus::default()
+        }
+    };
+    let identity = match state.model_download_pid.lock() {
+        Ok(identity) => identity.clone(),
+        Err(_) => {
+            lines.push("Captured process identity: unavailable (identity mutex poisoned).".into());
+            None
+        }
+    };
+
+    lines.push(format!(
+        "Attempt state: active={}; phase={}; progress={}%; measured_transfer_bytes={}; total_bytes={}; total_is_estimate={}",
+        status.active,
+        status.phase,
+        status.progress_percent,
+        status.downloaded_bytes,
+        status.total_bytes.map(|value| value.to_string()).unwrap_or_else(|| "unknown".into()),
+        status.size_is_estimate
+    ));
+
+    if let Some(model) = status.model.as_deref() {
+        lines.push(format!("Model/repository: {model}"));
+        lines.push(format!(
+            "Locked revision: {}",
+            model_lock_revision(model).unwrap_or_else(|| "not found in bundled lock".into())
+        ));
+        lines.push(format!(
+            "Locked weight SHA-256: {}",
+            model_lock_sha256(model).unwrap_or_else(|| "not found in bundled lock".into())
+        ));
+    } else {
+        lines.push("Model/repository: no recorded attempt.".into());
+    }
+
+    if let Some(root) = status.destination_root.as_deref() {
+        let root = PathBuf::from(root);
+        lines.push(format!(
+            "Selected model storage root: {}",
+            model_download_diagnostic_path_label(&root)
+        ));
+        lines.push(format!(
+            "Effective HF_HOME: {}",
+            model_download_diagnostic_path_label(&root)
+        ));
+        lines.push(format!(
+            "Effective HF_HUB_CACHE: {}",
+            model_download_diagnostic_path_label(&root.join("hub"))
+        ));
+        lines.push(format!(
+            "Effective HF_XET_CACHE: {}",
+            model_download_diagnostic_path_label(&root.join("xet"))
+        ));
+    } else {
+        lines.push("Selected model storage root: not recorded.".into());
+    }
+
+    lines.push(format!("Last status message: {}", status.message));
+
+    if let Some(identity) = identity.as_ref() {
+        let command_hash = format!("{:x}", Sha256::digest(identity.command.as_bytes()));
+        lines.push(format!(
+            "Captured downloader identity: PID={} PGID={} start={} state={} command_sha256={}",
+            identity.pid, identity.pgid, identity.started, identity.stat, command_hash
+        ));
+
+        match process_snapshot_result() {
+            Ok(snapshot) => {
+                let group_members = snapshot.iter()
+                    .filter(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'))
+                    .count();
+                lines.push(format!(
+                    "Current process snapshot: parsed successfully; {} live members in original PGID {}.",
+                    group_members, identity.pgid
+                ));
+                match snapshot.iter().find(|item| item.pid == identity.pid) {
+                    None => lines.push("Original numeric PID: absent from current process table.".into()),
+                    Some(current) if current.pgid != identity.pgid => lines.push(
+                        "Original numeric PID: now outside the original PGID; this PID is not targeted.".into()
+                    ),
+                    Some(current) => {
+                        let started_same = current.started == identity.started;
+                        let command_same = current.command == identity.command;
+                        lines.push(format!(
+                            "Original PID remains in original PGID: start_time_matches={started_same}; command_matches={command_same}; expected_backend={}",
+                            command_is_expected_backend(&current.command, &backend_executable_path(&state.resource_dir))
+                        ));
+                        if !started_same || !command_same {
+                            lines.push(
+                                "Ownership warning: leader identity differs inside the original PGID; no relaxed signal decision is made.".into()
+                            );
+                        }
+                    }
+                }
+            }
+            Err(_) => lines.push(
+                "Current process snapshot: FAILED; no process absence or ownership conclusion is inferred.".into()
+            ),
+        }
+    } else {
+        lines.push("Captured downloader identity: none currently registered.".into());
+    }
+
+    let directory = match model_download_diagnostics_directory(state) {
+        Ok(directory) => directory,
+        Err(_) => {
+            lines.push("Private model-download log directory: unavailable or unsafe.".into());
+            return lines;
+        }
+    };
+
+    let active_path = state
+        .model_download_log_path
+        .lock()
+        .ok()
+        .and_then(|path| path.clone())
+        .filter(|path| model_download_log_path_is_safe(&directory, path));
+
+    let log_path = active_path.or_else(|| {
+        let mut candidates: Vec<PathBuf> = fs::read_dir(&directory)
+            .ok()?
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| model_download_log_path_is_safe(&directory, path))
+            .collect();
+        candidates.sort_by_key(|path| path.file_name().map(|name| name.to_os_string()));
+        candidates.pop()
+    });
+
+    let Some(log_path) = log_path else {
+        lines.push("Latest private attempt log: none retained.".into());
+        return lines;
+    };
+
+    let metadata = match fs::symlink_metadata(&log_path) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => metadata,
+        _ => {
+            lines.push("Latest private attempt log: unsafe or unavailable; not opened.".into());
+            return lines;
+        }
+    };
+
+    lines.push(format!(
+        "Latest private attempt log: model-download-diagnostics/{} ({} bytes; private file).",
+        log_path.file_name().unwrap_or_default().to_string_lossy(),
+        metadata.len()
+    ));
+
+    const MAX_TAIL_BYTES: u64 = 65_536;
+    let mut file = match File::open(&log_path) {
+        Ok(file) => file,
+        Err(_) => {
+            lines.push("Log excerpt: unavailable.".into());
+            return lines;
+        }
+    };
+    let start = metadata.len().saturating_sub(MAX_TAIL_BYTES);
+    if start > 0 {
+        let _ = std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(start));
+    }
+    let mut bytes = Vec::new();
+    let _ = file.take(MAX_TAIL_BYTES).read_to_end(&mut bytes);
+    let excerpt = String::from_utf8_lossy(&bytes);
+    let safe_lines: Vec<&str> = excerpt
+        .lines()
+        .filter(|line| {
+            line.starts_with("RDT_MODEL_DOWNLOAD_STAGE:")
+                || line.starts_with("RDT_MODEL_DOWNLOAD_META:")
+                || line.starts_with("RDT_MODEL_DOWNLOAD_PROGRESS:")
+                || line.starts_with("RDT_MODEL_DOWNLOAD_ERROR:")
+                || line.starts_with("RDT_CONNECT_PROCESS_SNAPSHOT:")
+        })
+        .collect();
+
+    lines.push("Redacted structured log tail (raw stderr/tracebacks/credentials omitted):".into());
+    if safe_lines.is_empty() {
+        lines.push("(No structured downloader events retained in the log tail.)".into());
+    } else {
+        for line in safe_lines.iter().rev().take(18).rev() {
+            lines.push((*line).to_string());
+        }
+    }
+    lines.push(
+        "Recommended action: inspect the structured phase and process snapshot evidence before retrying; do not signal an unverified PID or PGID.".into()
+    );
+    lines
+}
+
+fn clear_model_download_log_path_with<Remove>(
+    store: &Mutex<Option<PathBuf>>,
+    expected_path: &Path,
+    remove_file: Remove,
+) -> Result<(), String>
+where
+    Remove: FnOnce(&Path) -> std::io::Result<()>,
+{
+    // Log-path bookkeeping is independent of process state. A poisoned mutex
+    // must not prevent unlinking this attempt's known private log.
+    let state_result = match store.lock() {
+        Ok(mut current) => {
+            if current.as_deref() == Some(expected_path) {
+                *current = None;
+            }
+            Ok(())
+        }
+        Err(_) => Err("The model-download log-path mutex is poisoned.".to_string()),
+    };
+
+    // Always attempt unlink, even when bookkeeping-lock acquisition failed.
+    let unlink_result = match remove_file(expected_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Could not remove the private model-download progress log: {error}"
+        )),
+    };
+
+    match (state_result, unlink_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(state_error), Ok(())) => Err(state_error),
+        (Ok(()), Err(unlink_error)) => Err(unlink_error),
+        (Err(state_error), Err(unlink_error)) => Err(format!("{state_error} {unlink_error}")),
+    }
 }
 
 fn clear_model_download_log_path(store: &Arc<Mutex<Option<PathBuf>>>, expected_path: &Path) {
-    if let Ok(mut current) = store.lock() {
-        if current.as_deref() == Some(expected_path) {
-            *current = None;
-        }
+    if let Err(error) =
+        clear_model_download_log_path_with(store.as_ref(), expected_path, |path: &Path| {
+            fs::remove_file(path)
+        })
+    {
+        // Log cleanup diagnostics never change downloader process state.
+        eprintln!("RDT Connect model-download log cleanup: {error}");
     }
-    // If a child still has the descriptor open, unlinking the name keeps the
-    // ephemeral machine-readable log private and bounds named temporary files.
-    let _ = fs::remove_file(expected_path);
 }
 
 fn capture_model_download_identity(
@@ -4362,7 +5271,7 @@ fn capture_model_download_identity(
 ) -> Result<ProcessSnapshot, String> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let snapshot = process_snapshot();
+        let snapshot = process_snapshot_result()?;
         if snapshot.is_empty() {
             return Err("The process table could not be inspected, so downloader ownership could not be established.".into());
         }
@@ -4427,6 +5336,35 @@ async fn start_model_download(
         .map_err(|error| format!("Model-download worker failed: {error}"))?
 }
 
+fn inspect_model_download_status<T, R>(
+    store: &Mutex<T>,
+    inspect: impl FnOnce(&T) -> R,
+) -> Result<R, String> {
+    let status = store
+        .lock()
+        .map_err(|_| "The model-download status mutex is poisoned.".to_string())?;
+    Ok(inspect(&status))
+}
+
+fn lock_model_download_registration_stores<'a>(
+    pid_store: &'a std::sync::Mutex<Option<ProcessSnapshot>>,
+    log_path_store: &'a std::sync::Mutex<Option<PathBuf>>,
+) -> Result<
+    (
+        std::sync::MutexGuard<'a, Option<ProcessSnapshot>>,
+        std::sync::MutexGuard<'a, Option<PathBuf>>,
+    ),
+    String,
+> {
+    let pid_guard = pid_store
+        .lock()
+        .map_err(|_| "Model-download PID store is unavailable.".to_string())?;
+    let log_guard = log_path_store
+        .lock()
+        .map_err(|_| "Model-download log-path store is unavailable.".to_string())?;
+    Ok((pid_guard, log_guard))
+}
+
 fn start_model_download_blocking(
     app: AppHandle,
     model: String,
@@ -4434,6 +5372,10 @@ fn start_model_download_blocking(
     let state = app.state::<BackendState>();
     validate_model(&model)?;
     let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
+    let _finalization = state
+        .model_download_finalization
+        .lock()
+        .map_err(|_| "Model-download finalization lock is unavailable.".to_string())?;
     let server_status = state.status();
     if server_status.running {
         let Some(active_model) = server_status.model.as_deref() else {
@@ -4491,7 +5433,17 @@ fn start_model_download_blocking(
     if !exe.is_file() {
         return Err(format!("Bundled model downloader was not found at {}. Run the platform-specific resource preparation script first.", exe.display()));
     }
-    let (log_path, log_writer) = create_model_download_log()?;
+    let log_directory = model_download_diagnostics_directory(state.inner())?;
+    let (log_path, log_writer) = create_model_download_log(&log_directory)?;
+    let stderr_writer = match log_writer.try_clone() {
+        Ok(writer) => writer,
+        Err(error) => {
+            let _ = fs::remove_file(&log_path);
+            return Err(format!(
+                "Could not attach downloader stderr to its private log: {error}"
+            ));
+        }
+    };
     state
         .model_download_cancel_requested
         .store(false, Ordering::SeqCst);
@@ -4544,11 +5496,32 @@ fn start_model_download_blocking(
         // A regular file cannot stay open awaiting EOF from a multiprocessing helper.
         // The supervisor tails it non-blockingly and owns all child cleanup.
         .stdout(Stdio::from(log_writer))
-        .stderr(Stdio::null());
+        .stderr(Stdio::from(stderr_writer));
     #[cfg(any(windows, target_os = "linux"))]
     command.env("RDT_GGML_MODEL_DIR", root.join("ggml"));
     #[cfg(unix)]
     command.process_group(0);
+    // Acquire both ownership stores before creating the child. A poisoned
+    // store must fail before spawn, never leave an untracked downloader.
+    let (mut download_pid, mut stored_log) = match lock_model_download_registration_stores(
+        state.model_download_pid.as_ref(),
+        state.model_download_log_path.as_ref(),
+    ) {
+        Ok(guards) => guards,
+        Err(error) => {
+            drop(command);
+            let _ = fs::remove_file(&log_path);
+            publish_model_download_status(
+                &app,
+                &state.model_download_status,
+                "failed",
+                &format!("Could not safely prepare downloader ownership: {error}"),
+                false,
+            );
+            return Err(error);
+        }
+    };
+
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
@@ -4590,18 +5563,18 @@ fn start_model_download_blocking(
             ));
         }
     };
-    if let Ok(mut download_pid) = state.model_download_pid.lock() {
-        *download_pid = Some(identity.clone());
-    }
-    if let Ok(mut stored_log) = state.model_download_log_path.lock() {
-        *stored_log = Some(log_path.clone());
-    }
+    *download_pid = Some(identity.clone());
+    *stored_log = Some(log_path.clone());
+    drop(stored_log);
+    drop(download_pid);
+    append_model_download_process_snapshot(&log_path, "identity-captured", &identity, &exe);
 
     let app_thread = app.clone();
     let status_store = Arc::clone(&state.model_download_status);
     let pid_store = Arc::clone(&state.model_download_pid);
     let log_path_store = Arc::clone(&state.model_download_log_path);
     let cancel_requested = Arc::clone(&state.model_download_cancel_requested);
+    let finalization_gate = Arc::clone(&state.model_download_finalization);
     let expected_exe = exe.clone();
     let model_for_worker = model.clone();
     let root_for_worker = root.clone();
@@ -4615,27 +5588,48 @@ fn start_model_download_blocking(
                     finish_stopping_model_download_group(&identity, &expected_exe)
                 {
                     let message = format!("The download progress log could not be opened ({error}); cleanup is unconfirmed ({stop_error}). Select Try cancel again.");
-                    publish_model_download_status(
-                        &app_thread,
+                    publish_model_download_failure_for_identity_with_gate(
+                        &finalization_gate,
+                        &pid_store,
                         &status_store,
-                        "failed",
+                        &app_thread,
+                        &identity,
                         &message,
-                        true,
                     );
-                    clear_model_download_log_path(&log_path_store, &log_path);
+                    retain_model_download_log_path(&log_path_store, &log_path);
                     return;
                 }
-                if let Ok(mut current) = pid_store.lock() {
-                    *current = None;
-                }
-                publish_model_download_status(
-                    &app_thread,
+                let finalized = finalize_model_download_state_with(
+                    &finalization_gate,
+                    &pid_store,
                     &status_store,
-                    "failed",
-                    "The model downloader's progress log could not be opened. Retry the download.",
+                    &cancel_requested,
+                    &identity,
                     false,
+                    |_, _| {
+                        (
+                        "failed".into(),
+                        "The model downloader's progress log could not be opened. Retry the download.".into(),
+                    )
+                    },
+                    |snapshot| {
+                        let _ = app_thread.emit("rdt-model-download-status", snapshot);
+                    },
                 );
-                clear_model_download_log_path(&log_path_store, &log_path);
+                if let Err(finalize_error) = finalized {
+                    let message = format!(
+                        "The downloader was stopped, but its terminal state could not be committed: {finalize_error}. The download remains locked; retry Cancel."
+                    );
+                    publish_model_download_failure_for_identity_with_gate(
+                        &finalization_gate,
+                        &pid_store,
+                        &status_store,
+                        &app_thread,
+                        &identity,
+                        &message,
+                    );
+                }
+                retain_model_download_log_path(&log_path_store, &log_path);
                 return;
             }
         };
@@ -4644,6 +5638,8 @@ fn start_model_download_blocking(
         let mut exit_status = None;
         let mut supervisor_error: Option<String> = None;
         let mut recovered_after_complete = false;
+        let mut metadata_check_timed_out = false;
+        let checking_started_at = Instant::now();
 
         loop {
             match consume_model_download_log(
@@ -4687,6 +5683,68 @@ fn start_model_download_blocking(
                         Some(format!("Could not monitor the model downloader: {error}"));
                     break;
                 }
+            }
+
+            // Metadata preflight is a distinct phase from the large weight transfer.
+            // Bound its total duration, then stop only this captured, isolated group.
+            // Never unlock the UI unless both group cleanup and leader exit are confirmed.
+            let checking_still_active = match inspect_model_download_status(
+                status_store.as_ref(),
+                |status| status.active && status.phase == "checking",
+            ) {
+                Ok(active) => active,
+                Err(error) => {
+                    eprintln!(
+                        "RDT Connect could not inspect model-download status; keeping the watchdog armed: {error}"
+                    );
+                    true
+                }
+            };
+            if checking_still_active
+                && !cancel_requested.load(Ordering::SeqCst)
+                && checking_started_at.elapsed() >= Duration::from_secs(90)
+            {
+                append_model_download_process_snapshot(
+                    &log_path,
+                    "metadata-watchdog-before-stop",
+                    &identity,
+                    &expected_exe,
+                );
+                match finish_stopping_model_download_group(&identity, &expected_exe) {
+                    Ok(()) => {
+                        let exit_deadline = Instant::now() + Duration::from_secs(2);
+                        loop {
+                            match child.try_wait() {
+                                Ok(Some(status)) => {
+                                    exit_status = Some(status);
+                                    metadata_check_timed_out = true;
+                                    break;
+                                }
+                                Ok(None) if Instant::now() < exit_deadline => {
+                                    thread::sleep(Duration::from_millis(50));
+                                }
+                                Ok(None) => {
+                                    supervisor_error = Some(
+                                        "The model metadata check exceeded 90 seconds, but downloader exit could not be confirmed. The download remains locked; select Try cancel again.".into()
+                                    );
+                                    break;
+                                }
+                                Err(error) => {
+                                    supervisor_error = Some(format!(
+                                        "The model metadata check exceeded 90 seconds, but downloader exit could not be confirmed ({error}). The download remains locked; select Try cancel again."
+                                    ));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        supervisor_error = Some(format!(
+                            "The model metadata check exceeded 90 seconds, but safe cleanup of its verified process group could not be confirmed ({error}). The download remains locked; select Try cancel again."
+                        ));
+                    }
+                }
+                break;
             }
 
             // COMPLETE is emitted only after weight SHA-256 validation and the verified
@@ -4743,8 +5801,15 @@ fn start_model_download_blocking(
         if let Some(error) = supervisor_error {
             // Keep active=true and the process identity while cleanup is unconfirmed;
             // the UI offers Try cancel again rather than enabling another download.
-            publish_model_download_status(&app_thread, &status_store, "failed", &error, true);
-            clear_model_download_log_path(&log_path_store, &log_path);
+            publish_model_download_failure_for_identity_with_gate(
+                &finalization_gate,
+                &pid_store,
+                &status_store,
+                &app_thread,
+                &identity,
+                &error,
+            );
+            retain_model_download_log_path(&log_path_store, &log_path);
             return;
         }
 
@@ -4753,86 +5818,116 @@ fn start_model_download_blocking(
         // releasing the UI or allowing a second model download.
         if let Err(error) = finish_stopping_model_download_group(&identity, &expected_exe) {
             let message = format!("The downloader exited, but cleanup of its verified process group is not confirmed: {error}. Select Try cancel again.");
-            publish_model_download_status(&app_thread, &status_store, "failed", &message, true);
-            clear_model_download_log_path(&log_path_store, &log_path);
+            publish_model_download_failure_for_identity_with_gate(
+                &finalization_gate,
+                &pid_store,
+                &status_store,
+                &app_thread,
+                &identity,
+                &message,
+            );
+            retain_model_download_log_path(&log_path_store, &log_path);
             return;
         }
 
-        let canceled = cancel_requested.swap(false, Ordering::SeqCst);
-        let cache_valid = model_cache_has_weights(&root_for_worker, &model_for_worker);
+        let cache_valid = !metadata_check_timed_out
+            && model_cache_has_weights(&root_for_worker, &model_for_worker);
         let cache_valid =
             cache_valid && model_cache_fully_verified(&root_for_worker, &model_for_worker);
-        if let Ok(mut current) = pid_store.lock() {
-            if current.as_ref().is_some_and(|recorded| {
-                recorded.pid == identity.pid
-                    && recorded.pgid == identity.pgid
-                    && recorded.started == identity.started
-                    && recorded.command == identity.command
-            }) {
-                *current = None;
-            }
-        }
 
-        if cache_valid {
-            let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
-                "GGML Whisper"
-            } else {
-                "MLX Whisper"
-            };
-            let message = if recovered_after_complete {
-                format!("The {family} model files were fully downloaded and verified. RDT Connect recovered the downloader's stalled final shutdown. The model is ready to use.")
-            } else if canceled {
-                format!("The {family} model files finished downloading and passed verification before cancellation completed. The model is ready to use.")
-            } else if exit_status.is_some_and(|status| status.success()) {
-                format!("Download complete. The verified {family} model is ready to use.")
-            } else {
-                format!("The downloader ended unexpectedly, but the {family} model files are complete and passed verification. The model is ready to use.")
-            };
-            publish_model_download_status(&app_thread, &status_store, "complete", &message, false);
-        } else if canceled {
-            publish_model_download_status(
-                &app_thread,
-                &status_store,
-                "cancelled",
-                "Download canceled. Only complete, verified model files will be shown as Downloaded; valid completed files remain reusable for retry.",
-                false,
+        let terminal_result = finalize_model_download_state_with(
+            &finalization_gate,
+            &pid_store,
+            &status_store,
+            &cancel_requested,
+            &identity,
+            false,
+            |canceled, current_status| {
+                if cache_valid {
+                    let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+                        "GGML Whisper"
+                    } else {
+                        "MLX Whisper"
+                    };
+                    let message = if recovered_after_complete {
+                        format!("The {family} model files were downloaded and verified. RDT Connect recovered the downloader's final shutdown. Model loading and inference have not yet been checked.")
+                    } else if canceled {
+                        format!("The {family} model files finished downloading and passed integrity verification before cancellation completed. Model loading and inference have not yet been checked.")
+                    } else if exit_status.is_some_and(|status| status.success()) {
+                        format!("Download complete. The verified {family} model files are saved; model loading and inference will be checked when you start the server.")
+                    } else {
+                        format!("The downloader ended unexpectedly, but the {family} model files are complete and verified. Model loading and inference have not yet been checked.")
+                    };
+                    ("complete".into(), message)
+                } else if canceled {
+                    (
+                        "cancelled".into(),
+                        "Download canceled. Only complete, verified model files will be shown as Downloaded; valid completed files remain reusable for retry.".into(),
+                    )
+                } else {
+                    let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
+                        "GGML Whisper"
+                    } else {
+                        "MLX Whisper"
+                    };
+                    let previous_message = current_status.message.clone();
+
+                    let message = if metadata_check_timed_out {
+                        "The model metadata check exceeded 90 seconds. The downloader was stopped safely; no model is marked Downloaded. Retry the check.".to_string()
+                    } else if previous_message.contains(" model download failed:") {
+                        previous_message
+                    } else if recovered_after_complete {
+                        format!(
+                            "The downloader stalled after announcing completion, but independent pinned {family} cache verification failed. The model is not marked Downloaded; retry the download."
+                        )
+                    } else if exit_status.as_ref().is_some_and(|status| status.success()) {
+                        format!(
+                            "The downloader exited successfully, but the {family} cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
+                        )
+                    } else {
+                        let exit_code = exit_status
+                            .as_ref()
+                            .and_then(|status| status.code())
+                            .map(|code| code.to_string())
+                            .unwrap_or_else(|| "unknown".into());
+                        format!(
+                            "Model download did not finish with a complete, verified {family} cache (downloader exit code: {exit_code}). The model is not marked Downloaded; check connectivity and retry."
+                        )
+                    };
+                    ("failed".into(), message)
+                }
+            },
+            |snapshot| {
+                let _ = app_thread.emit("rdt-model-download-status", snapshot);
+            },
+        );
+
+        if let Err(finalize_error) = terminal_result {
+            let message = format!(
+                "The downloader process group was stopped, but terminal state could not be committed: {finalize_error}. The download remains locked; select Try cancel again."
             );
-        } else {
-            let family = if cfg!(any(target_os = "windows", target_os = "linux")) {
-                "GGML Whisper"
-            } else {
-                "MLX Whisper"
-            };
-            let previous_message = status_store
-                .lock()
-                .map(|status| status.message.clone())
-                .unwrap_or_default();
-
-            // The line parser records a safe, actionable downloader error.
-            // Do not hide that error when the child process exits.
-            let message = if previous_message.contains(" model download failed:") {
-                previous_message
-            } else if recovered_after_complete {
-                format!(
-                    "The downloader stalled after announcing completion, but independent pinned {family} cache verification failed. The model is not marked Downloaded; retry the download."
-                )
-            } else if exit_status.as_ref().is_some_and(|status| status.success()) {
-                format!(
-                    "The downloader exited successfully, but the {family} cache is incomplete or invalid. The model is not marked Downloaded; retry to finish missing files."
-                )
-            } else {
-                let exit_code = exit_status
-                    .as_ref()
-                    .and_then(|status| status.code())
-                    .map(|code| code.to_string())
-                    .unwrap_or_else(|| "unknown".into());
-                format!(
-                    "Model download did not finish with a complete, verified {family} cache (downloader exit code: {exit_code}). The model is not marked Downloaded; check connectivity and retry."
-                )
-            };
-            publish_model_download_status(&app_thread, &status_store, "failed", &message, false);
+            publish_model_download_failure_for_identity_with_gate(
+                &finalization_gate,
+                &pid_store,
+                &status_store,
+                &app_thread,
+                &identity,
+                &message,
+            );
         }
-        clear_model_download_log_path(&log_path_store, &log_path);
+
+        let download_succeeded = match status_store.lock() {
+            Ok(status) => !status.active && status.phase == "complete",
+            Err(_) => {
+                eprintln!("RDT Connect could not confirm the downloader terminal state; retaining its private attempt log.");
+                false
+            }
+        };
+        if download_succeeded {
+            clear_model_download_log_path(&log_path_store, &log_path);
+        } else {
+            retain_model_download_log_path(&log_path_store, &log_path);
+        }
     });
     Ok(initial)
 }
@@ -4840,6 +5935,208 @@ fn start_model_download_blocking(
 // Model downloads use their own process group (CommandExt::process_group(0)). The
 // captured leader identity includes start time, PGID and full command. Helper processes
 // such as Python's resource_tracker are permitted only within that isolated group.
+fn model_download_group_snapshot_is_owned<F>(
+    identity: &ProcessSnapshot,
+    snapshot: &[ProcessSnapshot],
+    descendants_remain: bool,
+    is_expected_backend: F,
+) -> Result<bool, String>
+where
+    F: Fn(&str) -> bool,
+{
+    if identity.pid == 0 || identity.pgid != identity.pid {
+        return Err("The stored downloader identity is not an isolated process group.".into());
+    }
+    if snapshot.is_empty() {
+        return Err(
+            "Could not inspect the process table; no further cancellation signal was sent.".into(),
+        );
+    }
+
+    let has_live_group_member = snapshot
+        .iter()
+        .any(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'));
+
+    if !has_live_group_member {
+        if descendants_remain {
+            return Err("The downloader leader exited while descendant processes remain. RDT Connect cannot safely identify or terminate those helpers yet; no cancellation success was reported.".into());
+        }
+        return Ok(false);
+    }
+
+    if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
+        // The original leader may exit while an owned helper remains in its
+        // isolated process group. The numeric PID can then identify an unrelated
+        // process outside that group. Never signal that PID; cleanup targets only
+        // the captured PGID, whose live membership was established above.
+        if leader.pgid == identity.pgid {
+            if leader.started != identity.started || leader.command != identity.command {
+                return Err("The downloader PID now identifies a different process inside its original process group; no process-group signal was sent.".into());
+            }
+            if !is_expected_backend(&leader.command) {
+                return Err("The original downloader leader no longer matches the packaged backend; no process-group signal was sent.".into());
+            }
+        }
+    }
+
+    // Python's multiprocessing.resource_tracker and similar helpers may have a
+    // different command line, but they inherit this uniquely isolated PGID.
+    // A populated isolated PGID cannot be reused while any member remains.
+    // Never signal by port, process name, or an unverified enumeration index.
+    Ok(true)
+}
+
+fn model_download_process_identity_matches(
+    captured: &ProcessSnapshot,
+    expected: &ProcessSnapshot,
+) -> bool {
+    captured.pid == expected.pid
+        && captured.pgid == expected.pgid
+        && captured.started == expected.started
+        && captured.command == expected.command
+}
+
+fn model_download_cancel_attempt_is_current(
+    cancellation_requested: bool,
+    captured_identity: Option<&ProcessSnapshot>,
+    expected_identity: &ProcessSnapshot,
+    status_is_active_canceling: bool,
+) -> bool {
+    cancellation_requested
+        && status_is_active_canceling
+        && captured_identity.is_some_and(|captured| {
+            model_download_process_identity_matches(captured, expected_identity)
+        })
+}
+
+fn model_download_cancel_transition(current: &ModelDownloadStatus) -> Option<ModelDownloadStatus> {
+    if !current.active || current.phase == "canceling" {
+        return None;
+    }
+    let mut next = current.clone();
+    next.phase = "canceling".into();
+    next.message = "Stopping the download and its helper workers…".into();
+    Some(next)
+}
+
+// Call only after the supervisor has confirmed that the captured process
+// group and its owned helpers are gone. Lock order is:
+// finalization gate -> PID identity -> status.
+// No state is changed until both state locks have been acquired and checked.
+fn finalize_model_download_state_with<Decide, Publish>(
+    finalization_gate: &Mutex<()>,
+    pid_store: &Mutex<Option<ProcessSnapshot>>,
+    status_store: &Mutex<ModelDownloadStatus>,
+    cancel_requested: &AtomicBool,
+    expected_identity: &ProcessSnapshot,
+    require_canceling: bool,
+    decide: Decide,
+    publish: Publish,
+) -> Result<(), String>
+where
+    Decide: FnOnce(bool, &ModelDownloadStatus) -> (String, String),
+    Publish: FnOnce(ModelDownloadStatus),
+{
+    let gate = finalization_gate
+        .lock()
+        .map_err(|_| "Model-download finalization lock is unavailable.".to_string())?;
+
+    let mut current_identity = pid_store
+        .lock()
+        .map_err(|_| "Model-download process identity is unavailable.".to_string())?;
+
+    if !current_identity.as_ref().is_some_and(|captured| {
+        model_download_process_identity_matches(captured, expected_identity)
+    }) {
+        return Err(
+            "The captured downloader identity changed; terminal state was not published and the download remains locked."
+                .into(),
+        );
+    }
+
+    let mut status = status_store
+        .lock()
+        .map_err(|_| "Model-download status is unavailable.".to_string())?;
+
+    if !status.active || (require_canceling && status.phase != "canceling") {
+        return Err(
+            "The downloader attempt is no longer eligible for this terminal update; ownership was retained."
+                .into(),
+        );
+    }
+
+    let (phase, message) = decide(cancel_requested.load(Ordering::SeqCst), &status);
+    let is_complete = phase == "complete";
+
+    status.phase = phase;
+    status.message = message;
+    status.active = false;
+
+    if is_complete {
+        status.progress_percent = 100;
+        if let Some(total) = status.total_bytes {
+            status.downloaded_bytes = status.downloaded_bytes.max(total);
+        }
+    }
+
+    // Commit PID, status and cancel flag while both state locks are held.
+    *current_identity = None;
+    cancel_requested.store(false, Ordering::SeqCst);
+    let snapshot = status.clone();
+
+    drop(status);
+    drop(current_identity);
+
+    // Hold the gate through publication so a new Start cannot overtake this
+    // attempt's terminal status event.
+    publish(snapshot);
+    drop(gate);
+    Ok(())
+}
+
+// A cleanup failure is scoped to this exact active attempt. It never releases
+// the PID or active lock and cannot overwrite a newer download's status.
+fn publish_model_download_failure_for_identity_with_gate(
+    finalization_gate: &Mutex<()>,
+    pid_store: &Mutex<Option<ProcessSnapshot>>,
+    status_store: &Mutex<ModelDownloadStatus>,
+    app: &AppHandle,
+    expected_identity: &ProcessSnapshot,
+    message: &str,
+) {
+    let _gate = match finalization_gate.lock() {
+        Ok(gate) => gate,
+        Err(_) => return,
+    };
+
+    let current_identity = match pid_store.lock() {
+        Ok(identity) => identity,
+        Err(_) => return,
+    };
+
+    if !current_identity.as_ref().is_some_and(|captured| {
+        model_download_process_identity_matches(captured, expected_identity)
+    }) {
+        return;
+    }
+
+    let snapshot = {
+        let mut status = match status_store.lock() {
+            Ok(status) => status,
+            Err(_) => return,
+        };
+        if !status.active {
+            return;
+        }
+        status.phase = "failed".into();
+        status.message = message.to_string();
+        status.clone()
+    };
+
+    drop(current_identity);
+    let _ = app.emit("rdt-model-download-status", snapshot);
+}
+
 fn model_download_group_members_are_owned(
     identity: &ProcessSnapshot,
     expected_exe: &Path,
@@ -4847,57 +6144,46 @@ fn model_download_group_members_are_owned(
     if identity.pid == 0 || identity.pgid != identity.pid {
         return Err("The stored downloader identity is not an isolated process group.".into());
     }
-    let snapshot = process_snapshot();
-    if snapshot.is_empty() {
-        return Err(
-            "Could not inspect the process table; no further cancellation signal was sent.".into(),
-        );
-    }
-    let members: Vec<&ProcessSnapshot> = snapshot
+
+    let snapshot = process_snapshot_result()?;
+    #[cfg(windows)]
+    let has_live_group_member = snapshot
         .iter()
-        .filter(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'))
-        .collect();
-    if members.is_empty() {
-        #[cfg(windows)]
-        if !windows_descendant_pids(identity.pid, &snapshot).is_empty() {
-            return Err("The Windows downloader leader exited while descendant processes remain. RDT Connect cannot safely identify or terminate those helpers yet; no cancellation success was reported.".into());
-        }
-        // No captured group or descendant is visible. Do not target a reused PID.
-        return Ok(false);
-    }
-    if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
-        if leader.pgid != identity.pgid
-            || leader.started != identity.started
-            || leader.command != identity.command
-        {
-            return Err("The downloader PID now identifies a different process; no process-group signal was sent.".into());
-        }
-    }
-    // The group was created exclusively for this child with process_group(0).
-    // Legitimate helpers such as Python's multiprocessing.resource_tracker have a
-    // different command line but inherit that isolated PGID. Validate the original
-    // leader while it exists; a still-populated PGID cannot be reused after the
-    // leader exits until every member is gone. Never signal by port/name alone.
-    if let Some(leader) = snapshot.iter().find(|item| item.pid == identity.pid) {
-        if !command_is_expected_backend(&leader.command, expected_exe) {
-            return Err("The original downloader leader no longer matches the packaged backend; no process-group signal was sent.".into());
-        }
-    }
-    Ok(true)
+        .any(|item| item.pgid == identity.pgid && !item.stat.starts_with('Z'));
+
+    #[cfg(windows)]
+    let descendants_remain =
+        !has_live_group_member && !windows_descendant_pids(identity.pid, &snapshot).is_empty();
+    #[cfg(not(windows))]
+    let descendants_remain = false;
+
+    model_download_group_snapshot_is_owned(identity, &snapshot, descendants_remain, |command| {
+        command_is_expected_backend(command, expected_exe)
+    })
 }
 
 // Send TERM to only the verified download process group, allow graceful shutdown,
 // then revalidate identity before escalating to KILL. Every wait is bounded.
-fn finish_stopping_model_download_group(
+fn finish_stopping_model_download_group_with<Owned, Signal, Alive, Wait>(
     identity: &ProcessSnapshot,
-    expected_exe: &Path,
-) -> Result<(), String> {
-    if !model_download_group_members_are_owned(identity, expected_exe)? {
+    mut is_owned: Owned,
+    mut send_signal: Signal,
+    mut group_alive: Alive,
+    mut wait_until_unowned: Wait,
+) -> Result<(), String>
+where
+    Owned: FnMut(&ProcessSnapshot) -> Result<bool, String>,
+    Signal: FnMut(u32, i32) -> Result<(), String>,
+    Alive: FnMut(u32) -> bool,
+    Wait: FnMut(&ProcessSnapshot, Duration) -> Result<bool, String>,
+{
+    if !is_owned(identity)? {
         return Ok(());
     }
+
     let group_id = identity.pgid;
-    if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_TERM) {
-        if !process_group_alive(group_id) {
+    if let Err(error) = send_signal(group_id, SIGNAL_TERM) {
+        if !group_alive(group_id) {
             return Ok(());
         }
         return Err(format!(
@@ -4905,23 +6191,17 @@ fn finish_stopping_model_download_group(
         ));
     }
 
-    let term_deadline = Instant::now() + Duration::from_millis(700);
-    loop {
-        if !model_download_group_members_are_owned(identity, expected_exe)? {
-            return Ok(());
-        }
-        if Instant::now() >= term_deadline {
-            break;
-        }
-        thread::sleep(Duration::from_millis(75));
+    if wait_until_unowned(identity, Duration::from_millis(700))? {
+        return Ok(());
     }
 
     // Ownership is deliberately checked immediately before SIGKILL.
-    if !model_download_group_members_are_owned(identity, expected_exe)? {
+    if !is_owned(identity)? {
         return Ok(());
     }
-    if let Err(error) = send_signal_checked(-(group_id as i32), SIGNAL_KILL) {
-        if !process_group_alive(group_id) {
+
+    if let Err(error) = send_signal(group_id, SIGNAL_KILL) {
+        if !group_alive(group_id) {
             return Ok(());
         }
         return Err(format!(
@@ -4929,17 +6209,35 @@ fn finish_stopping_model_download_group(
         ));
     }
 
-    let final_deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        if !model_download_group_members_are_owned(identity, expected_exe)? {
-            return Ok(());
-        }
-        if Instant::now() >= final_deadline {
-            break;
-        }
-        thread::sleep(Duration::from_millis(75));
+    if wait_until_unowned(identity, Duration::from_secs(10))? {
+        return Ok(());
     }
+
     Err("The verified download process group is still active after bounded termination.".into())
+}
+
+fn finish_stopping_model_download_group(
+    identity: &ProcessSnapshot,
+    expected_exe: &Path,
+) -> Result<(), String> {
+    finish_stopping_model_download_group_with(
+        identity,
+        |captured| model_download_group_members_are_owned(captured, expected_exe),
+        |group_id, signal| send_signal_checked(-(group_id as i32), signal),
+        process_group_alive,
+        |captured, timeout| {
+            let deadline = Instant::now() + timeout;
+            loop {
+                if !model_download_group_members_are_owned(captured, expected_exe)? {
+                    return Ok(true);
+                }
+                if Instant::now() >= deadline {
+                    return Ok(false);
+                }
+                thread::sleep(Duration::from_millis(75));
+            }
+        },
+    )
 }
 
 #[tauri::command]
@@ -4947,186 +6245,248 @@ fn cancel_model_download(
     app: AppHandle,
     state: State<'_, BackendState>,
 ) -> Result<ModelDownloadStatus, String> {
-    // Serialize against the downloader's initial spawn so Cancel cannot race the
-    // small window where active=true but the isolated child PID is not yet recorded.
+    // Lock order matches Start: lifecycle -> finalization -> PID -> status.
     let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
-    let mut snapshot = state
+    let _finalization = state
+        .model_download_finalization
+        .lock()
+        .map_err(|_| "Model-download finalization lock is unavailable.".to_string())?;
+
+    let current_snapshot = state
         .model_download_status
         .lock()
         .map_err(|_| "Model-download state is unavailable.".to_string())?
         .clone();
-    if !snapshot.active {
-        return Ok(snapshot);
-    }
-    state
-        .model_download_cancel_requested
-        .store(true, Ordering::SeqCst);
-    snapshot.phase = "canceling".into();
-    snapshot.message = "Stopping the download and its helper workers…".into();
+
+    let Some(mut snapshot) = model_download_cancel_transition(&current_snapshot) else {
+        // Inactive cancellation is a no-op. Repeated clicks during the same
+        // canceling attempt must not create multiple escalation threads.
+        return Ok(current_snapshot);
+    };
 
     let identity = state
         .model_download_pid
         .lock()
         .map_err(|_| "Model-download process state is unavailable.".to_string())?
         .clone();
-    if let Some(identity) = identity {
-        let expected_exe = backend_executable_path(&state.resource_dir);
-        match model_download_group_members_are_owned(&identity, &expected_exe) {
-            Ok(true) => {
-                // The group was created specifically for this download. Its live
-                // members must all match our bundled executable before signaling.
-                if let Err(error) = send_signal_checked(-(identity.pgid as i32), SIGNAL_TERM) {
-                    if process_group_alive(identity.pgid) {
-                        snapshot.phase = "failed".into();
-                        snapshot.message = format!("Could not request cancellation: {error}. Select Try cancel again to retry.");
-                        if let Ok(mut status) = state.model_download_status.lock() {
-                            *status = snapshot.clone();
-                        }
-                        let _ = app.emit("rdt-model-download-status", snapshot.clone());
-                        return Ok(snapshot);
-                    }
-                }
-            }
-            Ok(false) => {
-                // The downloader already exited. The waiting thread will publish its
-                // terminal status; don't signal a potentially reused process-group ID.
-            }
-            Err(error) => {
-                snapshot.phase = "failed".into();
-                snapshot.message = format!("Cancellation could not verify the download process safely: {error} Select Try cancel again after checking Developer Options → Diagnostics.");
-                if let Ok(mut status) = state.model_download_status.lock() {
-                    *status = snapshot.clone();
-                }
-                let _ = app.emit("rdt-model-download-status", snapshot.clone());
-                return Ok(snapshot);
-            }
-        }
 
-        if let Ok(mut status) = state.model_download_status.lock() {
-            *status = snapshot.clone();
-        }
-        let _ = app.emit("rdt-model-download-status", snapshot.clone());
-
-        let app_for_escalation = app.clone();
-        let status_store = Arc::clone(&state.model_download_status);
-        let pid_store = Arc::clone(&state.model_download_pid);
-        let log_path_store = Arc::clone(&state.model_download_log_path);
-        let cancel_requested = Arc::clone(&state.model_download_cancel_requested);
-        let identity_for_escalation = identity.clone();
-        let model = snapshot.model.clone();
-        let destination_root = snapshot.destination_root.clone();
-        thread::spawn(move || {
-            // The foreground command already requested TERM. Allow bounded grace,
-            // then revalidate the exact stored identity before escalation.
-            thread::sleep(Duration::from_millis(900));
-            let still_this_attempt = cancel_requested.load(Ordering::SeqCst)
-                && pid_store
-                    .lock()
-                    .map(|current| {
-                        current.as_ref().is_some_and(|captured| {
-                            captured.pid == identity_for_escalation.pid
-                                && captured.pgid == identity_for_escalation.pgid
-                                && captured.started == identity_for_escalation.started
-                                && captured.command == identity_for_escalation.command
-                        })
-                    })
-                    .unwrap_or(false)
-                && status_store
-                    .lock()
-                    .map(|status| status.active && status.phase == "canceling")
-                    .unwrap_or(false);
-            if !still_this_attempt {
-                return;
-            }
-
-            if let Err(error) =
-                finish_stopping_model_download_group(&identity_for_escalation, &expected_exe)
-            {
-                let updated = if let Ok(mut status) = status_store.lock() {
-                    if !status.active || status.phase != "canceling" {
-                        return;
-                    }
-                    // Keep active=true so Start/Delete cannot race a possibly-live process.
-                    status.phase = "failed".into();
-                    status.message = format!("Cancellation could not be confirmed: {error} Select Try cancel again; no unverified process was signaled.");
-                    Some(status.clone())
-                } else {
-                    None
-                };
-                if let Some(updated) = updated {
-                    let _ = app_for_escalation.emit("rdt-model-download-status", updated);
-                }
-                return;
-            }
-
-            // If the worker already published a terminal result, do not overwrite it.
-            let still_this_attempt = cancel_requested.load(Ordering::SeqCst)
-                && pid_store
-                    .lock()
-                    .map(|current| {
-                        current.as_ref().is_some_and(|captured| {
-                            captured.pid == identity_for_escalation.pid
-                                && captured.pgid == identity_for_escalation.pgid
-                                && captured.started == identity_for_escalation.started
-                                && captured.command == identity_for_escalation.command
-                        })
-                    })
-                    .unwrap_or(false)
-                && status_store
-                    .lock()
-                    .map(|status| status.active && status.phase == "canceling")
-                    .unwrap_or(false);
-            if !still_this_attempt {
-                return;
-            }
-
-            let cache_valid = model
-                .as_deref()
-                .zip(destination_root.as_deref())
-                .is_some_and(|(model, root)| model_cache_fully_verified(Path::new(root), model));
-            cancel_requested.store(false, Ordering::SeqCst);
-            if let Ok(mut current) = pid_store.lock() {
-                if current.as_ref().is_some_and(|captured| {
-                    captured.pid == identity_for_escalation.pid
-                        && captured.started == identity_for_escalation.started
-                }) {
-                    *current = None;
-                }
-            }
-            if cache_valid {
-                publish_model_download_status(
-                    &app_for_escalation,
-                    &status_store,
-                    "complete",
-                    "The MLX model files are complete and verified. The downloader has been safely stopped and the model is ready to use.",
-                    false,
-                );
-            } else {
-                publish_model_download_status(
-                    &app_for_escalation,
-                    &status_store,
-                    "cancelled",
-                    "Download canceled. Only complete, verified MLX model files will be shown as Downloaded; completed files can be reused on retry.",
-                    false,
-                );
-            }
-            let remaining_log = log_path_store.lock().ok().and_then(|mut path| path.take());
-            if let Some(path) = remaining_log {
-                let _ = fs::remove_file(path);
-            }
-        });
-    } else {
-        // With the lifecycle lock held, no PID means the download never established
-        // a process or it finished between status and PID reads. Let the caller retry
-        // rather than claiming success or leaving the button disabled forever.
+    let Some(identity) = identity else {
         snapshot.phase = "failed".into();
         snapshot.message = "No active downloader process was recorded. Refresh status, then retry Cancel or retry the download.".into();
-        if let Ok(mut status) = state.model_download_status.lock() {
-            *status = snapshot.clone();
-        }
+        *state
+            .model_download_status
+            .lock()
+            .map_err(|_| "Model-download state is unavailable.".to_string())? = snapshot.clone();
         let _ = app.emit("rdt-model-download-status", snapshot.clone());
         return Ok(snapshot);
+    };
+
+    let expected_exe = backend_executable_path(&state.resource_dir);
+    if let Ok(current_log) = state.model_download_log_path.lock() {
+        if let Some(path) = current_log.as_ref() {
+            append_model_download_process_snapshot(
+                path,
+                "cancel-before-ownership-check",
+                &identity,
+                &expected_exe,
+            );
+        }
     }
+    let group_owned = match model_download_group_members_are_owned(&identity, &expected_exe) {
+        Ok(owned) => owned,
+        Err(error) => {
+            snapshot.phase = "failed".into();
+            snapshot.message = format!("Cancellation could not verify the download process safely: {error} Select Try cancel again after checking Developer Options → Diagnostics.");
+            *state
+                .model_download_status
+                .lock()
+                .map_err(|_| "Model-download state is unavailable.".to_string())? =
+                snapshot.clone();
+            let _ = app.emit("rdt-model-download-status", snapshot.clone());
+            return Ok(snapshot);
+        }
+    };
+
+    // Store canceling status before setting the atomic flag. Holding the shared
+    // gate prevents worker finalization during this short transition.
+    {
+        let mut status = state
+            .model_download_status
+            .lock()
+            .map_err(|_| "Model-download state is unavailable.".to_string())?;
+        *status = snapshot.clone();
+        state
+            .model_download_cancel_requested
+            .store(true, Ordering::SeqCst);
+    }
+    let _ = app.emit("rdt-model-download-status", snapshot.clone());
+
+    if group_owned {
+        if let Err(signal_error) = send_signal_checked(-(identity.pgid as i32), SIGNAL_TERM) {
+            // Revalidate ownership. A process-table failure is not evidence that
+            // the group exited and must never permit terminal publication.
+            match model_download_group_members_are_owned(&identity, &expected_exe) {
+                Ok(false) => {}
+                Ok(true) => {
+                    snapshot.phase = "failed".into();
+                    snapshot.message = format!("Could not request cancellation: {signal_error}. Select Try cancel again to retry.");
+                    *state
+                        .model_download_status
+                        .lock()
+                        .map_err(|_| "Model-download state is unavailable.".to_string())? =
+                        snapshot.clone();
+                    let _ = app.emit("rdt-model-download-status", snapshot.clone());
+                    return Ok(snapshot);
+                }
+                Err(check_error) => {
+                    snapshot.phase = "failed".into();
+                    snapshot.message = format!("Cancellation could not confirm downloader shutdown after TERM failed: {signal_error}; ownership recheck failed: {check_error}. Select Try cancel again.");
+                    *state
+                        .model_download_status
+                        .lock()
+                        .map_err(|_| "Model-download state is unavailable.".to_string())? =
+                        snapshot.clone();
+                    let _ = app.emit("rdt-model-download-status", snapshot.clone());
+                    return Ok(snapshot);
+                }
+            }
+        }
+    }
+    // An already-absent group is never signaled. The delayed supervisor still
+    // confirms the captured attempt before committing its terminal state.
+
+    let app_for_escalation = app.clone();
+    let status_store = Arc::clone(&state.model_download_status);
+    let pid_store = Arc::clone(&state.model_download_pid);
+    let log_path_store = Arc::clone(&state.model_download_log_path);
+    let cancel_requested = Arc::clone(&state.model_download_cancel_requested);
+    let finalization_gate = Arc::clone(&state.model_download_finalization);
+    let identity_for_escalation = identity.clone();
+    let model = snapshot.model.clone();
+    let destination_root = snapshot.destination_root.clone();
+    let expected_log_path = log_path_store
+        .lock()
+        .map(|current| current.clone())
+        .map_err(|_| {
+            "The model-download log-path mutex is poisoned; log cleanup may be skipped.".to_string()
+        });
+
+    thread::spawn(move || {
+        // Existing production grace interval; do not shorten for tests.
+        thread::sleep(Duration::from_millis(900));
+
+        // First attempt guard. Mutex poison, a changed identity, or a terminal
+        // worker result prevents any delayed stop/escalation.
+        let attempt_gate = match finalization_gate.lock() {
+            Ok(gate) => gate,
+            Err(_) => return,
+        };
+        let captured_identity = match pid_store.lock() {
+            Ok(current) => current.clone(),
+            Err(_) => return,
+        };
+        let status_is_active_canceling = match status_store.lock() {
+            Ok(status) => status.active && status.phase == "canceling",
+            Err(_) => return,
+        };
+        let still_this_attempt = model_download_cancel_attempt_is_current(
+            cancel_requested.load(Ordering::SeqCst),
+            captured_identity.as_ref(),
+            &identity_for_escalation,
+            status_is_active_canceling,
+        );
+        drop(attempt_gate);
+        if !still_this_attempt {
+            return;
+        }
+
+        if let Err(error) =
+            finish_stopping_model_download_group(&identity_for_escalation, &expected_exe)
+        {
+            let message = format!("Cancellation could not be confirmed: {error} Select Try cancel again; no unverified process was signaled.");
+            publish_model_download_failure_for_identity_with_gate(
+                &finalization_gate,
+                &pid_store,
+                &status_store,
+                &app_for_escalation,
+                &identity_for_escalation,
+                &message,
+            );
+            return;
+        }
+
+        // Recheck after process cleanup; the worker may have published a
+        // terminal result while the bounded stop operation was running.
+        let attempt_gate = match finalization_gate.lock() {
+            Ok(gate) => gate,
+            Err(_) => return,
+        };
+        let captured_identity = match pid_store.lock() {
+            Ok(current) => current.clone(),
+            Err(_) => return,
+        };
+        let status_is_active_canceling = match status_store.lock() {
+            Ok(status) => status.active && status.phase == "canceling",
+            Err(_) => return,
+        };
+        let still_this_attempt = model_download_cancel_attempt_is_current(
+            cancel_requested.load(Ordering::SeqCst),
+            captured_identity.as_ref(),
+            &identity_for_escalation,
+            status_is_active_canceling,
+        );
+        drop(attempt_gate);
+        if !still_this_attempt {
+            return;
+        }
+
+        let cache_valid = model
+            .as_deref()
+            .zip(destination_root.as_deref())
+            .is_some_and(|(model, root)| model_cache_fully_verified(Path::new(root), model));
+
+        let finalized = finalize_model_download_state_with(
+            &finalization_gate,
+            &pid_store,
+            &status_store,
+            &cancel_requested,
+            &identity_for_escalation,
+            true,
+            |_, _| {
+                if cache_valid {
+                    (
+                        "complete".into(),
+                        "The MLX model files are complete and verified, and the downloader has been safely stopped. Model loading and real inference have not yet been verified.".into(),
+                    )
+                } else {
+                    (
+                        "cancelled".into(),
+                        "Download canceled. Only complete, verified MLX model files will be shown as Downloaded; completed files can be reused on retry.".into(),
+                    )
+                }
+            },
+            |snapshot| {
+                let _ = app_for_escalation.emit("rdt-model-download-status", snapshot);
+            },
+        );
+
+        // Log cleanup is post-commit housekeeping. It cannot affect whether
+        // process shutdown was verified or whether terminal state was committed.
+        if finalized.is_ok() {
+            match expected_log_path {
+                Ok(Some(path)) => retain_model_download_log_path(&log_path_store, &path),
+                Ok(None) => {}
+                Err(error) => {
+                    // Process shutdown and terminal state are already committed.
+                    // A log-bookkeeping failure must not roll them back.
+                    eprintln!(
+                        "RDT Connect confirmed downloader shutdown; private log cleanup skipped: {error}"
+                    );
+                }
+            }
+        }
+    });
+
     Ok(snapshot)
 }
 
@@ -5554,6 +6914,7 @@ struct ModelStorageStatus {
     active_root: String,
     selected_root: String,
     model_cached: bool,
+    cached_model_path: Option<String>,
     server_running: bool,
 }
 
@@ -5587,8 +6948,13 @@ fn load_model_storage_locations(state: &BackendState) -> Result<Vec<String>, Str
     Ok(config.locations)
 }
 
-fn load_model_storage_selected_root(state: &BackendState, locations: &[String]) -> Result<String, String> {
-    let fallback = locations.first().cloned()
+fn load_model_storage_selected_root(
+    state: &BackendState,
+    locations: &[String],
+) -> Result<String, String> {
+    let fallback = locations
+        .first()
+        .cloned()
         .ok_or_else(|| "No model-storage location is configured. Open Settings.".to_string())?;
     if !state.model_storage_config_path.is_file() {
         return Ok(fallback);
@@ -5798,17 +7164,19 @@ fn model_storage_location_is_available(path: &Path, mounted_volumes: &[PathBuf])
     path.is_dir()
 }
 
-fn model_cache_has_weights(root: &Path, model: &str) -> bool {
-    let Some(revision) = model_lock_revision(model) else {
-        return false;
-    };
+fn model_cache_snapshot_path(root: &Path, model: &str) -> Option<PathBuf> {
+    let revision = model_lock_revision(model)?;
     let repo_key = format!("models--{}", model.replace('/', "--"));
     let snapshot = root
         .join("hub")
         .join(repo_key)
         .join("snapshots")
         .join(revision);
-    model_snapshot_is_complete(root, model, &snapshot)
+    model_snapshot_is_complete(root, model, &snapshot).then_some(snapshot)
+}
+
+fn model_cache_has_weights(root: &Path, model: &str) -> bool {
+    model_cache_snapshot_path(root, model).is_some()
 }
 
 fn model_cache_fully_verified(root: &Path, model: &str) -> bool {
@@ -5881,9 +7249,15 @@ fn make_model_storage_status(
 
     let cached_root = cached_index.and_then(|index| locations.get(index));
     let model_cached = cached_root.is_some();
+    let cached_model_path = cached_root.and_then(|root| {
+        model_cache_snapshot_path(Path::new(root.as_str()), model)
+            .map(|path| path.to_string_lossy().into_owned())
+    });
 
     // Keep the verified cache location distinct from the selected download folder.
-    let active_root = cached_root.map(|root| root.to_string()).unwrap_or_else(|| selected_root.clone());
+    let active_root = cached_root
+        .map(|root| root.to_string())
+        .unwrap_or_else(|| selected_root.clone());
 
     Ok(ModelStorageStatus {
         model: model.to_string(),
@@ -5892,6 +7266,7 @@ fn make_model_storage_status(
         active_root,
         selected_root,
         model_cached,
+        cached_model_path,
         server_running: state.status().running,
     })
 }
@@ -6011,15 +7386,24 @@ fn normalize_model_storage_locations(locations: Vec<String>) -> Result<Vec<Strin
     Ok(normalized)
 }
 
+fn model_storage_append_only_change_allowed(
+    existing_locations: &[String],
+    existing_root: &str,
+    locations: &[String],
+    active_root: &str,
+) -> bool {
+    locations.len() > existing_locations.len()
+        && locations.starts_with(existing_locations)
+        && active_root == existing_root
+}
+
 fn save_model_storage_locations(
     state: &BackendState,
     locations: Vec<String>,
     active_root: String,
 ) -> Result<Vec<String>, String> {
     let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
-    if state.status().running {
-        return Err("Stop the local server before changing model-storage locations.".into());
-    }
+    let server_running = state.status().running;
     if state
         .model_download_status
         .lock()
@@ -6037,6 +7421,18 @@ fn save_model_storage_locations(
         return Err("Select a download folder from the configured folder list.".into());
     }
     let active_root = selected.remove(0);
+    if server_running {
+        let existing_locations = load_model_storage_locations(state)?;
+        let existing_root = load_model_storage_selected_root(state, &existing_locations)?;
+        if !model_storage_append_only_change_allowed(
+            &existing_locations,
+            &existing_root,
+            &locations,
+            &active_root,
+        ) {
+            return Err("While the server is running, storage folders may only be appended; existing folders and the download destination cannot be changed.".into());
+        }
+    }
     let payload = serde_json::to_vec_pretty(&ModelStorageConfig {
         locations: locations.clone(),
         active_root: Some(active_root),
@@ -6074,6 +7470,54 @@ async fn set_model_storage_locations(
     })
     .await
     .map_err(|error| format!("Model-storage settings worker failed: {error}"))?
+}
+
+#[tauri::command]
+fn reveal_model_storage_folder(path: String) -> Result<(), String> {
+    let requested = std::path::PathBuf::from(path);
+    let metadata = std::fs::metadata(&requested)
+        .map_err(|error| format!("The model storage folder is unavailable: {error}"))?;
+    if !metadata.is_dir() {
+        return Err("The selected model storage path is not a folder.".into());
+    }
+    let folder = std::fs::canonicalize(&requested)
+        .map_err(|error| format!("Could not resolve the model storage folder: {error}"))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&folder)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Finder could not open the folder: {error}"))
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("explorer.exe");
+        command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
+        command
+            .arg(&folder)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("File Explorer could not open the folder: {error}"))
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&folder)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("The default file manager could not open the folder: {error}"))
+    }
+
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
+    {
+        let _ = folder;
+        Err("Opening model storage folders is not supported on this platform.".into())
+    }
 }
 
 #[tauri::command]
@@ -6273,7 +7717,6 @@ fn diagnostic_html_build_marker(path: &Path) -> String {
     "marker not found".into()
 }
 
-
 fn diagnostic_v2_safe_value(object: &Value, key: &str) -> Option<String> {
     let value = object.get(key)?;
     let raw = match value {
@@ -6283,13 +7726,20 @@ fn diagnostic_v2_safe_value(object: &Value, key: &str) -> Option<String> {
         _ => return None,
     };
     let safe: String = raw.chars().filter(|ch| !ch.is_control()).take(96).collect();
-    if safe.trim().is_empty() { None } else { Some(safe) }
+    if safe.trim().is_empty() {
+        None
+    } else {
+        Some(safe)
+    }
 }
 
 fn diagnostic_v2_record_line(label: &str, record: &Value, fields: &[&str]) -> String {
-    let values: Vec<String> = fields.iter().filter_map(|key| {
-        diagnostic_v2_safe_value(record, key).map(|value| format!("{key}={value}"))
-    }).collect();
+    let values: Vec<String> = fields
+        .iter()
+        .filter_map(|key| {
+            diagnostic_v2_safe_value(record, key).map(|value| format!("{key}={value}"))
+        })
+        .collect();
     if values.is_empty() {
         format!("{label}: (no allow-listed fields)")
     } else {
@@ -6298,7 +7748,8 @@ fn diagnostic_v2_record_line(label: &str, record: &Value, fields: &[&str]) -> St
 }
 
 fn format_transcription_diagnostics_v2(http_status: u16, payload: Option<&Value>) -> Vec<String> {
-    let mut lines = vec!["Recent transcription diagnostics (authenticated, read-only):".to_string()];
+    let mut lines =
+        vec!["Recent transcription diagnostics (authenticated, read-only):".to_string()];
     if http_status == 401 || http_status == 403 {
         lines.push(format!("FAIL — diagnostics endpoint rejected authentication/authorization (HTTP {http_status})."));
         return lines;
@@ -6308,7 +7759,9 @@ fn format_transcription_diagnostics_v2(http_status: u16, payload: Option<&Value>
         return lines;
     }
     if http_status != 200 {
-        lines.push(format!("CHECK — diagnostics endpoint returned HTTP {http_status}."));
+        lines.push(format!(
+            "CHECK — diagnostics endpoint returned HTTP {http_status}."
+        ));
         return lines;
     }
     let Some(payload) = payload else {
@@ -6324,38 +7777,81 @@ fn format_transcription_diagnostics_v2(http_status: u16, payload: Option<&Value>
 
     let runtime = payload.get("runtime").unwrap_or(payload);
     let runtime_fields = [
-        "provider", "active_provider", "model", "model_id", "device",
-        "active_device", "active_inference_count", "inference_lock_busy",
-        "queue_busy", "readiness", "transcription_readiness"
+        "provider",
+        "active_provider",
+        "model",
+        "model_id",
+        "device",
+        "active_device",
+        "active_inference_count",
+        "inference_lock_busy",
+        "queue_busy",
+        "readiness",
+        "transcription_readiness",
     ];
-    lines.push(diagnostic_v2_record_line("Runtime", runtime, &runtime_fields));
+    lines.push(diagnostic_v2_record_line(
+        "Runtime",
+        runtime,
+        &runtime_fields,
+    ));
 
-    let events = payload.get("events").or_else(|| payload.get("recent_events")).and_then(Value::as_array);
-    let jobs = payload.get("jobs").or_else(|| payload.get("recent_jobs")).and_then(Value::as_array);
+    let events = payload
+        .get("events")
+        .or_else(|| payload.get("recent_events"))
+        .and_then(Value::as_array);
+    let jobs = payload
+        .get("jobs")
+        .or_else(|| payload.get("recent_jobs"))
+        .and_then(Value::as_array);
     let event_count = events.map_or(0, Vec::len);
     let job_count = jobs.map_or(0, Vec::len);
     lines.push(format!("Backend history: {event_count} events; {job_count} jobs (in-memory for this server process)."));
 
     let event_fields = [
-        "job_id", "event", "stage", "status", "percent", "timestamp",
-        "created_at", "updated_at", "error_type", "http_status"
+        "job_id",
+        "event",
+        "stage",
+        "status",
+        "percent",
+        "timestamp",
+        "created_at",
+        "updated_at",
+        "error_type",
+        "http_status",
     ];
     if let Some(items) = events {
         for (index, item) in items.iter().rev().take(8).rev().enumerate() {
-            lines.push(diagnostic_v2_record_line(&format!("Event {}", index + 1), item, &event_fields));
+            lines.push(diagnostic_v2_record_line(
+                &format!("Event {}", index + 1),
+                item,
+                &event_fields,
+            ));
         }
     }
     let job_fields = [
-        "job_id", "status", "stage", "started_at", "updated_at",
-        "completed_at", "error_type", "http_status"
+        "job_id",
+        "status",
+        "stage",
+        "started_at",
+        "updated_at",
+        "completed_at",
+        "error_type",
+        "http_status",
     ];
     if let Some(items) = jobs {
         for (index, item) in items.iter().rev().take(5).rev().enumerate() {
-            lines.push(diagnostic_v2_record_line(&format!("Job {}", index + 1), item, &job_fields));
+            lines.push(diagnostic_v2_record_line(
+                &format!("Job {}", index + 1),
+                item,
+                &job_fields,
+            ));
         }
     }
     if event_count == 0 && job_count == 0 {
-        lines.push("No transcription attempts have been recorded in this running backend process yet.".into());
+        lines.push(
+            "No transcription attempts have been recorded in this running backend process yet."
+                .into(),
+        );
     }
     lines
 }
@@ -6464,6 +7960,8 @@ fn get_app_diagnostics(state: State<'_, BackendState>, preferred_port: u16) -> S
             }
         ),
     ];
+    lines.push(String::new());
+    lines.extend(model_download_diagnostics_report(&state));
     if let Some(port) = status.port {
         lines.push(format!(
             "Local /health check: {}",
@@ -6863,6 +8361,12 @@ fn stop_orphaned_backend(
         }
         Some(_) | None => (None, None),
     };
+    if let Some(error) = port_lookup_error.as_deref() {
+        append_stop_trace(format!(
+            "INITIAL TARGET PORT LOOKUP: unable to verify listening port: {}",
+            sanitize_log_line(error, "")
+        ));
+    }
     let home = home_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
@@ -6882,22 +8386,29 @@ fn stop_orphaned_backend(
         // Snapshot port and direct manager identity before stopping. The command is not
         // considered successful until the backend tree is gone AND lsof confirms the
         // listener port stayed free after any stale manager was cleaned up.
-        let (command, _) = process_command_and_group(pid).ok_or_else(|| {
-            format!("Previous backend PID {pid} has already exited. Refresh server status.")
-        })?;
-        if !command_is_expected_backend(&command, &expected_exe) {
-            return Err("Safety check refused to stop this PID because it is not the expected packaged RDT Connect backend. No process was stopped.".into());
-        }
-        let port = port.ok_or_else(|| port_lookup_error.clone().unwrap_or_else(|| format!("Could not identify a listening port from verified packaged PID {pid}. No process was stopped.")))?;
+        let _verified_target = verified_backend_process_snapshot(pid, &expected_exe)?;
         let owner = manager_parent_for_backend(&state, pid);
         stop_orphaned_backend_safely(&state, pid)?;
         if let Some((owner_pid, owner_command)) = owner {
             close_legacy_manager_after_stop(owner_pid, &owner_command)?;
         }
-        verify_port_released(port, pid)?;
+
+        if let Some(port) = port {
+            verify_port_released(port, pid)?;
+        } else {
+            append_stop_trace(format!(
+                "PORT RELEASE CHECK UNAVAILABLE: backend PID {pid} had no independently identified listener port; verified process-group cleanup completed."
+            ));
+        }
+
         let scan = scan_orphaned_backends(&state);
         if scan.instances.iter().any(|item| item.pid == pid) {
-            return Err(format!("Backend PID {pid} still appears in the process scan after Stop. Port {port} was checked, but cleanup is not confirmed."));
+            let port_detail = port
+                .map(|value| format!("Port {value} was checked."))
+                .unwrap_or_else(|| "No listener port was independently identified.".into());
+            return Err(format!(
+                "Backend PID {pid} still appears in the process scan after Stop. {port_detail} Process cleanup is not confirmed."
+            ));
         }
         refresh_tray_menu(&app);
         Ok(scan)
@@ -6907,7 +8418,11 @@ fn stop_orphaned_backend(
         append_stop_trace(line);
     }
     match &result {
-        Ok(_) => append_stop_trace(format!("FINAL RESULT: SUCCESS; Rust command verified backend tree stopped and target port released; elapsed_ms={}.", started.elapsed().as_millis())),
+        Ok(_) => append_stop_trace(format!(
+            "FINAL RESULT: SUCCESS; verified backend process cleanup; port verification={}; elapsed_ms={}.",
+            port.map(|value| format!("released {value}")).unwrap_or_else(|| "unavailable (no listener identified)".into()),
+            started.elapsed().as_millis()
+        )),
         Err(error) => append_stop_trace(format!("FINAL RESULT: FAILURE; elapsed_ms={}; returned_error={}", started.elapsed().as_millis(), error)),
     }
     result
@@ -7040,7 +8555,10 @@ fn set_keep_in_menu_bar(
     state.set_keep_in_menu_bar(enabled)?;
     let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") else {
         let _ = state.set_keep_in_menu_bar(previous);
-        return Err(format!("The {} icon is not available in this session; the previous preference was restored.", tray_location_name()));
+        return Err(format!(
+            "The {} icon is not available in this session; the previous preference was restored.",
+            tray_location_name()
+        ));
     };
     if let Err(error) = tray.set_visible(enabled) {
         let _ = state.set_keep_in_menu_bar(previous);
@@ -7055,33 +8573,112 @@ async fn start_backend(
     model: String,
     preferred_port: u16,
 ) -> Result<BackendStatus, String> {
-    let state_app = app.clone();
     let worker_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let state = state_app.state::<BackendState>();
-        start_backend_blocking(worker_app, state, model, preferred_port)
+        start_backend_blocking(worker_app, model, preferred_port)
     })
     .await
     .map_err(|error| format!("Server startup worker failed: {error}"))?
 }
 
+const NORMAL_BACKEND_STARTUP_TIMEOUT: Duration = Duration::from_secs(180);
+
 fn start_backend_blocking(
     app: AppHandle,
-    state: State<'_, BackendState>,
     model: String,
     preferred_port: u16,
 ) -> Result<BackendStatus, String> {
+    // Model resolution and the real MLX warm-up inference happen before /health
+    // is served. Allow a bounded first load without changing benchmark deadlines.
     start_backend_blocking_with_options(
         app,
-        state,
         model,
         preferred_port,
         None,
-        Duration::from_secs(60),
+        NORMAL_BACKEND_STARTUP_TIMEOUT,
     )
 }
 
 fn start_backend_blocking_with_options(
+    app: AppHandle,
+    model: String,
+    preferred_port: u16,
+    inference_device_override: Option<&str>,
+    startup_timeout: Duration,
+) -> Result<BackendStatus, String> {
+    if preferred_port < 1024 {
+        return Err("Choose a preferred port between 1024 and 65535.".into());
+    }
+
+    // A port probe is only a candidate selector, never proof that the port
+    // remains available. The backend's actual bind is authoritative.
+    let mut attempted_ports = Vec::with_capacity(3);
+    attempted_ports.push(preferred_port);
+
+    for attempt in 1..=3 {
+        let port = if attempt == 1 {
+            preferred_port
+        } else {
+            let mut selected = None;
+            for _ in 0..128 {
+                let candidate = if attempt == 2 {
+                    native_benchmark_ephemeral_loopback_port()?
+                } else {
+                    native_benchmark_random_five_digit_loopback_port()?
+                };
+                if !attempted_ports.contains(&candidate) {
+                    selected = Some(candidate);
+                    break;
+                }
+            }
+            selected.ok_or_else(|| {
+                format!(
+                    "Could not select a distinct loopback port for startup attempt {attempt}/3."
+                )
+            })?
+        };
+
+        attempted_ports.push(port);
+        eprintln!("[RDT Connect] normal backend startup attempt {attempt}/3 on 127.0.0.1:{port}");
+
+        let result = start_backend_blocking_with_options_once(
+            app.clone(),
+            app.state::<BackendState>(),
+            model.clone(),
+            port,
+            inference_device_override,
+            startup_timeout,
+        );
+
+        match result {
+            Ok(status) => {
+                if status.port != Some(port) {
+                    return Err(format!(
+                        "Backend endpoint mismatch: requested 127.0.0.1:{port}, but manager reported {:?}.",
+                        status.port
+                    ));
+                }
+                return Ok(status);
+            }
+            Err(error) if native_benchmark_is_address_in_use_error(&error) && attempt < 3 => {
+                eprintln!(
+                    "[RDT Connect] actual backend bind collision on attempt {attempt}/3 at 127.0.0.1:{port}; retrying with a different port: {error}"
+                );
+            }
+            Err(error) if native_benchmark_is_address_in_use_error(&error) => {
+                return Err(format!(
+                    "The backend could not bind after three actual startup attempts on distinct loopback ports {:?}. No further retry was attempted. Last error: {error}",
+                    attempted_ports
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err("Backend startup ended without a result after three attempts.".into())
+}
+
+fn start_backend_blocking_with_options_once(
     app: AppHandle,
     state: State<'_, BackendState>,
     model: String,
@@ -7158,7 +8755,9 @@ fn start_backend_blocking_with_options(
         ));
     }
 
-    let port = check_preferred_port(preferred_port)?;
+    // Do not preflight-bind and release this port. The packaged backend's
+    // actual Uvicorn bind is the authoritative availability check.
+    let port = preferred_port;
     let bundle_dir = exe
         .parent()
         .ok_or_else(|| "Could not resolve the backend bundle folder.".to_string())?;
@@ -7258,15 +8857,13 @@ fn start_backend_blocking_with_options(
     command
         .env_remove("RDT_MLX_DEVICE")
         .env_remove("RDT_WHISPER_WORKER_VARIANT");
+    let mut applied_inference_device_preference: Option<String> = None;
     if cfg!(target_os = "macos") {
-        command.env(
-            "RDT_MLX_DEVICE",
-            inference_device_override
-                .map(str::to_string)
-                .unwrap_or_else(|| {
-                    read_effective_inference_device_preference(state.inner(), &model)
-                }),
-        );
+        let device = inference_device_override
+            .map(str::to_string)
+            .unwrap_or_else(|| read_effective_inference_device_preference(state.inner(), &model));
+        command.env("RDT_MLX_DEVICE", device.clone());
+        applied_inference_device_preference = Some(device);
     } else if let Some(worker_variant) = inference_device_override {
         command.env("RDT_WHISPER_WORKER_VARIANT", worker_variant);
     }
@@ -7397,6 +8994,7 @@ fn start_backend_blocking_with_options(
     {
         let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner.child = Some(child);
+        inner.applied_inference_device_preference = applied_inference_device_preference;
         inner.process_group = Some(process_group);
         inner.port = Some(port);
         inner.model = Some(model);
@@ -8683,7 +10281,12 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
         *item = Some(update_menu_item.clone());
     }
     #[cfg(target_os = "macos")]
-    let about_label = tray_text(&locale, "msg.about_rdt_connect.1d22", "About RDT Connect", &[]);
+    let about_label = tray_text(
+        &locale,
+        "msg.about_rdt_connect.1d22",
+        "About RDT Connect",
+        &[],
+    );
     let about_item = MenuItem::with_id(app, "tray-about-app", &about_label, true, None::<&str>)?;
 
     let quit = MenuItem::with_id(
@@ -9455,13 +11058,12 @@ async fn start_hardware_candidate_backend(
             }
 
             let result = start_backend_blocking_with_options(
-                worker_app.clone(),
-                state,
-                attempt_model,
-                candidate_port,
-                Some(device),
-                timeout,
-            );
+        worker_app.clone(),
+        attempt_model,
+        candidate_port,
+        Some(device),
+        timeout
+    );
 
             // The startup helper consumes the State handle. Reacquire it from
             // this same AppHandle before inspecting or stopping the owned child.
@@ -9681,7 +11283,9 @@ fn native_benchmark_segment_metadata(value: &Value) -> (usize, bool) {
     let mut usable = 0usize;
     let mut timing_available = true;
     for segment in segments {
-        let has_text = segment.get("text").and_then(Value::as_str)
+        let has_text = segment
+            .get("text")
+            .and_then(Value::as_str)
             .is_some_and(|text| !text.trim().is_empty());
         if !has_text {
             continue;
@@ -9912,9 +11516,12 @@ struct NativeBenchmarkFixtureSpec {
     expected_reference_sha256: Option<&'static str>,
 }
 
-fn native_benchmark_fixture_spec(mode: &str) -> Result<NativeBenchmarkFixtureSpec, String> {
-    match mode {
-        "first-run" => Ok(NativeBenchmarkFixtureSpec {
+fn native_benchmark_fixture_spec(
+    mode: &str,
+    manual_fixture: Option<&str>,
+) -> Result<NativeBenchmarkFixtureSpec, String> {
+    match (mode, manual_fixture) {
+        ("first-run", None) => Ok(NativeBenchmarkFixtureSpec {
             mode: "first-run",
             directory: "first-run-benchmark",
             audio_filename: "audio.wav",
@@ -9928,7 +11535,24 @@ fn native_benchmark_fixture_spec(mode: &str) -> Result<NativeBenchmarkFixtureSpe
                 "c2a2654a48f82a06d23928bd46b85a5801fb40935bcaa3fbfb356ccbd75aca56",
             ),
         }),
-        "manual" => Ok(NativeBenchmarkFixtureSpec {
+        ("first-run", Some(_)) => {
+            Err("Mandatory first-run benchmarking does not accept manual fixture settings.".into())
+        }
+        ("manual", Some("12s")) => Ok(NativeBenchmarkFixtureSpec {
+            mode: "manual",
+            directory: "first-run-benchmark",
+            audio_filename: "audio.wav",
+            fixture_id: "rdt-user-voice-first-run-12s-v1",
+            expected_sha256: "55c7b7d3b127a50ce6943a08e0078ff3aa67f42ca926814201a819654914450a",
+            minimum_duration_seconds: 11.5,
+            maximum_duration_seconds: 12.5,
+            expected_word_count: 28,
+            reference_filename: Some("reference-28-words.txt"),
+            expected_reference_sha256: Some(
+                "c2a2654a48f82a06d23928bd46b85a5801fb40935bcaa3fbfb356ccbd75aca56",
+            ),
+        }),
+        ("manual", Some("21s")) => Ok(NativeBenchmarkFixtureSpec {
             mode: "manual",
             directory: "benchmark",
             audio_filename: "user-voice-21s.wav",
@@ -9940,25 +11564,78 @@ fn native_benchmark_fixture_spec(mode: &str) -> Result<NativeBenchmarkFixtureSpe
             reference_filename: None,
             expected_reference_sha256: None,
         }),
+        ("manual", _) => Err("Manual benchmark fixture must be exactly 12s or 21s.".into()),
         _ => Err("Benchmark fixture mode must be exactly first-run or manual.".into()),
     }
 }
 
-fn native_benchmark_remaining_timeout(deadline: &Instant) -> Result<Duration, String> {
+fn native_benchmark_candidate_timeout_ms(
+    fixture_mode: &str,
+    manual_fixture: Option<&str>,
+    remaining_budget_ms: Option<u64>,
+) -> Result<Option<u64>, String> {
+    match fixture_mode {
+        "first-run" => {
+            if manual_fixture.is_some() {
+                return Err(
+                    "Mandatory first-run benchmarking cannot use manual fixture settings.".into(),
+                );
+            }
+            let remaining = remaining_budget_ms
+                .filter(|value| *value > 0)
+                .ok_or_else(|| "The shared benchmark time budget has expired.".to_string())?;
+            Ok(Some(remaining.min(60_000)))
+        }
+        "manual" => {
+            let maximum = match manual_fixture {
+                Some("12s") => 60_000,
+                Some("21s") => 120_000,
+                _ => return Err("Manual benchmark fixture must be exactly 12s or 21s.".into()),
+            };
+            match remaining_budget_ms {
+                Some(0) => Err("The selected manual candidate time limit has expired.".into()),
+                Some(remaining) => Ok(Some(remaining.min(maximum))),
+                None => Ok(None),
+            }
+        }
+        _ => Err("Benchmark fixture mode must be exactly first-run or manual.".into()),
+    }
+}
+
+fn native_benchmark_remaining_timeout(
+    deadline: Option<&Instant>,
+) -> Result<Option<Duration>, String> {
     if NATIVE_BENCHMARK_CANCEL_REQUESTED.load(Ordering::SeqCst) {
         return Err(
             "Benchmark cancellation was requested; no further HTTP request will start.".into(),
         );
     }
+    let Some(deadline) = deadline else {
+        return Ok(None);
+    };
     let remaining = deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
         return Err(
             "The benchmark hard time limit was reached; this candidate cannot qualify.".into(),
         );
     }
-    Ok(remaining)
+    Ok(Some(remaining))
 }
 
+trait NativeBenchmarkRequestDeadline {
+    fn apply_benchmark_deadline(self, deadline: Option<&Instant>) -> Result<Self, String>
+    where
+        Self: Sized;
+}
+
+impl NativeBenchmarkRequestDeadline for reqwest::blocking::RequestBuilder {
+    fn apply_benchmark_deadline(self, deadline: Option<&Instant>) -> Result<Self, String> {
+        Ok(match native_benchmark_remaining_timeout(deadline)? {
+            Some(timeout) => self.timeout(timeout),
+            None => self,
+        })
+    }
+}
 
 fn native_benchmark_safe_failure_code(message: &str) -> &'static str {
     let value = message.to_ascii_lowercase();
@@ -9993,23 +11670,44 @@ fn native_benchmark_diagnostic_record(
     candidate_index: Option<u32>,
     candidate_count: Option<u32>,
     result: &Result<Value, String>,
+    last_phase: &str,
+    terminal_outcome: Option<&str>,
 ) -> Value {
     let profile = result.as_ref().ok();
     let field = |key: &str| {
-        profile.and_then(|value| value.get(key))
-            .cloned().unwrap_or(Value::Null)
+        profile
+            .and_then(|value| value.get(key))
+            .cloned()
+            .unwrap_or(Value::Null)
     };
     let summary_source = profile.and_then(|value| value.get("summary"));
     let fixture_source = profile.and_then(|value| value.get("fixture"));
-    let candidate_failure = profile.and_then(|value| value.get("candidateFailure"))
+    let candidate_failure = profile
+        .and_then(|value| value.get("candidateFailure"))
         .and_then(Value::as_str);
-    let failure_message = result.as_ref().err().map(String::as_str).or(candidate_failure);
+    let failure_message = result
+        .as_ref()
+        .err()
+        .map(String::as_str)
+        .or(candidate_failure);
     let failed = result.is_err() || candidate_failure.is_some();
     let complete = field("candidateComplete").as_bool() == Some(true);
-    let outcome = if failed { "failed" } else if complete { "complete" } else { "partial" };
-    let failure_code = failure_message.map(native_benchmark_safe_failure_code).or_else(|| {
-        if outcome == "partial" { Some("incomplete_measured_samples") } else { None }
-    });
+    let outcome = if failed {
+        "failed"
+    } else if complete {
+        "complete"
+    } else {
+        "partial"
+    };
+    let failure_code = failure_message
+        .map(native_benchmark_safe_failure_code)
+        .or_else(|| {
+            if outcome == "partial" {
+                Some("incomplete_measured_samples")
+            } else {
+                None
+            }
+        });
 
     let runs = profile.and_then(|value| value.get("runs"))
         .and_then(Value::as_array)
@@ -10034,12 +11732,16 @@ fn native_benchmark_diagnostic_record(
         .unwrap_or_default();
 
     let summary_field = |key: &str| {
-        summary_source.and_then(|value| value.get(key))
-            .cloned().unwrap_or(Value::Null)
+        summary_source
+            .and_then(|value| value.get(key))
+            .cloned()
+            .unwrap_or(Value::Null)
     };
     let fixture_field = |key: &str| {
-        fixture_source.and_then(|value| value.get(key))
-            .cloned().unwrap_or(Value::Null)
+        fixture_source
+            .and_then(|value| value.get(key))
+            .cloned()
+            .unwrap_or(Value::Null)
     };
     let summary = json!({
         "provider": summary_field("provider"),
@@ -10053,6 +11755,45 @@ fn native_benchmark_diagnostic_record(
         "medianStrictCharacterErrorRate": summary_field("medianStrictCharacterErrorRate"),
         "measuredRunCount": summary_field("measuredRunCount")
     });
+
+    let category_failure_code = failure_message.map(native_benchmark_safe_failure_code);
+    let measured_run_count = field("measuredRunCount").as_u64().unwrap_or(0);
+    let lease_release_failed = field("leaseReleaseConfirmed").as_bool() == Some(false);
+    let qualification_failure = matches!(
+        category_failure_code,
+        Some("transcript_segment_validation") | Some("provider_verification_failed")
+    );
+    let infrastructure_failure = failed || lease_release_failed;
+
+    let failure_category = if terminal_outcome == Some("timed_out") {
+        "timeout"
+    } else if terminal_outcome == Some("interrupted") {
+        "interrupted"
+    } else if qualification_failure {
+        "qualification"
+    } else if infrastructure_failure {
+        "infrastructure"
+    } else if !complete {
+        "incomplete"
+    } else {
+        "none"
+    };
+
+    let diagnostic_outcome = if terminal_outcome == Some("timed_out") {
+        "timed_out"
+    } else if terminal_outcome == Some("interrupted") {
+        "interrupted"
+    } else if qualification_failure {
+        "qualification_failed"
+    } else if infrastructure_failure && measured_run_count > 0 && measured_run_count < 7 {
+        "partial"
+    } else if infrastructure_failure {
+        "failed"
+    } else if complete {
+        "complete"
+    } else {
+        "partial"
+    };
 
     json!({
         "schema": "rdt-connect-native-benchmark-attempt-v1",
@@ -10076,7 +11817,10 @@ fn native_benchmark_diagnostic_record(
             "sampleRateHz": fixture_field("sample_rate_hz"),
             "sha256": fixture_field("sha256")
         },
-        "outcome": outcome,
+        "outcome": diagnostic_outcome,
+        "failureCategory": failure_category,
+        "lastPhase": last_phase,
+        "terminalOutcome": terminal_outcome.unwrap_or("none"),
         "failureCode": failure_code,
         "measuredRunCount": field("measuredRunCount"),
         "candidateComplete": complete,
@@ -10087,22 +11831,25 @@ fn native_benchmark_diagnostic_record(
 }
 
 fn native_benchmark_diagnostics_path(state: &BackendState) -> Result<PathBuf, String> {
-    state.app_language_pref_path.parent()
+    state
+        .app_language_pref_path
+        .parent()
         .map(|parent| parent.join("native-benchmark-diagnostics-v1.json"))
-        .ok_or_else(|| "Could not locate the app support folder for benchmark diagnostics.".to_string())
+        .ok_or_else(|| {
+            "Could not locate the app support folder for benchmark diagnostics.".to_string()
+        })
 }
 
-fn append_native_benchmark_diagnostic(
-    state: &BackendState,
-    record: Value,
-) -> Result<(), String> {
-    let _guard = NATIVE_BENCHMARK_DIAGNOSTICS_LOCK.lock()
+fn append_native_benchmark_diagnostic(state: &BackendState, record: Value) -> Result<(), String> {
+    let _guard = NATIVE_BENCHMARK_DIAGNOSTICS_LOCK
+        .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let path = native_benchmark_diagnostics_path(state)?;
     let mut attempts = match fs::read(&path) {
         Ok(bytes) => {
-            let existing: Value = serde_json::from_slice(&bytes)
-                .map_err(|_| "Existing benchmark diagnostics are invalid; preserving the file.".to_string())?;
+            let existing: Value = serde_json::from_slice(&bytes).map_err(|_| {
+                "Existing benchmark diagnostics are invalid; preserving the file.".to_string()
+            })?;
             existing.get("attempts").and_then(Value::as_array).cloned()
                 .ok_or_else(|| "Existing benchmark diagnostics have an invalid attempts list; preserving the file.".to_string())?
         }
@@ -10111,7 +11858,9 @@ fn append_native_benchmark_diagnostic(
     };
     attempts.push(record);
     let excess = attempts.len().saturating_sub(20);
-    if excess > 0 { attempts.drain(0..excess); }
+    if excess > 0 {
+        attempts.drain(0..excess);
+    }
     let document = json!({
         "schema": "rdt-connect-native-benchmark-diagnostics-v1",
         "updatedAtUnixMs": unix_epoch_millis(),
@@ -10132,7 +11881,8 @@ fn append_native_benchmark_diagnostic(
 
 #[tauri::command]
 fn get_native_benchmark_diagnostics(state: State<'_, BackendState>) -> Result<Value, String> {
-    let _guard = NATIVE_BENCHMARK_DIAGNOSTICS_LOCK.lock()
+    let _guard = NATIVE_BENCHMARK_DIAGNOSTICS_LOCK
+        .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let path = native_benchmark_diagnostics_path(state.inner())?;
     match fs::read(path) {
@@ -10150,7 +11900,7 @@ fn get_native_benchmark_diagnostics(state: State<'_, BackendState>) -> Result<Va
             },
             "attempts": []
         })),
-        Err(_) => Err("Could not read benchmark diagnostics.".into())
+        Err(_) => Err("Could not read benchmark diagnostics.".into()),
     }
 }
 
@@ -10162,8 +11912,20 @@ mod native_benchmark_1d30_privacy_tests {
     fn optional_segment_count_does_not_require_timing_data() {
         let with_segments = json!({"segments":[{"start":0.0},{"start":1.0}]});
         let without_segments = json!({"text":"valid transcript"});
-        assert_eq!(with_segments.get("segments").and_then(Value::as_array).map(|v| v.len()), Some(2));
-        assert_eq!(without_segments.get("segments").and_then(Value::as_array).map(|v| v.len()), None);
+        assert_eq!(
+            with_segments
+                .get("segments")
+                .and_then(Value::as_array)
+                .map(|v| v.len()),
+            Some(2)
+        );
+        assert_eq!(
+            without_segments
+                .get("segments")
+                .and_then(Value::as_array)
+                .map(|v| v.len()),
+            None
+        );
     }
 
     #[test]
@@ -10188,8 +11950,17 @@ mod native_benchmark_1d30_privacy_tests {
         });
         let result: Result<Value, String> = Ok(profile);
         let record = native_benchmark_diagnostic_record(
-            100, 112, "manual", Some("gpu"), Some(10), Some(false),
-            Some(1), Some(2), &result
+            100,
+            112,
+            "manual",
+            Some("gpu"),
+            Some(10),
+            Some(false),
+            Some(1),
+            Some(2),
+            &result,
+            "complete",
+            None,
         );
         let encoded = serde_json::to_string(&record).unwrap();
         assert!(!encoded.contains("PRIVATE_TRANSCRIPT_SHOULD_NOT_APPEAR"));
@@ -10199,9 +11970,152 @@ mod native_benchmark_1d30_privacy_tests {
     }
 
     #[test]
-    fn benchmark_candidate_budget_is_hard_limited_to_sixty_seconds() {
-        const MAX_MS: u64 = 60_000;
-        assert_eq!(MAX_MS, 60_000);
+    fn diagnostic_record_preserves_partial_runs_when_timed_out() {
+        let profile = json!({
+            "candidateComplete": false,
+            "leaseReleaseConfirmed": true,
+            "measuredRunCount": 2,
+            "summary": {"provider":"mlx-metal-gpu","medianInferenceMs":14.0},
+            "runs": [
+                {"inferenceMs":13.0,"provider":{"provider":"mlx-metal-gpu","provider_verified":true}},
+                {"inferenceMs":15.0,"provider":{"provider":"mlx-metal-gpu","provider_verified":true}}
+            ]
+        });
+        let result: Result<Value, String> = Ok(profile);
+        let record = native_benchmark_diagnostic_record(
+            100,
+            245,
+            "manual",
+            Some("gpu"),
+            Some(10),
+            Some(false),
+            Some(1),
+            Some(2),
+            &result,
+            "measuring",
+            Some("timed_out"),
+        );
+
+        assert_eq!(record["outcome"], "timed_out");
+        assert_eq!(record["failureCategory"], "timeout");
+        assert_eq!(record["lastPhase"], "measuring");
+        assert_eq!(record["terminalOutcome"], "timed_out");
+        assert_eq!(record["elapsedMs"], 145);
+        assert_eq!(record["measuredRunCount"], 2);
+        assert_eq!(record["runs"].as_array().unwrap().len(), 2);
+        assert_eq!(record["candidateComplete"], false);
+    }
+
+    #[test]
+    fn diagnostic_record_distinguishes_interruption_qualification_and_infrastructure() {
+        let interrupted_profile = json!({
+            "candidateComplete": false,
+            "candidateFailure": "Benchmark cancelled; previous successful results were preserved.",
+            "leaseReleaseConfirmed": true,
+            "measuredRunCount": 1,
+            "runs": [
+                {"inferenceMs":13.0,"provider":{"provider":"mlx-metal-gpu","provider_verified":true}}
+            ]
+        });
+        let interrupted_result: Result<Value, String> = Ok(interrupted_profile);
+        let interrupted = native_benchmark_diagnostic_record(
+            100,
+            200,
+            "manual",
+            Some("gpu"),
+            Some(10),
+            Some(false),
+            Some(1),
+            Some(2),
+            &interrupted_result,
+            "measuring",
+            Some("interrupted"),
+        );
+        assert_eq!(interrupted["outcome"], "interrupted");
+        assert_eq!(interrupted["failureCategory"], "interrupted");
+        assert_eq!(interrupted["lastPhase"], "measuring");
+        assert_eq!(interrupted["runs"].as_array().unwrap().len(), 1);
+        assert_eq!(interrupted["candidateComplete"], false);
+
+        let qualification_profile = json!({
+            "candidateComplete": false,
+            "candidateFailure": "Provider verification failed.",
+            "leaseReleaseConfirmed": true,
+            "measuredRunCount": 1,
+            "runs": []
+        });
+        let qualification_result: Result<Value, String> = Ok(qualification_profile);
+        let qualification = native_benchmark_diagnostic_record(
+            100,
+            200,
+            "manual",
+            Some("gpu"),
+            Some(10),
+            Some(false),
+            Some(1),
+            Some(2),
+            &qualification_result,
+            "verification",
+            None,
+        );
+        assert_eq!(qualification["outcome"], "qualification_failed");
+        assert_eq!(qualification["failureCategory"], "qualification");
+        assert_eq!(qualification["candidateComplete"], false);
+
+        let infrastructure_result: Result<Value, String> =
+            Err("Could not renew benchmark lease: connection refused".into());
+        let infrastructure = native_benchmark_diagnostic_record(
+            100,
+            200,
+            "manual",
+            Some("gpu"),
+            Some(10),
+            Some(false),
+            Some(1),
+            Some(2),
+            &infrastructure_result,
+            "lease-renewal",
+            None,
+        );
+        assert_eq!(infrastructure["outcome"], "failed");
+        assert_eq!(infrastructure["failureCategory"], "infrastructure");
+    }
+
+    #[test]
+    fn benchmark_candidate_timeout_policy_separates_mandatory_and_manual_modes() {
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("first-run", None, Some(180_000)).unwrap(),
+            Some(60_000)
+        );
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("first-run", None, Some(24_000)).unwrap(),
+            Some(24_000)
+        );
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("manual", Some("12s"), Some(90_000)).unwrap(),
+            Some(60_000)
+        );
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("manual", Some("21s"), Some(180_000)).unwrap(),
+            Some(120_000)
+        );
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("manual", Some("21s"), Some(30_000)).unwrap(),
+            Some(30_000)
+        );
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("manual", Some("12s"), None).unwrap(),
+            None
+        );
+        assert_eq!(
+            native_benchmark_candidate_timeout_ms("manual", Some("21s"), None).unwrap(),
+            None
+        );
+        assert!(
+            native_benchmark_candidate_timeout_ms("first-run", Some("21s"), Some(60_000)).is_err()
+        );
+        assert!(native_benchmark_candidate_timeout_ms("first-run", None, None).is_err());
+        assert!(native_benchmark_candidate_timeout_ms("manual", Some("invalid"), None).is_err());
     }
 }
 
@@ -10209,6 +12123,7 @@ mod native_benchmark_1d30_privacy_tests {
 async fn run_hardware_native_benchmark(
     app: AppHandle,
     fixture_mode: String,
+    manual_fixture: Option<String>,
     candidate: Option<String>,
     optimization_session_id: Option<String>,
     backend_ready_ms: Option<u64>,
@@ -10224,6 +12139,10 @@ async fn run_hardware_native_benchmark(
     let diagnostic_backend_reused = backend_reused;
     let diagnostic_candidate_index = candidate_index;
     let diagnostic_candidate_count = candidate_count;
+    let diagnostic_last_phase = Arc::new(Mutex::new("starting".to_owned()));
+    let diagnostic_terminal_outcome = Arc::new(Mutex::new(None::<String>));
+    let worker_last_phase = Arc::clone(&diagnostic_last_phase);
+    let worker_terminal_outcome = Arc::clone(&diagnostic_terminal_outcome);
     let task_app = app.clone();
     let worker_result = tauri::async_runtime::spawn_blocking(move || {
         let state = task_app.state::<BackendState>();
@@ -10231,6 +12150,7 @@ async fn run_hardware_native_benchmark(
             task_app.clone(),
             state.inner(),
             fixture_mode,
+            manual_fixture,
             candidate,
             optimization_session_id,
             backend_ready_ms,
@@ -10238,12 +12158,23 @@ async fn run_hardware_native_benchmark(
             candidate_index,
             candidate_count,
             remaining_budget_ms,
+            worker_last_phase,
+            worker_terminal_outcome,
         )
-    }).await;
+    })
+    .await;
     let result = match worker_result {
         Ok(value) => value,
         Err(error) => Err(format!("Native benchmark worker failed: {error}")),
     };
+    let last_phase = diagnostic_last_phase
+        .lock()
+        .map(|phase| phase.clone())
+        .unwrap_or_else(|_| "unknown".to_owned());
+    let terminal_outcome = diagnostic_terminal_outcome
+        .lock()
+        .ok()
+        .and_then(|outcome| outcome.clone());
     let finished_at_ms = unix_epoch_millis();
     let state = app.state::<BackendState>();
     let record = native_benchmark_diagnostic_record(
@@ -10256,6 +12187,8 @@ async fn run_hardware_native_benchmark(
         diagnostic_candidate_index,
         diagnostic_candidate_count,
         &result,
+        &last_phase,
+        terminal_outcome.as_deref(),
     );
     if let Err(error) = append_native_benchmark_diagnostic(state.inner(), record) {
         eprintln!("[RDT Connect] Could not save benchmark diagnostics: {error}");
@@ -10267,6 +12200,7 @@ fn run_hardware_native_benchmark_blocking(
     app: AppHandle,
     state: &BackendState,
     fixture_mode: String,
+    manual_fixture: Option<String>,
     candidate: Option<String>,
     optimization_session_id: Option<String>,
     backend_ready_ms: Option<u64>,
@@ -10274,20 +12208,17 @@ fn run_hardware_native_benchmark_blocking(
     candidate_index: Option<u32>,
     candidate_count: Option<u32>,
     remaining_budget_ms: Option<u64>,
+    last_phase: Arc<Mutex<String>>,
+    terminal_outcome: Arc<Mutex<Option<String>>>,
 ) -> Result<Value, String> {
-    let fixture_spec = native_benchmark_fixture_spec(&fixture_mode)?;
-    const MAX_CANDIDATE_BUDGET_MS: u64 = 60_000;
-    let native_budget_ms = match fixture_mode.as_str() {
-        // Each hardware option gets its own hard 60-second ceiling.
-        // First-run is additionally bounded by the remaining shared budget.
-        "first-run" => remaining_budget_ms
-            .filter(|value| *value > 0)
-            .ok_or_else(|| "The shared benchmark time budget has expired.".to_string())?
-            .min(MAX_CANDIDATE_BUDGET_MS),
-        "manual" => MAX_CANDIDATE_BUDGET_MS,
-        _ => return Err("Benchmark fixture mode must be exactly first-run or manual.".into()),
-    };
-    let benchmark_deadline = Instant::now() + Duration::from_millis(native_budget_ms);
+    let fixture_spec = native_benchmark_fixture_spec(&fixture_mode, manual_fixture.as_deref())?;
+    let native_budget_ms = native_benchmark_candidate_timeout_ms(
+        &fixture_mode,
+        manual_fixture.as_deref(),
+        remaining_budget_ms,
+    )?;
+    let benchmark_deadline =
+        native_budget_ms.map(|budget| Instant::now() + Duration::from_millis(budget));
     if let Some(candidate_name) = candidate.as_deref() {
         if !NATIVE_BENCHMARK_STARTING.load(Ordering::SeqCst) {
             return Err(
@@ -10413,7 +12344,10 @@ fn run_hardware_native_benchmark_blocking(
 
     let origin = parsed_url.origin().ascii_serialization();
     let (_port, token) = state.api_credentials()?;
-    let client = local_tls_client(&tls_config, Duration::from_secs(260))?;
+    let client_timeout = benchmark_deadline
+        .as_ref()
+        .map(|_| Duration::from_secs(260));
+    let client = local_tls_client_with_optional_timeout(&tls_config, client_timeout)?;
 
     // The selected mode is fixed for the whole GPU/CPU comparison session.
     let fixture_dir = state.resource_dir.join(fixture_spec.directory);
@@ -10513,7 +12447,7 @@ fn run_hardware_native_benchmark_blocking(
         &token,
         &origin,
     )
-    .timeout(native_benchmark_remaining_timeout(&benchmark_deadline)?)
+    .apply_benchmark_deadline(benchmark_deadline.as_ref())?
     .send()
     .map_err(|error| {
         format!("Could not verify benchmark support in the local transcription server: {error}")
@@ -10547,7 +12481,7 @@ fn run_hardware_native_benchmark_blocking(
         &token,
         &origin,
     )
-    .timeout(native_benchmark_remaining_timeout(&benchmark_deadline)?)
+    .apply_benchmark_deadline(benchmark_deadline.as_ref())?
     .send()
     .map_err(|error| format!("Could not acquire benchmark lease: {error}"))?;
     let lease = native_benchmark_response(lease_response, "Benchmark lease acquisition")?;
@@ -10567,6 +12501,14 @@ fn run_hardware_native_benchmark_blocking(
         // Exactly 8 transcription API requests: one warm-up + seven measured.
         let mut candidate_failure: Option<String> = None;
         for index in 0..8 {
+            if let Ok(mut phase) = last_phase.lock() {
+                *phase = if index == 0 {
+                    "candidate-start"
+                } else {
+                    "lease-renewal"
+                }
+                .to_owned();
+            }
             let iteration_result: Result<(), String> = (|| -> Result<(), String> {
                 if NATIVE_BENCHMARK_CANCEL_REQUESTED.load(Ordering::SeqCst) {
                     return Err(
@@ -10583,7 +12525,7 @@ fn run_hardware_native_benchmark_blocking(
                         &origin,
                     )
                     .header("RDT-Benchmark-Session", session_id.as_str())
-                    .timeout(native_benchmark_remaining_timeout(&benchmark_deadline)?)
+                    .apply_benchmark_deadline(benchmark_deadline.as_ref())?
                     .send()
                     .map_err(|error| format!("Could not renew benchmark lease: {error}"))?;
                     native_benchmark_response(response, "Benchmark lease renewal")?;
@@ -10615,6 +12557,9 @@ fn run_hardware_native_benchmark_blocking(
                     .part("file", part);
 
                 let started = Instant::now();
+                if let Ok(mut phase) = last_phase.lock() {
+                    *phase = if index == 0 { "warmup" } else { "measuring" }.to_owned();
+                }
                 let response = request_builder(
                     &client,
                     "POST",
@@ -10624,7 +12569,7 @@ fn run_hardware_native_benchmark_blocking(
                 )
                 .header("RDT-Benchmark-Session", session_id.as_str())
                 .multipart(form)
-                .timeout(native_benchmark_remaining_timeout(&benchmark_deadline)?)
+                .apply_benchmark_deadline(benchmark_deadline.as_ref())?
                 .send()
                 .map_err(|error| {
                     format!("Benchmark transcription {} failed: {error}", index + 1)
@@ -10856,7 +12801,7 @@ fn run_hardware_native_benchmark_blocking(
             .ok_or_else(|| "Could not calculate the measured-run strict-CER median.".to_string())?;
         let median_wer = native_benchmark_median(&wers)
             .ok_or_else(|| "Could not calculate the measured-run WER median.".to_string())?;
-        if let Err(error) = native_benchmark_remaining_timeout(&benchmark_deadline) {
+        if let Err(error) = native_benchmark_remaining_timeout(benchmark_deadline.as_ref()) {
             candidate_failure.get_or_insert(error);
         }
         Ok(json!({
@@ -10908,6 +12853,28 @@ fn run_hardware_native_benchmark_blocking(
             }
         }))
     })();
+
+    let cancellation_observed = NATIVE_BENCHMARK_CANCEL_REQUESTED.load(Ordering::SeqCst)
+        || benchmark_result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error.to_ascii_lowercase().contains("cancelled"))
+        || benchmark_result
+            .as_ref()
+            .ok()
+            .and_then(|profile| profile.get("candidateFailure"))
+            .and_then(Value::as_str)
+            .is_some_and(|message| message.to_ascii_lowercase().contains("cancelled"));
+    let deadline_expired = benchmark_deadline
+        .as_ref()
+        .is_some_and(|deadline| Instant::now() >= *deadline);
+    if let Ok(mut terminal) = terminal_outcome.lock() {
+        if cancellation_observed {
+            *terminal = Some("interrupted".to_owned());
+        } else if benchmark_result.is_err() && deadline_expired {
+            *terminal = Some("timed_out".to_owned());
+        }
+    }
 
     // Release the lease even if the run failed or the user cancelled.
     let release_result = request_builder(
@@ -10971,11 +12938,27 @@ fn run_hardware_native_benchmark_blocking(
         .map_err(|error| format!("Could not encode benchmark profile: {error}"))?;
     write_private_atomic(&profile_path, &profile_bytes)?;
 
+    if let Ok(mut phase) = last_phase.lock() {
+        *phase = "complete".to_owned();
+    }
     let _ = app.emit(
         "rdt-native-benchmark-progress",
         json!({"phase": "complete", "profile": profile}),
     );
     Ok(profile)
+}
+
+fn native_benchmark_selected_devices_valid(selected_devices: &[String]) -> bool {
+    match selected_devices {
+        [device] => matches!(device.as_str(), "gpu" | "cpu"),
+        [first, second] => {
+            matches!(first.as_str(), "gpu" | "cpu")
+                && matches!(second.as_str(), "gpu" | "cpu")
+                && first != second
+                && ((first == "gpu" && second == "cpu") || (first == "cpu" && second == "gpu"))
+        }
+        _ => false,
+    }
 }
 
 #[tauri::command]
@@ -10994,14 +12977,10 @@ fn finalize_hardware_optimization(
     {
         return Err("The hardware optimization session identifier is invalid.".into());
     }
-    if selected_devices.len() != 2
-        || !selected_devices.iter().any(|device| device == "gpu")
-        || !selected_devices.iter().any(|device| device == "cpu")
-        || selected_devices
-            .iter()
-            .any(|device| !matches!(device.as_str(), "gpu" | "cpu"))
-    {
-        return Err("The hardware benchmark must compare both Apple GPU and Apple CPU.".into());
+    if !native_benchmark_selected_devices_valid(&selected_devices) {
+        return Err(
+            "Select one Apple hardware candidate or compare both Apple GPU and Apple CPU.".into(),
+        );
     }
     if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         return Err("The MLX hardware comparison is available only on Apple Silicon Macs.".into());
@@ -11111,35 +13090,41 @@ fn finalize_hardware_optimization(
         Ok(profile)
     };
 
-    // Validate both candidates independently. A failure in one must never erase a valid result from the other.
-    let gpu_result = read_candidate("gpu");
-    let cpu_result = read_candidate("cpu");
+    // Read only selected candidates. Unselected hardware is not a benchmark failure.
     let mut candidate_failures = serde_json::Map::new();
-    let gpu = match gpu_result {
-        Ok(profile) => Some(profile),
-        Err(error) => {
-            candidate_failures.insert("gpu".into(), Value::String(error));
-            None
+    let gpu = if selected_devices.iter().any(|device| device == "gpu") {
+        match read_candidate("gpu") {
+            Ok(profile) => Some(profile),
+            Err(error) => {
+                candidate_failures.insert("gpu".into(), Value::String(error));
+                None
+            }
         }
+    } else {
+        None
     };
-    let cpu = match cpu_result {
-        Ok(profile) => Some(profile),
-        Err(error) => {
-            candidate_failures.insert("cpu".into(), Value::String(error));
-            None
+    let cpu = if selected_devices.iter().any(|device| device == "cpu") {
+        match read_candidate("cpu") {
+            Ok(profile) => Some(profile),
+            Err(error) => {
+                candidate_failures.insert("cpu".into(), Value::String(error));
+                None
+            }
         }
+    } else {
+        None
     };
     if gpu.is_none() && cpu.is_none() {
         return Err(format!(
-            "Neither Apple GPU nor Apple CPU produced a verified measured run. GPU: {}; CPU: {}",
+            "No selected Apple hardware candidate produced a verified measured run. GPU: {}; CPU: {}",
             candidate_failures
                 .get("gpu")
                 .and_then(Value::as_str)
-                .unwrap_or("not available"),
+                .unwrap_or("not selected"),
             candidate_failures
                 .get("cpu")
                 .and_then(Value::as_str)
-                .unwrap_or("not available")
+                .unwrap_or("not selected")
         ));
     }
 
@@ -11282,6 +13267,50 @@ fn finalize_hardware_optimization(
         hardware_optimization_profile_path(state.inner(), "hardware-optimization-profile.json")?;
     write_private_atomic(&legacy_path, &bytes)?;
     Ok(comparison)
+}
+
+#[cfg(test)]
+mod native_benchmark_selection_contract_tests {
+    use super::native_benchmark_selected_devices_valid;
+
+    fn devices(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn accepts_single_gpu() {
+        assert!(native_benchmark_selected_devices_valid(&devices(&["gpu"])));
+    }
+
+    #[test]
+    fn accepts_single_cpu() {
+        assert!(native_benchmark_selected_devices_valid(&devices(&["cpu"])));
+    }
+
+    #[test]
+    fn accepts_gpu_cpu_pair_in_either_order() {
+        assert!(native_benchmark_selected_devices_valid(&devices(&[
+            "gpu", "cpu"
+        ])));
+        assert!(native_benchmark_selected_devices_valid(&devices(&[
+            "cpu", "gpu"
+        ])));
+    }
+
+    #[test]
+    fn rejects_empty_duplicate_unknown_and_more_than_two_devices() {
+        assert!(!native_benchmark_selected_devices_valid(&devices(&[])));
+        assert!(!native_benchmark_selected_devices_valid(&devices(&[
+            "gpu", "gpu"
+        ])));
+        assert!(!native_benchmark_selected_devices_valid(&devices(&["npu"])));
+        assert!(!native_benchmark_selected_devices_valid(&devices(&[
+            "gpu", "npu"
+        ])));
+        assert!(!native_benchmark_selected_devices_valid(&devices(&[
+            "gpu", "cpu", "npu"
+        ])));
+    }
 }
 
 fn hardware_optimization_candidate_record_valid(candidate: &Value, device: &str) -> bool {
@@ -12782,7 +14811,7 @@ fn main() {
             get_tray_location_name,
             get_keep_in_menu_bar, set_keep_in_menu_bar, set_app_language, set_update_indicator, remember_recent_server_choice, start_backend, stop_backend, list_available_browsers, get_preferred_browser, set_preferred_browser, set_offline_only_mode,
             record_fireworks_activation, open_voice_window,
-            get_model_storage_status, set_model_storage_locations, pick_model_storage_directory,
+            get_model_storage_status, set_model_storage_locations, reveal_model_storage_folder, pick_model_storage_directory,
             get_model_download_status, start_model_download, cancel_model_download, delete_rdt_model_caches, open_easywhisper_model_manager,
             get_local_https_status, pick_tls_file, setup_local_https_certificate, link_local_https_certificate, trust_local_https_ca, remove_rdt_https_trust, set_local_transport,
             get_tailscale_status, get_remote_access_diagnostics, enable_private_access, generate_pairing_qr,
@@ -12864,8 +14893,12 @@ mod transcription_diagnostics_v2_tests {
 
     #[test]
     fn identifies_auth_and_missing_route_failures() {
-        assert!(format_transcription_diagnostics_v2(401, None).join(" ").contains("authentication"));
-        assert!(format_transcription_diagnostics_v2(404, None).join(" ").contains("does not expose"));
+        assert!(format_transcription_diagnostics_v2(401, None)
+            .join(" ")
+            .contains("authentication"));
+        assert!(format_transcription_diagnostics_v2(404, None)
+            .join(" ")
+            .contains("does not expose"));
     }
 }
 
@@ -12914,7 +14947,7 @@ mod native_benchmark_tests {
 
     #[test]
     fn fixture_modes_select_their_own_user_voice_recordings() {
-        let first = native_benchmark_fixture_spec("first-run").unwrap();
+        let first = native_benchmark_fixture_spec("first-run", None).unwrap();
         assert_eq!(first.directory, "first-run-benchmark");
         assert_eq!(first.audio_filename, "audio.wav");
         assert_eq!(first.fixture_id, "rdt-user-voice-first-run-12s-v1");
@@ -12923,7 +14956,12 @@ mod native_benchmark_tests {
             (first.minimum_duration_seconds..=first.maximum_duration_seconds).contains(&12.0294375)
         );
 
-        let manual = native_benchmark_fixture_spec("manual").unwrap();
+        let manual_short = native_benchmark_fixture_spec("manual", Some("12s")).unwrap();
+        assert_eq!(manual_short.directory, "first-run-benchmark");
+        assert_eq!(manual_short.audio_filename, "audio.wav");
+        assert_eq!(manual_short.expected_sha256, first.expected_sha256);
+
+        let manual = native_benchmark_fixture_spec("manual", Some("21s")).unwrap();
         assert_eq!(manual.directory, "benchmark");
         assert_eq!(manual.audio_filename, "user-voice-21s.wav");
         assert_eq!(manual.fixture_id, "rdt-user-voice-manual-21s-v1");
@@ -12932,9 +14970,9 @@ mod native_benchmark_tests {
             (manual.minimum_duration_seconds..=manual.maximum_duration_seconds).contains(&20.72575)
         );
         assert_ne!(first.expected_sha256, manual.expected_sha256);
-        assert!(native_benchmark_fixture_spec("").is_err());
-        assert!(native_benchmark_fixture_spec("preview").is_err());
-        assert!(native_benchmark_fixture_spec("librispeech").is_err());
+        assert!(native_benchmark_fixture_spec("", None).is_err());
+        assert!(native_benchmark_fixture_spec("preview", None).is_err());
+        assert!(native_benchmark_fixture_spec("librispeech", None).is_err());
     }
 }
 
@@ -13118,6 +15156,76 @@ mod native_benchmark_guard_tests {
 #[cfg(test)]
 mod model_storage_atomic_write_tests {
     use super::*;
+    #[test]
+    fn running_server_allows_appending_locations() {
+        let old = vec!["/models/primary".to_string()];
+        let new = vec![
+            "/models/primary".to_string(),
+            "/models/secondary".to_string(),
+        ];
+        assert!(model_storage_append_only_change_allowed(
+            &old,
+            "/models/primary",
+            &new,
+            "/models/primary"
+        ));
+    }
+
+    #[test]
+    fn running_server_rejects_unchanged_and_removed_locations() {
+        let old = vec![
+            "/models/primary".to_string(),
+            "/models/secondary".to_string(),
+        ];
+        assert!(!model_storage_append_only_change_allowed(
+            &old,
+            "/models/primary",
+            &old,
+            "/models/primary"
+        ));
+        let removed = vec!["/models/primary".to_string()];
+        assert!(!model_storage_append_only_change_allowed(
+            &old,
+            "/models/primary",
+            &removed,
+            "/models/primary"
+        ));
+    }
+
+    #[test]
+    fn running_server_rejects_reordering_existing_locations() {
+        let old = vec![
+            "/models/primary".to_string(),
+            "/models/secondary".to_string(),
+        ];
+        let reordered = vec![
+            "/models/secondary".to_string(),
+            "/models/primary".to_string(),
+            "/models/third".to_string(),
+        ];
+        assert!(!model_storage_append_only_change_allowed(
+            &old,
+            "/models/primary",
+            &reordered,
+            "/models/primary"
+        ));
+    }
+
+    #[test]
+    fn running_server_rejects_download_destination_changes() {
+        let old = vec!["/models/primary".to_string()];
+        let new = vec![
+            "/models/primary".to_string(),
+            "/models/secondary".to_string(),
+        ];
+        assert!(!model_storage_append_only_change_allowed(
+            &old,
+            "/models/primary",
+            &new,
+            "/models/secondary"
+        ));
+    }
+
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fixture(label: &str) -> PathBuf {
@@ -13353,5 +15461,946 @@ mod ggml_companion_cleanup_tests {
 
         fs::remove_file(&entry).unwrap();
         fs::remove_file(&target).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod model_download_group_ownership_tests {
+    use super::*;
+
+    const STARTED: &str = "Sat Nov 21 01:00:00 2026";
+    const LEADER_COMMAND: &str = "/bundle/rdt_voice_backend --download";
+
+    fn process(pid: u32, pgid: u32, stat: &str, started: &str, command: &str) -> ProcessSnapshot {
+        ProcessSnapshot {
+            pid,
+            ppid: 1,
+            pgid,
+            stat: stat.into(),
+            started: started.into(),
+            command: command.into(),
+        }
+    }
+
+    fn identity() -> ProcessSnapshot {
+        process(410, 410, "S", STARTED, LEADER_COMMAND)
+    }
+
+    fn expected(command: &str) -> bool {
+        command.contains("/bundle/rdt_voice_backend")
+    }
+
+    #[test]
+    fn accepts_captured_leader_and_resource_tracker_helper() {
+        let leader = identity();
+        let helper = process(
+            411,
+            410,
+            "S",
+            STARTED,
+            "/usr/bin/python multiprocessing.resource_tracker",
+        );
+        assert_eq!(
+            model_download_group_snapshot_is_owned(
+                &leader,
+                &[leader.clone(), helper],
+                false,
+                expected
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn accepts_remaining_isolated_helper_after_leader_exit() {
+        let leader = identity();
+        let helper = process(
+            411,
+            410,
+            "S",
+            STARTED,
+            "/usr/bin/python multiprocessing.resource_tracker",
+        );
+        assert_eq!(
+            model_download_group_snapshot_is_owned(&leader, &[helper], false, expected),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn rejects_pid_reuse_even_when_group_matches() {
+        let leader = identity();
+        let reused = process(410, 410, "S", "Sat Nov 21 02:00:00 2026", LEADER_COMMAND);
+        assert!(
+            model_download_group_snapshot_is_owned(&leader, &[reused], false, expected)
+                .unwrap_err()
+                .contains("different process")
+        );
+    }
+
+    #[test]
+    fn reused_leader_pid_outside_original_group_does_not_block_cleanup() {
+        let leader = identity();
+        let reused_pid = process(410, 900, "S", STARTED, "/tmp/unrelated-process");
+        let owned_helper = process(411, 410, "S", STARTED, "/usr/bin/python helper");
+        assert_eq!(
+            model_download_group_snapshot_is_owned(
+                &leader,
+                &[reused_pid, owned_helper],
+                false,
+                expected
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn changed_leader_identity_inside_original_group_is_rejected() {
+        let leader = identity();
+        let replaced = process(410, 410, "S", "Sat Nov 21 02:00:00 2026", LEADER_COMMAND);
+        let helper = process(411, 410, "S", STARTED, "/usr/bin/python helper");
+        let error =
+            model_download_group_snapshot_is_owned(&leader, &[replaced, helper], false, expected)
+                .unwrap_err();
+        assert!(error.contains("different process inside its original process group"));
+    }
+
+    #[test]
+    fn rejects_changed_command_for_captured_leader() {
+        let captured = identity();
+        let replacement = process(410, 410, "S", STARTED, "/tmp/replacement-process");
+        let error =
+            model_download_group_snapshot_is_owned(&captured, &[replacement], false, expected)
+                .unwrap_err();
+        assert!(error.contains("different process"), "{error}");
+    }
+
+    #[test]
+    fn rejects_wrong_executable_for_original_leader() {
+        let mut leader = identity();
+        let wrong = process(410, 410, "S", STARTED, "/tmp/unrelated-process");
+        leader.command = wrong.command.clone();
+        assert!(
+            model_download_group_snapshot_is_owned(&leader, &[wrong], false, expected)
+                .unwrap_err()
+                .contains("no longer matches the packaged backend")
+        );
+    }
+
+    #[test]
+    fn foreign_process_group_is_not_owned() {
+        let leader = identity();
+        let foreign = process(900, 900, "S", STARTED, "/tmp/unrelated-process");
+        assert_eq!(
+            model_download_group_snapshot_is_owned(&leader, &[foreign], false, expected),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn empty_process_snapshot_fails_closed() {
+        let leader = identity();
+        assert!(
+            model_download_group_snapshot_is_owned(&leader, &[], false, expected)
+                .unwrap_err()
+                .contains("Could not inspect the process table")
+        );
+    }
+
+    #[test]
+    fn remaining_descendants_without_group_members_fail_closed() {
+        let leader = identity();
+        let foreign = process(900, 900, "S", STARTED, "/tmp/unrelated-process");
+        assert!(
+            model_download_group_snapshot_is_owned(&leader, &[foreign], true, expected)
+                .unwrap_err()
+                .contains("descendant processes remain")
+        );
+    }
+
+    #[test]
+    fn rejects_nonisolated_identity() {
+        let mut leader = identity();
+        leader.pgid = 900;
+        assert!(model_download_group_snapshot_is_owned(
+            &leader,
+            &[leader.clone()],
+            false,
+            expected
+        )
+        .unwrap_err()
+        .contains("not an isolated process group"));
+    }
+
+    #[test]
+    fn zombie_only_group_is_not_live_or_owned() {
+        let leader = identity();
+        let zombie = process(410, 410, "Z", STARTED, LEADER_COMMAND);
+        assert_eq!(
+            model_download_group_snapshot_is_owned(&leader, &[zombie], false, expected),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn cancellation_attempt_guard_requires_exact_identity_and_active_request() {
+        let captured = identity();
+
+        assert!(model_download_process_identity_matches(
+            &captured, &captured
+        ));
+        assert!(model_download_cancel_attempt_is_current(
+            true,
+            Some(&captured),
+            &captured,
+            true
+        ));
+
+        let mut changed = captured.clone();
+        changed.pid += 1;
+        assert!(!model_download_process_identity_matches(
+            &changed, &captured
+        ));
+
+        changed = captured.clone();
+        changed.pgid += 1;
+        assert!(!model_download_process_identity_matches(
+            &changed, &captured
+        ));
+
+        changed = captured.clone();
+        changed.started = "different-start-time".into();
+        assert!(!model_download_process_identity_matches(
+            &changed, &captured
+        ));
+
+        changed = captured.clone();
+        changed.command = "/tmp/replacement-process".into();
+        assert!(!model_download_process_identity_matches(
+            &changed, &captured
+        ));
+
+        assert!(!model_download_cancel_attempt_is_current(
+            false,
+            Some(&captured),
+            &captured,
+            true
+        ));
+        assert!(!model_download_cancel_attempt_is_current(
+            true, None, &captured, true
+        ));
+        assert!(!model_download_cancel_attempt_is_current(
+            true,
+            Some(&captured),
+            &captured,
+            false
+        ));
+    }
+
+    #[test]
+    fn finish_stop_does_not_signal_unowned_group() {
+        let leader = identity();
+        let mut signals = Vec::new();
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(false),
+            |group, signal| {
+                signals.push((group, signal));
+                Ok(())
+            },
+            |_| false,
+            |_, _| Ok(true),
+        );
+        assert!(result.is_ok());
+        assert!(signals.is_empty());
+    }
+
+    #[test]
+    fn finish_stop_accepts_group_gone_during_term_grace() {
+        let leader = identity();
+        let mut signals = Vec::new();
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(true),
+            |group, signal| {
+                signals.push((group, signal));
+                Ok(())
+            },
+            |_| false,
+            |_, timeout| {
+                assert_eq!(timeout, Duration::from_millis(700));
+                Ok(true)
+            },
+        );
+        assert!(result.is_ok());
+        assert_eq!(signals, vec![(leader.pgid, SIGNAL_TERM)]);
+    }
+
+    #[test]
+    fn finish_stop_revalidates_before_kill() {
+        let leader = identity();
+        let mut owned_checks = 0usize;
+        let mut waits = 0usize;
+        let mut signals = Vec::new();
+
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| {
+                owned_checks += 1;
+                Ok(true)
+            },
+            |group, signal| {
+                signals.push((group, signal));
+                Ok(())
+            },
+            |_| true,
+            |_, timeout| {
+                waits += 1;
+                if waits == 1 {
+                    assert_eq!(timeout, Duration::from_millis(700));
+                    Ok(false)
+                } else {
+                    assert_eq!(timeout, Duration::from_secs(10));
+                    Ok(true)
+                }
+            },
+        );
+
+        assert!(result.is_ok());
+        assert_eq!(owned_checks, 2);
+        assert_eq!(
+            signals,
+            vec![(leader.pgid, SIGNAL_TERM), (leader.pgid, SIGNAL_KILL)]
+        );
+    }
+
+    #[test]
+    fn finish_stop_refuses_kill_after_identity_error() {
+        let leader = identity();
+        let mut owned_checks = 0usize;
+        let mut signals = Vec::new();
+
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| {
+                owned_checks += 1;
+                if owned_checks == 1 {
+                    Ok(true)
+                } else {
+                    Err("captured identity changed".into())
+                }
+            },
+            |group, signal| {
+                signals.push((group, signal));
+                Ok(())
+            },
+            |_| true,
+            |_, _| Ok(false),
+        );
+
+        assert!(result.unwrap_err().contains("identity changed"));
+        assert_eq!(signals, vec![(leader.pgid, SIGNAL_TERM)]);
+    }
+
+    #[test]
+    fn finish_stop_retains_failure_when_term_fails_and_group_lives() {
+        let leader = identity();
+        let mut signals = Vec::new();
+
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(true),
+            |group, signal| {
+                signals.push((group, signal));
+                Err("TERM denied".into())
+            },
+            |_| true,
+            |_, _| panic!("must not wait after failed TERM"),
+        );
+
+        assert!(result.unwrap_err().contains("graceful cleanup"));
+        assert_eq!(signals, vec![(leader.pgid, SIGNAL_TERM)]);
+    }
+
+    #[test]
+    fn finish_stop_accepts_term_error_if_group_is_already_gone() {
+        let leader = identity();
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(true),
+            |_, _| Err("TERM raced with exit".into()),
+            |_| false,
+            |_, _| panic!("group was already gone"),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn finish_stop_retains_failure_when_kill_fails_and_group_lives() {
+        let leader = identity();
+        let mut signals = Vec::new();
+
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(true),
+            |group, signal| {
+                signals.push((group, signal));
+                if signal == SIGNAL_KILL {
+                    Err("KILL denied".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| true,
+            |_, timeout| {
+                assert_eq!(timeout, Duration::from_millis(700));
+                Ok(false)
+            },
+        );
+
+        assert!(result.unwrap_err().contains("force-stop"));
+        assert_eq!(
+            signals,
+            vec![(leader.pgid, SIGNAL_TERM), (leader.pgid, SIGNAL_KILL)]
+        );
+    }
+
+    #[test]
+    fn finish_stop_accepts_kill_error_if_group_is_already_gone() {
+        let leader = identity();
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(true),
+            |_, signal| {
+                if signal == SIGNAL_KILL {
+                    Err("KILL raced with exit".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| false,
+            |_, _| Ok(false),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn finish_stop_fails_when_group_survives_final_deadline() {
+        let leader = identity();
+        let mut waits = 0usize;
+        let mut signals = Vec::new();
+
+        let result = finish_stopping_model_download_group_with(
+            &leader,
+            |_| Ok(true),
+            |group, signal| {
+                signals.push((group, signal));
+                Ok(())
+            },
+            |_| true,
+            |_, timeout| {
+                waits += 1;
+                if waits == 1 {
+                    assert_eq!(timeout, Duration::from_millis(700));
+                } else {
+                    assert_eq!(timeout, Duration::from_secs(10));
+                }
+                Ok(false)
+            },
+        );
+
+        assert!(result.unwrap_err().contains("still active"));
+        assert_eq!(waits, 2);
+        assert_eq!(
+            signals,
+            vec![(leader.pgid, SIGNAL_TERM), (leader.pgid, SIGNAL_KILL)]
+        );
+    }
+}
+
+#[cfg(test)]
+mod model_download_terminal_finalize_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    fn identity() -> ProcessSnapshot {
+        ProcessSnapshot {
+            pid: 731,
+            ppid: 1,
+            pgid: 731,
+            stat: "S".into(),
+            started: "Sat Nov 21 02:00:00 2026".into(),
+            command: "/bundle/rdt_voice_backend --download".into(),
+        }
+    }
+
+    fn active_status(phase: &str) -> ModelDownloadStatus {
+        let mut status = ModelDownloadStatus::default();
+        status.active = true;
+        status.model = Some("mlx-community/whisper-small-mlx".into());
+        status.destination_root = Some("/models".into());
+        status.phase = phase.into();
+        status.message = "Downloading".into();
+        status.progress_percent = 64;
+        status.downloaded_bytes = 64;
+        status.total_bytes = Some(100);
+        status
+    }
+
+    #[test]
+    fn inactive_cancel_is_a_noop() {
+        assert!(model_download_cancel_transition(&ModelDownloadStatus::default()).is_none());
+    }
+
+    #[test]
+    fn repeated_cancel_during_one_attempt_is_idempotent() {
+        let first = model_download_cancel_transition(&active_status("downloading")).unwrap();
+        assert_eq!(first.phase, "canceling");
+        assert!(model_download_cancel_transition(&first).is_none());
+
+        let retry = model_download_cancel_transition(&active_status("failed")).unwrap();
+        assert_eq!(retry.phase, "canceling");
+    }
+
+    #[test]
+    fn finalization_commits_pid_status_and_cancel_flag_together() {
+        let id = identity();
+        let gate = Mutex::new(());
+        let pid = Mutex::new(Some(id.clone()));
+        let status = Mutex::new(active_status("downloading"));
+        let cancel = AtomicBool::new(false);
+        let events = AtomicUsize::new(0);
+        let pid_check = &pid;
+        let status_check = &status;
+
+        finalize_model_download_state_with(
+            &gate,
+            &pid,
+            &status,
+            &cancel,
+            &id,
+            false,
+            |requested, current| {
+                assert!(!requested);
+                assert_eq!(current.phase, "downloading");
+                (
+                    "complete".into(),
+                    "Verified files; inference not yet checked.".into(),
+                )
+            },
+            |snapshot| {
+                assert!(pid_check.lock().unwrap().is_none());
+                let committed = status_check.lock().unwrap();
+                assert!(!committed.active);
+                assert_eq!(committed.phase, "complete");
+                assert!(!snapshot.active);
+                events.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .unwrap();
+
+        assert!(pid.lock().unwrap().is_none());
+        let committed = status.lock().unwrap();
+        assert!(!committed.active);
+        assert_eq!(committed.phase, "complete");
+        assert_eq!(committed.progress_percent, 100);
+        assert_eq!(committed.downloaded_bytes, 100);
+        assert!(!cancel.load(Ordering::SeqCst));
+        assert_eq!(events.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn identity_mismatch_keeps_pid_active_status_and_cancel_flag() {
+        let id = identity();
+        let foreign = ProcessSnapshot {
+            pid: 732,
+            pgid: 732,
+            command: "/bundle/rdt_voice_backend --different-download".into(),
+            ..id.clone()
+        };
+        let gate = Mutex::new(());
+        let pid = Mutex::new(Some(foreign));
+        let status = Mutex::new(active_status("canceling"));
+        let cancel = AtomicBool::new(true);
+        let events = AtomicUsize::new(0);
+
+        let result = finalize_model_download_state_with(
+            &gate,
+            &pid,
+            &status,
+            &cancel,
+            &id,
+            true,
+            |_, _| ("cancelled".into(), "Canceled".into()),
+            |_| {
+                events.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        assert!(result.is_err());
+        assert_eq!(pid.lock().unwrap().as_ref().unwrap().pid, 732);
+        assert!(status.lock().unwrap().active);
+        assert!(cancel.load(Ordering::SeqCst));
+        assert_eq!(events.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn cancellation_finalizer_requires_same_active_canceling_attempt() {
+        let id = identity();
+        let gate = Mutex::new(());
+        let pid = Mutex::new(Some(id.clone()));
+        let status = Mutex::new(active_status("failed"));
+        let cancel = AtomicBool::new(true);
+
+        let result = finalize_model_download_state_with(
+            &gate,
+            &pid,
+            &status,
+            &cancel,
+            &id,
+            true,
+            |_, _| ("cancelled".into(), "Canceled".into()),
+            |_| panic!("failed/non-canceling state must not be overwritten"),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(pid.lock().unwrap().as_ref().unwrap().pid, id.pid);
+        assert!(status.lock().unwrap().active);
+        assert_eq!(status.lock().unwrap().phase, "failed");
+        assert!(cancel.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn poisoned_pid_lock_fails_closed() {
+        let id = identity();
+        let gate = Mutex::new(());
+        let pid = Arc::new(Mutex::new(Some(id.clone())));
+        let poison = Arc::clone(&pid);
+        let _ = std::thread::spawn(move || {
+            let _guard = poison.lock().unwrap();
+            panic!("intentional PID mutex poison fixture");
+        })
+        .join();
+
+        let status = Mutex::new(active_status("canceling"));
+        let cancel = AtomicBool::new(true);
+        let result = finalize_model_download_state_with(
+            &gate,
+            &pid,
+            &status,
+            &cancel,
+            &id,
+            true,
+            |_, _| ("cancelled".into(), "Canceled".into()),
+            |_| panic!("must not publish with poisoned PID mutex"),
+        );
+
+        assert!(result.is_err());
+        assert!(status.lock().unwrap().active);
+        assert!(cancel.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn poisoned_status_lock_preserves_pid_and_cancel_flag() {
+        let id = identity();
+        let gate = Mutex::new(());
+        let pid = Mutex::new(Some(id.clone()));
+        let status = Arc::new(Mutex::new(active_status("canceling")));
+        let poison = Arc::clone(&status);
+        let _ = std::thread::spawn(move || {
+            let _guard = poison.lock().unwrap();
+            panic!("intentional status mutex poison fixture");
+        })
+        .join();
+
+        let cancel = AtomicBool::new(true);
+        let result = finalize_model_download_state_with(
+            &gate,
+            &pid,
+            &status,
+            &cancel,
+            &id,
+            true,
+            |_, _| ("cancelled".into(), "Canceled".into()),
+            |_| panic!("must not publish with poisoned status mutex"),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(pid.lock().unwrap().as_ref().unwrap().pid, id.pid);
+        assert!(cancel.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn already_terminal_status_does_not_clear_stale_pid() {
+        let id = identity();
+        let gate = Mutex::new(());
+        let pid = Mutex::new(Some(id.clone()));
+        let mut terminal = active_status("complete");
+        terminal.active = false;
+        let status = Mutex::new(terminal);
+
+        let result = finalize_model_download_state_with(
+            &gate,
+            &pid,
+            &status,
+            &AtomicBool::new(false),
+            &id,
+            false,
+            |_, _| ("cancelled".into(), "Canceled".into()),
+            |_| panic!("terminal status must not be republished"),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(pid.lock().unwrap().as_ref().unwrap().pid, id.pid);
+        assert!(!status.lock().unwrap().active);
+    }
+
+    #[test]
+    fn worker_and_cancel_race_publish_only_one_terminal_event() {
+        let id = identity();
+        let gate = Arc::new(Mutex::new(()));
+        let pid = Arc::new(Mutex::new(Some(id.clone())));
+        let status = Arc::new(Mutex::new(active_status("canceling")));
+        let cancel = Arc::new(AtomicBool::new(true));
+        let events = Arc::new(AtomicUsize::new(0));
+        let mut handles = Vec::new();
+
+        for require_canceling in [false, true] {
+            let gate = Arc::clone(&gate);
+            let pid = Arc::clone(&pid);
+            let status = Arc::clone(&status);
+            let cancel = Arc::clone(&cancel);
+            let events = Arc::clone(&events);
+            let expected = id.clone();
+            handles.push(std::thread::spawn(move || {
+                finalize_model_download_state_with(
+                    &gate,
+                    &pid,
+                    &status,
+                    &cancel,
+                    &expected,
+                    require_canceling,
+                    |_, _| ("cancelled".into(), "One terminal result only.".into()),
+                    move |_| {
+                        events.fetch_add(1, Ordering::SeqCst);
+                    },
+                )
+            }));
+        }
+
+        let results: Vec<_> = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(events.load(Ordering::SeqCst), 1);
+        assert!(pid.lock().unwrap().is_none());
+        assert!(!status.lock().unwrap().active);
+        assert!(!cancel.load(Ordering::SeqCst));
+    }
+}
+
+#[cfg(test)]
+mod model_download_log_cleanup_tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn poisoned_log_mutex_still_attempts_unlink_and_reports_poison() {
+        let expected = PathBuf::from("/tmp/rdt-log-poison-fixture.log");
+        let store = Arc::new(Mutex::new(Some(expected.clone())));
+        let poison_store = Arc::clone(&store);
+
+        let poison_result = std::thread::spawn(move || {
+            let _guard = poison_store.lock().unwrap();
+            panic!("intentional log mutex poison fixture");
+        })
+        .join();
+        assert!(poison_result.is_err());
+
+        let unlink_attempted = AtomicBool::new(false);
+        let result = clear_model_download_log_path_with(store.as_ref(), &expected, |_| {
+            unlink_attempted.store(true, Ordering::SeqCst);
+            Ok(())
+        });
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("poisoned"));
+        assert!(unlink_attempted.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn unlink_failure_does_not_clear_a_newer_attempt_log_path() {
+        let old_path = PathBuf::from("/tmp/rdt-old-download.log");
+        let new_path = PathBuf::from("/tmp/rdt-new-download.log");
+        let store = Mutex::new(Some(new_path.clone()));
+
+        let result = clear_model_download_log_path_with(&store, &old_path, |_| {
+            Err(Error::new(
+                ErrorKind::PermissionDenied,
+                "fixture unlink failure",
+            ))
+        });
+
+        assert!(result.is_err());
+        assert_eq!(store.lock().unwrap().as_deref(), Some(new_path.as_path()));
+    }
+
+    #[test]
+    fn missing_log_is_success_and_exact_path_is_cleared() {
+        let expected = PathBuf::from("/tmp/rdt-download-already-removed.log");
+        let store = Mutex::new(Some(expected.clone()));
+
+        let result = clear_model_download_log_path_with(&store, &expected, |_| {
+            Err(Error::new(ErrorKind::NotFound, "fixture already absent"))
+        });
+
+        assert!(result.is_ok());
+        assert!(store.lock().unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod model_download_process_snapshot_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn unix_process_parser_accepts_complete_identity_rows() {
+        let output = "4242 1 4242 S Sat Nov 21 02:58:00 2026 /opt/rdt_voice_backend --worker\n";
+        let snapshot = parse_unix_process_snapshot(output).unwrap();
+
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].pid, 4242);
+        assert_eq!(snapshot[0].ppid, 1);
+        assert_eq!(snapshot[0].pgid, 4242);
+        assert_eq!(snapshot[0].started, "Sat Nov 21 02:58:00 2026");
+        assert_eq!(snapshot[0].command, "/opt/rdt_voice_backend --worker");
+    }
+
+    #[test]
+    fn unix_process_parser_rejects_empty_and_malformed_tables() {
+        assert!(parse_unix_process_snapshot("").is_err());
+        assert!(parse_unix_process_snapshot("malformed process row\n").is_err());
+        assert!(
+            parse_unix_process_snapshot("not-a-pid 1 1 S Sat Nov 21 02:58:00 2026 /worker\n")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn windows_process_parser_accepts_complete_identity_rows() {
+        let value = serde_json::json!([{
+            "ProcessId": 77,
+            "ParentProcessId": 1,
+            "CreationDate": "20261121025800.000000-360",
+            "ExecutablePath": "C:\\RDT\\rdt_voice_backend.exe",
+            "CommandLine": "--worker"
+        }]);
+
+        let snapshot = parse_windows_process_snapshot(value).unwrap();
+
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].pid, 77);
+        assert_eq!(snapshot[0].ppid, 1);
+        assert_eq!(snapshot[0].pgid, 77);
+        assert!(snapshot[0].command.contains("rdt_voice_backend.exe"));
+    }
+
+    #[test]
+    fn windows_process_parser_rejects_empty_and_incomplete_tables() {
+        assert!(parse_windows_process_snapshot(serde_json::json!([])).is_err());
+        assert!(parse_windows_process_snapshot(serde_json::json!({
+            "ProcessId": 77,
+            "CreationDate": "20261121025800.000000-360"
+        }))
+        .is_err());
+        assert!(parse_windows_process_snapshot(serde_json::json!("not a process table")).is_err());
+    }
+
+    #[test]
+    fn process_table_launch_exit_and_empty_errors_fail_closed() {
+        let launch_error = checked_process_snapshot_output(
+            "fixture-process-list",
+            Err("permission denied".into()),
+            |_: &str| Ok(Vec::new()),
+        );
+        assert!(launch_error.is_err());
+
+        let exit_error = checked_process_snapshot_output(
+            "fixture-process-list",
+            Ok((false, String::new())),
+            |_: &str| Ok(Vec::new()),
+        );
+        assert!(exit_error.is_err());
+
+        let empty_result = checked_process_snapshot_output(
+            "fixture-process-list",
+            Ok((true, String::new())),
+            |_: &str| Ok(Vec::new()),
+        );
+        assert!(empty_result.is_err());
+    }
+
+    #[test]
+    fn poisoned_worker_status_read_returns_error() {
+        let store = Arc::new(Mutex::new(true));
+        let poison_store = Arc::clone(&store);
+
+        let poison_result = std::thread::spawn(move || {
+            let _guard = poison_store.lock().unwrap();
+            panic!("intentional worker status mutex poison fixture");
+        })
+        .join();
+
+        assert!(poison_result.is_err());
+
+        let result = inspect_model_download_status(store.as_ref(), |value| *value);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("poisoned"));
+    }
+
+    #[test]
+    fn worker_status_inspection_returns_real_predicate() {
+        let store = Mutex::new(true);
+        let result = inspect_model_download_status(&store, |value| *value);
+        assert!(result.unwrap());
+    }
+}
+
+#[cfg(test)]
+mod model_download_registration_lock_tests {
+    use super::*;
+
+    #[test]
+    fn poisoned_pid_store_prevents_registration() {
+        let pid_store = std::sync::Arc::new(std::sync::Mutex::new(None::<ProcessSnapshot>));
+        let log_store = std::sync::Mutex::new(None::<PathBuf>);
+        let poison_target = std::sync::Arc::clone(&pid_store);
+        let _ = std::thread::spawn(move || {
+            let _guard = poison_target.lock().unwrap();
+            panic!("intentional downloader PID-store poison fixture");
+        })
+        .join();
+
+        assert!(lock_model_download_registration_stores(pid_store.as_ref(), &log_store,).is_err());
+    }
+
+    #[test]
+    fn poisoned_log_store_prevents_registration() {
+        let pid_store = std::sync::Mutex::new(None::<ProcessSnapshot>);
+        let log_store = std::sync::Arc::new(std::sync::Mutex::new(None::<PathBuf>));
+        let poison_target = std::sync::Arc::clone(&log_store);
+        let _ = std::thread::spawn(move || {
+            let _guard = poison_target.lock().unwrap();
+            panic!("intentional downloader log-store poison fixture");
+        })
+        .join();
+
+        assert!(lock_model_download_registration_stores(&pid_store, log_store.as_ref(),).is_err());
     }
 }

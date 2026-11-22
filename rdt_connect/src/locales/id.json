@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Perbandingan perangkat keras dilewati",
     "msg.benchmark_slower.1d20": "lebih lambat",
     "msg.benchmark_test_order.1d22": "Urutan tes",
-    "msg.benchmark_timing_limit.1d22": "Batasi waktu benchmark hingga 60 detik per pemilihan perangkat keras",
+    "msg.benchmark_timing_limit.1d22": "Terapkan batas waktu per perangkat keras",
+    "msg.benchmark_audio_label.1d23": "Audio benchmark",
+    "msg.benchmark_audio_12s.1d23": "Rekaman 12 detik · 60 detik per perangkat keras",
+    "msg.benchmark_audio_21s.1d23": "Rekaman 20,7 detik · 120 detik per perangkat keras",
     "msg.benchmark_title.1d22": "Bebaskan Perangkat Keras Anda",
     "msg.benchmark_tooltip_faster_context.1d20": "Lebih cepat dengan faktor waktu nyata yang diukur, tapi",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Kecepatannya hampir sama, tapi",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Pembaruan berhasil dipasang. Anda sekarang menjalankan versi ini.",
     "msg.update_success_version.1d40": "Versi",
     "msg.update_success_build.1d40": "Nomor build",
-    "msg.update_success_continue.1d40": "Lanjutkan"
+    "msg.update_success_continue.1d40": "Lanjutkan",
+    "msg.open_model_storage_folder.1d43": "Buka",
+    "msg.stop_server_to_change_default_folder.1d43": "Hentikan server terlebih dahulu untuk mengubah folder default.",
+    "msg.could_not_open_model_storage_folder.1d43": "Folder ini tidak dapat dibuka: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Instal pembaruan otomatis saat memulai ulang berikutnya",
   "msg.install_verified_updates_on_app_restart.1d30": "Saat Anda memilih memulai ulang RDT Connect, pembaruan yang tersedia diunduh dan diverifikasi sebelum aplikasi dibuka kembali. Aplikasi tidak pernah memulai ulang sendiri."

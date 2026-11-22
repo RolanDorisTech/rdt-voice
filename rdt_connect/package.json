@@ -1,7 +1,7 @@
 {
   "name": "rdt-connect-desktop",
   "private": true,
-  "version": "0.2.0-dev.12.1D42",
+  "version": "0.2.0-dev.12.1D46",
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/check-embedded-rdt-voice.mjs",
@@ -10,9 +10,11 @@
     "tauri": "tauri",
     "prepare:desktop-resources": "bash scripts/prepare-macos-bundle.sh ..",
     "build:desktop:macos": "bash scripts/build-macos-with-marker.sh",
-    "build:custom-dmg": "python3 scripts/build-custom-dmg.py",
+    "build:custom-dmg": "bash scripts/run-release-contracts.sh && python3 scripts/build-custom-dmg.py",
     "build:desktop:custom-dmg:macos": "RDT_SKIP_UPDATER_ARTIFACTS=1 RDT_BUILD_APP_ONLY=1 bash scripts/build-macos-with-marker.sh && python3 scripts/build-custom-dmg.py",
-    "test:versioning": "node scripts/test-build-versioning.cjs"
+    "test:versioning": "node scripts/test-build-versioning.cjs",
+    "test:release-contracts": "bash scripts/run-release-contracts.sh",
+    "sync:build-version": "node scripts/sync-build-version.cjs ."
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

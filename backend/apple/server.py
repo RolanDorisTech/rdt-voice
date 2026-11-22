@@ -3,22 +3,12 @@
 import os, re, math, bisect, tempfile, subprocess, wave, pathlib, datetime, uuid, platform, asyncio, time, threading, secrets, hmac, shutil, ipaddress, queue, sqlite3, hashlib, json, signal, sys
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-from fastapi import FastAPI, UploadFile, File, Form, Query, Header, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse, FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-import mlx_whisper
-import qrcode
-from qrcode.image.svg import SvgPathImage
-from contextlib import contextmanager
 
+# Model-lock verification and explicit download path (stdlib-only startup).
 MODEL_ID = os.getenv("WHISPER_MODEL_ID", "mlx-community/whisper-large-v3-turbo")
 
-# RDT Connect uses immutable model and weight records shared with the Rust cache
-# validator. The manifest is bundled as PyInstaller data for the desktop app.
 _RDT_MODEL_LOCK_CACHE: Optional[dict] = None
+
 _RDT_MODEL_LOCK_PATH: Optional[pathlib.Path] = None
 
 def _rdt_load_model_lock() -> dict:
@@ -207,6 +197,221 @@ def _rdt_model_snapshot_is_complete(snapshot_path, cache_dir, repo_id, *, verify
         return _rdt_marker_is_current(snapshot, cache_dir, repo_id, spec, weights_path)
     except (OSError, RuntimeError, ValueError, TypeError, KeyError):
         return False
+
+def _download_model_only(repo_id: str) -> None:
+    """Download only an approved pinned MLX Whisper revision with truthful byte progress."""
+    import inspect as _inspect
+    import io as _io
+    import threading as _threading
+    import time as _time
+    from huggingface_hub import snapshot_download
+
+    cache_dir = os.getenv("HF_HUB_CACHE", "").strip()
+    if not cache_dir:
+        print("RDT_MODEL_DOWNLOAD_ERROR:cache_not_configured", flush=True)
+        raise SystemExit(2)
+
+    try:
+        model_lock = _rdt_load_model_lock()
+        model_spec = _rdt_model_spec(repo_id)
+    except (RuntimeError, ValueError):
+        print("RDT_MODEL_DOWNLOAD_ERROR:model_not_approved", flush=True)
+        raise SystemExit(6)
+
+    size_estimates = {
+        model_id: int(spec.get("size_estimate_bytes", 0))
+        for model_id, spec in model_lock["models"].items()
+    }
+    total_bytes = int(size_estimates.get(repo_id, 0))
+    if total_bytes <= 0:
+        print("RDT_MODEL_DOWNLOAD_ERROR:missing_size_estimate", flush=True)
+        raise SystemExit(5)
+
+    print("RDT_MODEL_DOWNLOAD_STAGE:checking", flush=True)
+
+    # Never perform a remote Hub dry-run before publishing the transfer phase:
+    # that preflight can block without sending progress to the application.
+    # This lock-derived total is explicitly marked estimated, not measured.
+    estimated = True
+    print(f"RDT_MODEL_DOWNLOAD_META:{total_bytes}:0:1", flush=True)
+    print("RDT_MODEL_DOWNLOAD_STAGE:downloading", flush=True)
+
+    try:
+        params = _inspect.signature(snapshot_download).parameters
+        if "tqdm_class" not in params:
+            print("RDT_MODEL_DOWNLOAD_ERROR:progress_api_unavailable", flush=True)
+            raise SystemExit(4)
+
+        progress_lock = _threading.Lock()
+        last_emit_at = 0.0
+        last_emit_bytes = 0
+        last_percent = -1
+        max_reported_bytes = 0
+
+        try:
+            from tqdm.auto import tqdm as _BaseTqdm
+        except Exception:
+            print("RDT_MODEL_DOWNLOAD_ERROR:progress_dependency_unavailable", flush=True)
+            raise SystemExit(4)
+
+        class _RdtProgressTqdm(_BaseTqdm):
+            """Capture aggregate transferred bytes without exposing file names."""
+            def __init__(self, *args, **kwargs):
+                description = str(kwargs.get("desc", ""))
+                self._rdt_track_transfer = (
+                    str(kwargs.get("unit", "")).lower() in ("b", "byte", "bytes")
+                    and description.strip().lower().startswith("downloading bytes")
+                )
+                kwargs["file"] = _io.StringIO()
+                kwargs["leave"] = False
+                kwargs["disable"] = False
+                super().__init__(*args, **kwargs)
+
+            def _rdt_emit_transfer(self):
+                nonlocal last_emit_at, last_emit_bytes, last_percent
+                nonlocal max_reported_bytes
+                if not self._rdt_track_transfer:
+                    return
+
+                now = _time.monotonic()
+                raw_bytes = max(0, int(getattr(self, "n", 0) or 0))
+                with progress_lock:
+                    max_reported_bytes = max(max_reported_bytes, raw_bytes)
+                    bytes_now = max_reported_bytes
+                    percent_now = min(98, int((bytes_now * 100) / total_bytes))
+                    size_step = max(1_048_576, int(total_bytes * 0.003))
+                    if (
+                        bytes_now - last_emit_bytes < size_step
+                        and percent_now == last_percent
+                        and now - last_emit_at < 0.75
+                    ):
+                        return
+                    if (
+                        bytes_now == last_emit_bytes
+                        and percent_now == last_percent
+                        and now - last_emit_at < 1.2
+                    ):
+                        return
+
+                    last_emit_at = now
+                    last_emit_bytes = bytes_now
+                    last_percent = max(last_percent, percent_now)
+                    print(
+                        f"RDT_MODEL_DOWNLOAD_PROGRESS:{bytes_now}:{total_bytes}:{last_percent}",
+                        flush=True,
+                    )
+
+            def update(self, n=1):
+                result = super().update(n)
+                self._rdt_emit_transfer()
+                return result
+
+            def update_transfer(self, n=1):
+                result = super().update(n)
+                self._rdt_emit_transfer()
+                return result
+
+        # This lookup is local-only. It cannot wait for remote metadata and it
+        # accepts a cache hit only when the exact pinned snapshot and SHA validate.
+        try:
+            cached_snapshot = snapshot_download(
+                repo_id=repo_id,
+                revision=model_spec["revision"],
+                cache_dir=cache_dir,
+                token=False,
+                local_files_only=True,
+            )
+        except Exception:
+            cached_snapshot = None
+
+        if cached_snapshot is not None and _rdt_model_snapshot_is_complete(
+            cached_snapshot, cache_dir, repo_id, verify_digest=True
+        ):
+            print("RDT_MODEL_DOWNLOAD_META:0:0:0", flush=True)
+            print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
+            print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
+            return
+
+        os.environ.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
+        snapshot = snapshot_download(
+            repo_id=repo_id,
+            revision=model_spec["revision"],
+            cache_dir=cache_dir,
+            token=False,
+            local_files_only=False,
+            max_workers=4,
+            tqdm_class=_RdtProgressTqdm,
+        )
+        print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
+
+        # Repair only this approved repository at its immutable locked revision.
+        # Never clear the user's Hugging Face cache or unrelated repositories.
+        if not _rdt_model_snapshot_is_complete(
+            snapshot, cache_dir, repo_id, verify_digest=True
+        ):
+            snapshot = snapshot_download(
+                repo_id=repo_id,
+                revision=model_spec["revision"],
+                cache_dir=cache_dir,
+                token=False,
+                local_files_only=False,
+                force_download=True,
+                max_workers=4,
+                tqdm_class=_RdtProgressTqdm,
+            )
+            print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
+            if not _rdt_model_snapshot_is_complete(
+                snapshot, cache_dir, repo_id, verify_digest=True
+            ):
+                print(
+                    "RDT_MODEL_DOWNLOAD_ERROR:cache_repair_failed_verification",
+                    flush=True,
+                )
+                raise SystemExit(3)
+
+        # The pinned snapshot validator and locked weight digest establish
+        # completion; the estimated transfer total never does.
+        print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print("RDT_MODEL_DOWNLOAD_ERROR:" + type(exc).__name__, flush=True)
+        raise SystemExit(2) from None
+
+# Lightweight download-only entrypoint. This intentionally runs before
+# NumPy, FastAPI, Uvicorn and MLX are imported by the normal server path.
+if (
+    __name__ == "__main__"
+    and len(sys.argv) > 1
+    and sys.argv[1] == "--download-model"
+):
+    if len(sys.argv) < 3:
+        print("RDT_MODEL_DOWNLOAD_ERROR:MissingModel", flush=True)
+        raise SystemExit(2)
+    print("RDT_MODEL_DOWNLOAD_STAGE:checking", flush=True)
+    _download_model_only(sys.argv[2])
+    raise SystemExit(0)
+
+import numpy as np
+from fastapi import FastAPI, UploadFile, File, Form, Query, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+import mlx_whisper
+import qrcode
+from qrcode.image.svg import SvgPathImage
+from contextlib import contextmanager
+
+
+# RDT Connect uses immutable model and weight records shared with the Rust cache
+# validator. The manifest is bundled as PyInstaller data for the desktop app.
+
+
+
+
+
+
 
 def _rdt_resolve_model_snapshot(repo_id: str) -> str:
     """Return verified local pinned snapshot; managed Connect never downloads implicitly."""
@@ -2336,195 +2541,6 @@ def _parse_args():
     ], help="Download a supported MLX Whisper model into the configured Hugging Face cache, then exit")
     return p.parse_known_args()[0]
 
-def _download_model_only(repo_id: str) -> None:
-    """Download a supported public MLX Whisper repo with byte-based progress events."""
-    import inspect as _inspect
-    import io as _io
-    import threading as _threading
-    import time as _time
-    from huggingface_hub import snapshot_download
-
-    cache_dir = os.getenv("HF_HUB_CACHE", "").strip()
-    if not cache_dir:
-        print("RDT_MODEL_DOWNLOAD_ERROR:cache_not_configured", flush=True)
-        raise SystemExit(2)
-
-    # Stable fallback estimates are used only when repository file metadata cannot
-    # provide a complete byte total. The UI labels those totals as approximate.
-    try:
-        model_lock = _rdt_load_model_lock()
-        model_spec = _rdt_model_spec(repo_id)
-    except (RuntimeError, ValueError):
-        print("RDT_MODEL_DOWNLOAD_ERROR:model_not_approved", flush=True)
-        raise SystemExit(6)
-    size_estimates = {
-        model_id: int(spec.get("size_estimate_bytes", 0))
-        for model_id, spec in model_lock["models"].items()
-    }
-    print("RDT_MODEL_DOWNLOAD_STAGE:checking", flush=True)
-    try:
-        params = _inspect.signature(snapshot_download).parameters
-        supports_dry_run = "dry_run" in params
-        supports_tqdm_class = "tqdm_class" in params
-        if not supports_tqdm_class:
-            print("RDT_MODEL_DOWNLOAD_ERROR:progress_api_unavailable", flush=True)
-            raise SystemExit(4)
-
-        planned_files = None
-        estimated = True
-        total_bytes = int(size_estimates.get(repo_id, 0))
-        progress_lock = _threading.Lock()
-        last_emit_at = 0.0
-        last_emit_bytes = 0
-        last_percent = -1
-        max_reported_bytes = 0
-
-        try:
-            from tqdm.auto import tqdm as _BaseTqdm
-        except Exception:
-            print("RDT_MODEL_DOWNLOAD_ERROR:progress_dependency_unavailable", flush=True)
-            raise SystemExit(4)
-
-        class _RdtProgressTqdm(_BaseTqdm):
-            """Capture Hugging Face's aggregate transfer-byte bar, never file names."""
-            def __init__(self, *args, **kwargs):
-                description = str(kwargs.get("desc", ""))
-                self._rdt_track_transfer = (
-                    str(kwargs.get("unit", "")).lower() in ("b", "byte", "bytes")
-                    and description.strip().lower().startswith("downloading bytes")
-                )
-                # tqdm's normal redraws are written to an in-memory sink. The UI gets
-                # throttled machine-readable byte updates with no changing filenames.
-                kwargs["file"] = _io.StringIO()
-                kwargs["leave"] = False
-                kwargs["disable"] = False
-                super().__init__(*args, **kwargs)
-
-            def _rdt_emit_transfer(self):
-                nonlocal last_emit_at, last_emit_bytes, last_percent, max_reported_bytes
-                if not self._rdt_track_transfer:
-                    return
-                now = _time.monotonic()
-                raw_bytes = max(0, int(getattr(self, "n", 0) or 0))
-                with progress_lock:
-                    # This is Hugging Face's shared aggregate transfer bar; n is the
-                    # sum of transferred bytes across concurrent files, not one file.
-                    max_reported_bytes = max(max_reported_bytes, raw_bytes)
-                    bytes_now = min(max_reported_bytes, total_bytes)
-                    percent_now = min(98, int((bytes_now * 100) / total_bytes))
-                    size_step = max(1_048_576, int(total_bytes * 0.003))
-                    if (bytes_now - last_emit_bytes < size_step and percent_now == last_percent and now - last_emit_at < 0.75):
-                        return
-                    if bytes_now == last_emit_bytes and percent_now == last_percent and now - last_emit_at < 1.2:
-                        return
-                    last_emit_at = now
-                    last_emit_bytes = bytes_now
-                    last_percent = max(last_percent, percent_now)
-                    print(f"RDT_MODEL_DOWNLOAD_PROGRESS:{bytes_now}:{total_bytes}:{last_percent}", flush=True)
-
-            def update(self, n=1):
-                result = super().update(n)
-                self._rdt_emit_transfer()
-                return result
-
-            def update_transfer(self, n=1):
-                # The Hub calls update_transfer for actual network bytes. This is
-                # distinct from reconstruction progress, which must not inflate the
-                # downloaded-byte count shown to the user.
-                result = super().update(n)
-                self._rdt_emit_transfer()
-                return result
-
-        if supports_dry_run:
-            dry_rows = snapshot_download(
-                repo_id=repo_id,
-                revision=model_spec["revision"],
-                cache_dir=cache_dir,
-                token=False,
-                local_files_only=False,
-                dry_run=True,
-                max_workers=4,
-            )
-            to_download = [item for item in dry_rows if bool(getattr(item, "will_download", True))]
-            planned_files = len(to_download)
-            known_sizes = [getattr(item, "file_size", None) for item in to_download]
-            if not to_download:
-                # All files appear cached according to Hub metadata. Validate the pinned
-                # snapshot and the actual weight digest rather than trusting file presence.
-                snapshot = snapshot_download(repo_id=repo_id, revision=model_spec["revision"], cache_dir=cache_dir, token=False, local_files_only=True)
-                if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id):
-                    if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
-                        # The Hub metadata said the files were cached, but the pinned weights
-                        # failed verification. Repair only this approved repository/revision;
-                        # never delete the user's Hugging Face cache or unrelated repos.
-                        repair_total = max(1, int(size_estimates.get(repo_id, 0)))
-                        total_bytes = repair_total
-                        estimated = True
-                        print(f"RDT_MODEL_DOWNLOAD_META:{total_bytes}:0:1", flush=True)
-                        print("RDT_MODEL_DOWNLOAD_STAGE:downloading", flush=True)
-                        snapshot = snapshot_download(
-                            repo_id=repo_id,
-                            revision=model_spec["revision"],
-                            cache_dir=cache_dir,
-                            token=False,
-                            local_files_only=False,
-                            force_download=True,
-                            max_workers=4,
-                            tqdm_class=_RdtProgressTqdm,
-                        )
-                        print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
-                        if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
-                            print("RDT_MODEL_DOWNLOAD_ERROR:cache_repair_failed_verification", flush=True)
-                            raise SystemExit(3)
-                        print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
-                        return
-                print("RDT_MODEL_DOWNLOAD_META:0:0:0", flush=True)
-                print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
-                print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
-                return
-            if known_sizes and all(isinstance(value, (int, float)) and value >= 0 for value in known_sizes):
-                known_total = int(sum(known_sizes))
-                if known_total > 0:
-                    total_bytes = known_total
-                    estimated = False
-
-        if total_bytes <= 0:
-            print("RDT_MODEL_DOWNLOAD_ERROR:missing_size_estimate", flush=True)
-            raise SystemExit(5)
-
-        files_label = str(planned_files if planned_files is not None else 0)
-        print(f"RDT_MODEL_DOWNLOAD_META:{total_bytes}:{files_label}:{1 if estimated else 0}", flush=True)
-        print("RDT_MODEL_DOWNLOAD_STAGE:downloading", flush=True)
-        # Ignore a parent shell's progress-disable variable; the custom tqdm class
-        # captures real transfer bytes while suppressing the default flickery terminal bars.
-        os.environ.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
-        download_kwargs = {
-            "repo_id": repo_id,
-            "revision": model_spec["revision"],
-            "cache_dir": cache_dir,
-            "token": False,
-            "local_files_only": False,
-            "max_workers": 4,
-            "tqdm_class": _RdtProgressTqdm,
-        }
-        snapshot = snapshot_download(**download_kwargs)
-        print("RDT_MODEL_DOWNLOAD_STAGE:verifying", flush=True)
-        if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id):
-            if not _rdt_model_snapshot_is_complete(snapshot, cache_dir, repo_id, verify_digest=True):
-                print("RDT_MODEL_DOWNLOAD_ERROR:downloaded_model_incomplete_or_hash_mismatch", flush=True)
-                raise SystemExit(3)
-        # Snapshot verification, not an estimated byte count, establishes completion.
-        # Only report the exact planned byte total when the Hub supplied exact sizes;
-        # never make an approximate model size look like measured transfer bytes.
-        if not estimated:
-            print(f"RDT_MODEL_DOWNLOAD_PROGRESS:{total_bytes}:{total_bytes}:99", flush=True)
-        print("RDT_MODEL_DOWNLOAD_STAGE:complete", flush=True)
-    except SystemExit:
-        raise
-    except Exception as exc:
-        # Keep errors machine-readable and never echo model paths or credentials into the UI.
-        print("RDT_MODEL_DOWNLOAD_ERROR:" + type(exc).__name__, flush=True)
-        raise SystemExit(2) from None
 
 if __name__ == "__main__":
     _args=_parse_args()

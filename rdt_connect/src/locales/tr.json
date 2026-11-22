@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Donanım karşılaştırması atlandı",
     "msg.benchmark_slower.1d20": "Yavaş",
     "msg.benchmark_test_order.1d22": "Test sırası",
-    "msg.benchmark_timing_limit.1d22": "Karşılaştırma zamanlamasını donanım seçimi başına 60 saniyeyle sınırlayın",
+    "msg.benchmark_timing_limit.1d22": "Donanım başına süre sınırını uygula",
+    "msg.benchmark_audio_label.1d23": "Karşılaştırma sesi",
+    "msg.benchmark_audio_12s.1d23": "12 saniyelik kayıt · donanım başına 60 saniye",
+    "msg.benchmark_audio_21s.1d23": "20,7 saniyelik kayıt · donanım başına 120 saniye",
     "msg.benchmark_title.1d22": "Donanımınızı Serbest Bırakın",
     "msg.benchmark_tooltip_faster_context.1d20": "Ölçülen gerçek zamanlı faktöre göre daha hızlıdır, ancak",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Hız olarak neredeyse eşit, ancak",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Güncelleme başarıyla yüklendi. Şu anda bu sürümü kullanıyorsunuz.",
     "msg.update_success_version.1d40": "Sürüm",
     "msg.update_success_build.1d40": "Derleme numarası",
-    "msg.update_success_continue.1d40": "Devam et"
+    "msg.update_success_continue.1d40": "Devam et",
+    "msg.open_model_storage_folder.1d43": "Aç",
+    "msg.stop_server_to_change_default_folder.1d43": "Varsayılan klasörü değiştirmek için önce sunucuyu durdurun.",
+    "msg.could_not_open_model_storage_folder.1d43": "Bu klasör açılamadı: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Sonraki yeniden başlatmada güncellemeleri otomatik yükle",
   "msg.install_verified_updates_on_app_restart.1d30": "RDT Connect'i yeniden başlatmayı seçtiğinizde güncelleme indirilir ve uygulama açılmadan önce doğrulanır. Uygulama kendi kendine yeniden başlamaz."

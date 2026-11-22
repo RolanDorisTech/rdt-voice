@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "हार्डवेयर तुलना छोड़ दी गई",
     "msg.benchmark_slower.1d20": "और धीमा",
     "msg.benchmark_test_order.1d22": "परीक्षण क्रम",
-    "msg.benchmark_timing_limit.1d22": "प्रति हार्डवेयर चयन के लिए बेंचमार्क समय को 60 सेकंड तक सीमित करें",
+    "msg.benchmark_timing_limit.1d22": "हर हार्डवेयर के लिए समय सीमा लागू करें",
+    "msg.benchmark_audio_label.1d23": "बेंचमार्क ऑडियो",
+    "msg.benchmark_audio_12s.1d23": "12 सेकंड की रिकॉर्डिंग · हर हार्डवेयर के लिए 60 सेकंड",
+    "msg.benchmark_audio_21s.1d23": "20.7 सेकंड की रिकॉर्डिंग · हर हार्डवेयर के लिए 120 सेकंड",
     "msg.benchmark_title.1d22": "अपने हार्डवेयर को उजागर करें",
     "msg.benchmark_tooltip_faster_context.1d20": "मापा वास्तविक समय कारक द्वारा तेज़, लेकिन",
     "msg.benchmark_tooltip_near_tie_context.1d20": "गति में लगभग टाई, लेकिन",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "अपडेट सफलतापूर्वक इंस्टॉल हो गया है। अब आप यह संस्करण चला रहे हैं।",
     "msg.update_success_version.1d40": "संस्करण",
     "msg.update_success_build.1d40": "बिल्ड नंबर",
-    "msg.update_success_continue.1d40": "जारी रखें"
+    "msg.update_success_continue.1d40": "जारी रखें",
+    "msg.open_model_storage_folder.1d43": "खोलें",
+    "msg.stop_server_to_change_default_folder.1d43": "डिफ़ॉल्ट फ़ोल्डर बदलने के लिए पहले सर्वर रोकें।",
+    "msg.could_not_open_model_storage_folder.1d43": "यह फ़ोल्डर नहीं खोला जा सका: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "अगले रीस्टार्ट पर अपडेट अपने आप इंस्टॉल करें",
   "msg.install_verified_updates_on_app_restart.1d30": "RDT Connect को रीस्टार्ट करने पर उपलब्ध अपडेट दोबारा खुलने से पहले डाउनलोड और सत्यापित किया जाएगा। ऐप अपने आप रीस्टार्ट नहीं होगा।"

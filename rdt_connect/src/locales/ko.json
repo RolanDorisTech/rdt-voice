@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "하드웨어 비교를 건너뛰었습니다.",
     "msg.benchmark_slower.1d20": "더 느리게",
     "msg.benchmark_test_order.1d22": "테스트 순서",
-    "msg.benchmark_timing_limit.1d22": "하드웨어 선택당 벤치마크 시간을 60초로 제한",
+    "msg.benchmark_timing_limit.1d22": "하드웨어별 시간 제한 적용",
+    "msg.benchmark_audio_label.1d23": "벤치마크 오디오",
+    "msg.benchmark_audio_12s.1d23": "12초 녹음 · 하드웨어당 60초",
+    "msg.benchmark_audio_21s.1d23": "20.7초 녹음 · 하드웨어당 120초",
     "msg.benchmark_title.1d22": "하드웨어를 마음껏 활용하세요",
     "msg.benchmark_tooltip_faster_context.1d20": "측정된 실시간 요인으로 인해 더 빠르지만,",
     "msg.benchmark_tooltip_near_tie_context.1d20": "속도는 거의 동점이지만",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "업데이트가 성공적으로 설치되었습니다. 이제 이 버전을 사용하고 있습니다.",
     "msg.update_success_version.1d40": "버전",
     "msg.update_success_build.1d40": "빌드 번호",
-    "msg.update_success_continue.1d40": "계속"
+    "msg.update_success_continue.1d40": "계속",
+    "msg.open_model_storage_folder.1d43": "열기",
+    "msg.stop_server_to_change_default_folder.1d43": "기본 폴더를 변경하려면 먼저 서버를 중지하세요.",
+    "msg.could_not_open_model_storage_folder.1d43": "이 폴더를 열 수 없습니다: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "다음 재시작 시 업데이트 자동 설치",
   "msg.install_verified_updates_on_app_restart.1d30": "RDT Connect 재시작을 선택하면 다시 열기 전에 사용 가능한 업데이트를 다운로드하고 검증합니다. 앱이 자동으로 재시작되는 일은 없습니다."

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "تم تخطي مقارنة الأجهزة",
     "msg.benchmark_slower.1d20": "أبطأ",
     "msg.benchmark_test_order.1d22": "أمر الاختبار",
-    "msg.benchmark_timing_limit.1d22": "حدد التوقيت القياسي بـ 60 ثانية لكل اختيار من الأجهزة",
+    "msg.benchmark_timing_limit.1d22": "تطبيق حد الوقت لكل جهاز",
+    "msg.benchmark_audio_label.1d23": "صوت الاختبار",
+    "msg.benchmark_audio_12s.1d23": "تسجيل 12 ثانية · 60 ثانية لكل جهاز",
+    "msg.benchmark_audio_21s.1d23": "تسجيل 20.7 ثانية · 120 ثانية لكل جهاز",
     "msg.benchmark_title.1d22": "أطلق العنان لأجهزتك",
     "msg.benchmark_tooltip_faster_context.1d20": "أسرع من خلال قياس عامل الوقت الحقيقي، ولكن",
     "msg.benchmark_tooltip_near_tie_context.1d20": "قريب من التعادل في السرعة، ولكن",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "تم تثبيت التحديث بنجاح. أنت الآن تستخدم هذا الإصدار.",
     "msg.update_success_version.1d40": "الإصدار",
     "msg.update_success_build.1d40": "رقم البناء",
-    "msg.update_success_continue.1d40": "متابعة"
+    "msg.update_success_continue.1d40": "متابعة",
+    "msg.open_model_storage_folder.1d43": "فتح",
+    "msg.stop_server_to_change_default_folder.1d43": "أوقف الخادم أولاً لتغيير المجلد الافتراضي.",
+    "msg.could_not_open_model_storage_folder.1d43": "تعذّر فتح هذا المجلد: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "تثبيت التحديثات تلقائيًا عند إعادة التشغيل",
   "msg.install_verified_updates_on_app_restart.1d30": "عند اختيارك إعادة تشغيل RDT Connect، سيُنزل التحديث المتاح ويتحقق من سلامته قبل إعادة التشغيل. لن يُعاد تشغيل التطبيق تلقائيًا."

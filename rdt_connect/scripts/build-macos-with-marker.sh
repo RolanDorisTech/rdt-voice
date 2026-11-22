@@ -17,6 +17,9 @@ if [[ ! "$MARKER" =~ ^1[A-KM-Z][0-9]{2}$ ]]; then
 fi
 export RDT_BUILD_ID="$MARKER"
 
+# Derive and synchronize every package version from the marker before tests/build.
+node "$ROOT/scripts/sync-build-version.cjs" "$ROOT"
+
 # Never reuse the historical src-tauri/target tree or shared build staging.
 # A marker-specific target and staging directory keep candidate artifacts isolated.
 CARGO_TARGET_DIR="${RDT_CARGO_TARGET_DIR:-$ROOT/build/rdt-connect-${MARKER}-cargo-target}"
@@ -29,6 +32,10 @@ export CARGO_TARGET_DIR RDT_MACOS_BUILD_STAGING_ROOT
 printf 'RDT Connect source-patch marker: %s\n' "$RDT_BUILD_ID"
 printf 'Isolated Cargo target: %s\n' "$CARGO_TARGET_DIR"
 printf 'Isolated resource staging: %s\n' "$RDT_MACOS_BUILD_STAGING_ROOT"
+
+# Mandatory source, lifecycle, backend, benchmark and packaging regression gate.
+# This runs before resource preparation, compilation or artifact creation.
+bash "$ROOT/scripts/run-release-contracts.sh"
 
 case "${RDT_SKIP_UPDATER_ARTIFACTS:-0}" in
   0|1) ;;

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Jämförelse av hårdvara hoppade över",
     "msg.benchmark_slower.1d20": "långsammare",
     "msg.benchmark_test_order.1d22": "Testorder",
-    "msg.benchmark_timing_limit.1d22": "Begränsa benchmark-timing till 60 sekunder per hårdvaruval",
+    "msg.benchmark_timing_limit.1d22": "Använd tidsgräns per maskinvara",
+    "msg.benchmark_audio_label.1d23": "Benchmarkljud",
+    "msg.benchmark_audio_12s.1d23": "12-sekunders inspelning · 60 sekunder per maskinvara",
+    "msg.benchmark_audio_21s.1d23": "20,7-sekunders inspelning · 120 sekunder per maskinvara",
     "msg.benchmark_title.1d22": "Släpp loss din hårdvara",
     "msg.benchmark_tooltip_faster_context.1d20": "Snabbare av uppmätt realtidsfaktor, men",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Nästan jämnt i hastighet, men",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Uppdateringen installerades. Du använder nu den här versionen.",
     "msg.update_success_version.1d40": "Version",
     "msg.update_success_build.1d40": "Byggnummer",
-    "msg.update_success_continue.1d40": "Fortsätt"
+    "msg.update_success_continue.1d40": "Fortsätt",
+    "msg.open_model_storage_folder.1d43": "Öppna",
+    "msg.stop_server_to_change_default_folder.1d43": "Stoppa servern först för att ändra standardmappen.",
+    "msg.could_not_open_model_storage_folder.1d43": "Det gick inte att öppna den här mappen: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Installera uppdateringar automatiskt vid nästa omstart",
   "msg.install_verified_updates_on_app_restart.1d30": "När du väljer att starta om RDT Connect hämtas och verifieras uppdateringen innan appen öppnas igen. Appen startar aldrig om på egen hand."

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -267,6 +268,102 @@ class ModelCacheValidationTests(unittest.TestCase):
         self.assertIn("_rdt_write_verified_marker", source)
         self.assertNotIn('path_or_hf_repo=MODEL_ID', source)
 
+    def test_visual_setup_guide_is_hidden_when_https_is_ready_or_unknown(self):
+        source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
+        start = source.index("function updateVisualSetupGuide()")
+        end = source.index("function scheduleVisualSetupGuideUpdate()", start)
+        guide = source[start:end]
+        self.assertIn("const httpsReady = Boolean(", guide)
+        self.assertIn("currentLocalHttps === null ||", guide)
+        self.assertIn("httpsReady", guide)
+        self.assertIn('currentLocalHttps.mode === "https"', guide)
+        self.assertIn("currentLocalHttps.configured", guide)
+        self.assertIn("currentLocalHttps.trusted", guide)
+
+    def test_model_metadata_preflight_has_bounded_safe_cleanup(self):
+        source = RUST_RS.read_text(encoding="utf-8")
+        self.assertIn(
+            "checking_started_at.elapsed() >= Duration::from_secs(90)",
+            source,
+        )
+        self.assertIn(
+            "finish_stopping_model_download_group(&identity, &expected_exe)",
+            source,
+        )
+        self.assertIn("metadata_check_timed_out", source)
+        self.assertIn("The model metadata check exceeded 90 seconds.", source)
+        self.assertIn("The download remains locked; select Try cancel again.", source)
+
+    def test_downloader_stderr_uses_the_private_regular_file_log(self):
+        source = RUST_RS.read_text(encoding="utf-8")
+        start = source.index("fn start_model_download(")
+        end = source.index("// Model downloads use their own process group", start)
+        download = source[start:end]
+        self.assertIn("log_writer.try_clone()", download)
+        self.assertIn(".stderr(Stdio::from(stderr_writer))", download)
+        self.assertIn("options.mode(0o600)", source)
+
+    def test_python_traceback_is_reduced_to_safe_exception_class(self):
+        source = RUST_RS.read_text(encoding="utf-8")
+        self.assertIn('trimmed.split_once(": ")', source)
+        self.assertIn('simple_name.ends_with("Error")', source)
+        self.assertIn('simple_name.ends_with("Timeout")', source)
+        self.assertIn("Python exception {simple_name}", source)
+
+    def test_downloaded_model_files_are_not_claimed_ready_for_inference(self):
+        source = RUST_RS.read_text(encoding="utf-8")
+        start = source.index("fn start_model_download(")
+        end = source.index("// Model downloads use their own process group", start)
+        download = source[start:end]
+        self.assertNotIn("model is ready to use", download.lower())
+        self.assertIn("model loading and inference have not yet been checked", download.lower())
+        self.assertIn("model loading and inference will be checked when you start the server", download.lower())
+
+    def test_normal_backend_startup_allows_bounded_model_load_and_warmup(self):
+        source = RUST_RS.read_text(encoding="utf-8")
+        start = source.index("const NORMAL_BACKEND_STARTUP_TIMEOUT")
+        end = source.index("fn start_backend_blocking_with_options(", start)
+        normal_start = source[start:end]
+        self.assertIn("Duration::from_secs(180)", normal_start)
+        self.assertIn("NORMAL_BACKEND_STARTUP_TIMEOUT", normal_start)
+        self.assertIn("warm-up inference happen before /health", normal_start)
+        self.assertIn(
+            "Duration::from_secs(startup_timeout_seconds.clamp(1, 90))",
+            source,
+        )
+
+    def test_failed_normal_model_switch_restores_previous_verified_model(self):
+        source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
+        helper_start = source.index("async function restorePreviousModelAfterFailedSwitch(")
+        helper_end = source.index('startButton.addEventListener("click"', helper_start)
+        helper = source[helper_start:helper_end]
+        self.assertIn('invoke<BackendStatus>("get_backend_status")', helper)
+        self.assertIn('invoke<BackendStatus>("stop_backend")', helper)
+        self.assertIn("observed.model !== failedTargetModel", helper)
+        self.assertIn("stopped.running || stopped.pid", helper)
+        self.assertIn("requestModelStorageStatus(previousModel)", helper)
+        self.assertIn("startSelectedBackendModel(previousCache, previousPort)", helper)
+
+        switch_start = source.index('startButton.addEventListener("click"')
+        switch_end = source.index("const UPDATE_SUCCESS_STORAGE_KEY", switch_start)
+        switch = source[switch_start:switch_end]
+        self.assertIn("const previousModel = wasRunning && backend.model", switch)
+        self.assertIn("const previousPortValue = backend.port", switch)
+        self.assertIn('typeof previousPortValue === "number"', switch)
+        self.assertIn("previousPortValue > 0 && previousPortValue <= 65535", switch)
+        self.assertRegex(switch, r"if\s*\(\s*!targetStarted")
+        self.assertIn("restorePreviousModelAfterFailedSwitch(", switch)
+
+    def test_model_start_failure_is_not_swallowed_as_a_successful_switch(self):
+        source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
+        start = source.index("async function startSelectedBackendModel(")
+        end = source.index("async function restorePreviousModelAfterFailedSwitch(", start)
+        function = source[start:end]
+        self.assertIn("): Promise<boolean>", function)
+        self.assertIn("return startedAndVerified;", function)
+        self.assertIn("if (!selectedCache.modelCached)", function)
+        self.assertIn("return false;", function)
+
     def test_rust_supervisor_uses_nonblocking_log_and_no_pipe_joins(self):
         source = RUST_RS.read_text(encoding="utf-8")
         self.assertIn(".stdout(Stdio::from(log_writer))", source)
@@ -285,7 +382,15 @@ class ModelCacheValidationTests(unittest.TestCase):
 
     def test_rust_cache_requires_locked_commit_digest_marker(self):
         source = RUST_RS.read_text(encoding="utf-8")
-        self.assertIn('include_str!("../../../backend/rdt_model_lock.json")', source)
+        expected_include = 'include_str!("../../backend/rdt_model_lock.json")'
+        self.assertTrue(
+            expected_include in source,
+            "Rust must embed the Connect-local backend/rdt_model_lock.json",
+        )
+        resolved_lock = (RUST_RS.parent / "../../backend/rdt_model_lock.json").resolve()
+        expected_lock = (RUST_RS.parents[2] / "backend" / "rdt_model_lock.json").resolve()
+        self.assertEqual(resolved_lock, expected_lock)
+        self.assertTrue(resolved_lock.is_file(), "Rust model-lock include target is missing")
         self.assertIn('snapshot.file_name().and_then(|name| name.to_str()) != Some(revision.as_str())', source)
         self.assertIn('"rdt-model-verification"', source)
         self.assertIn('marker.get("sha256").and_then(Value::as_str) == Some(expected_sha.as_str())', source)
@@ -294,15 +399,41 @@ class ModelCacheValidationTests(unittest.TestCase):
     def test_cancel_allows_owned_resource_tracker_helper_in_isolated_group(self):
         source = RUST_RS.read_text(encoding="utf-8")
         section = source[source.index("fn model_download_group_members_are_owned"):source.index("fn finish_stopping_model_download_group")]
-        self.assertIn("resource_tracker", section)
+        with open("src-tauri/src/main.rs", encoding="utf-8") as rust_source_file:
+            rust_source = rust_source_file.read()
+        validator_start = rust_source.index("fn model_download_group_snapshot_is_owned")
+        validator_end = rust_source.index("fn model_download_group_members_are_owned", validator_start)
+        validator_section = rust_source[validator_start:validator_end]
+        self.assertIn("resource_tracker", validator_section)
+        self.assertIn("model_download_group_snapshot_is_owned(", section)
         self.assertNotIn("members.iter().any(|item| !command_is_expected_backend", section)
-        self.assertIn("leader.started != identity.started", section)
+        self.assertIn("leader.started != identity.started", validator_section)
 
     def test_tray_restores_previous_menu_bar_icon(self):
         root = __import__("pathlib").Path(__file__).resolve().parents[1]
         source = (root / "src-tauri" / "src" / "main.rs").read_text(encoding="utf-8")
         self.assertIn('icons/rdt-menu-bar-icon.png', source)
-        self.assertIn('.icon_as_template(false)', source)
+        self.assertIn("let (tray_icon, tray_icon_is_template) =", source)
+        mac_template_pair = re.search(
+            r'#\[cfg\(target_os = "macos"\)\]\s*'
+            r'let \(tray_icon, tray_icon_is_template\) = \(\s*'
+            r'tauri::include_image!\("icons/rdt-menu-bar-template\.png"\),\s*'
+            r'true,\s*\);',
+            source,
+        )
+        other_platform_pair = re.search(
+            r'#\[cfg\(not\(target_os = "macos"\)\)\]\s*'
+            r'let \(tray_icon, tray_icon_is_template\) = \(\s*'
+            r'tauri::include_image!\("icons/rdt-menu-bar-icon\.png"\),\s*'
+            r'false,\s*\);',
+            source,
+        )
+        self.assertTrue(mac_template_pair, "macOS must use its template menu-bar icon")
+        self.assertTrue(other_platform_pair, "non-macOS must use the full-color tray icon")
+        self.assertTrue(
+            ".icon_as_template(tray_icon_is_template)" in source,
+            "tray template mode must follow the platform-specific icon selection",
+        )
         self.assertNotIn('rdt-menu-bar-template-0D45.png', source)
         self.assertTrue((root / "src-tauri" / "icons" / "rdt-menu-bar-icon.png").is_file())
         start = source.index("fn build_tray_menu(")
@@ -339,7 +470,91 @@ class ModelCacheValidationTests(unittest.TestCase):
         script = (ROOT / "rdt_connect" / "scripts" / "prepare-macos-bundle.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"$REPO_ROOT/backend/apple/server.py"', script)
+        self.assertIn(
+            'RDT_VOICE_BACKEND_SOURCE:-$HOME/dev/rdt-voice/backend/server.py',
+            script,
+        )
+        self.assertIn("patch_desktop_backend.py", script)
+        self.assertIn('"$CONNECT_BACKEND_SOURCE" "$STAGE/server.py"', script)
+        self.assertIn('--add-data "$REPO_ROOT/backend/rdt_model_lock.json:."', script)
+
+
+    def test_connect_patcher_stages_canonical_voice_with_pinned_model_lock(self):
+        voice_source = Path(
+            os.environ.get(
+                "RDT_VOICE_BACKEND_SOURCE",
+                str(Path.home() / "dev" / "rdt-voice" / "backend" / "server.py"),
+            )
+        ).expanduser()
+        if not voice_source.is_file():
+            self.skipTest("Canonical RDT Voice backend is not present on this runner.")
+
+        patcher_path = ROOT / "rdt_connect" / "scripts" / "patch_desktop_backend.py"
+        spec = importlib.util.spec_from_file_location(
+            "rdt_connect_patcher_under_test", patcher_path
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        patcher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patcher)
+
+        original_sha = hashlib.sha256(voice_source.read_bytes()).hexdigest()
+        staged = patcher.patch(voice_source)
+        tree = ast.parse(staged, filename="<staged-connect-backend>")
+        functions = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        required = {
+            "_rdt_load_model_lock",
+            "_rdt_model_spec",
+            "_rdt_marker_path",
+            "_rdt_marker_is_current",
+            "_rdt_write_verified_marker",
+            "_rdt_model_snapshot_is_complete",
+            "_rdt_resolve_model_snapshot",
+            "_download_model_only",
+        }
+        self.assertTrue(required.issubset(functions))
+
+        downloader = functions["_download_model_only"]
+        hub_calls = [
+            node for node in ast.walk(downloader)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "snapshot_download"
+        ]
+        self.assertEqual(len(hub_calls), 3)
+        self.assertTrue(all(
+            any(keyword.arg == "revision" for keyword in call.keywords)
+            for call in hub_calls
+        ))
+        self.assertFalse(any(
+            keyword.arg == "dry_run"
+            for call in hub_calls for keyword in call.keywords
+        ))
+        self.assertTrue(
+            patcher._rdt_function_is_revision_pinned(
+                staged, "_download_model_only"
+            )
+        )
+        # The transform pins both original call sites, then the Connect staging
+        # patch removes synthetic startup warmup; only real inference remains.
+        self.assertEqual(
+            staged.count(
+                "path_or_hf_repo=_rdt_resolve_model_snapshot(MODEL_ID)"
+            ),
+            1,
+        )
+        self.assertEqual(staged.count("mlx_whisper.transcribe("), 1)
+        self.assertNotIn("_warm_path", staged)
+        self.assertNotIn("path_or_hf_repo=MODEL_ID", staged)
+        compile(staged, "<staged-connect-backend>", "exec")
+        self.assertEqual(
+            hashlib.sha256(voice_source.read_bytes()).hexdigest(),
+            original_sha,
+        )
 
     def test_python_pyincluded_lock_and_dependency_version_are_strict(self):
         script = (ROOT / "rdt_connect" / "scripts" / "prepare-macos-bundle.sh").read_text(encoding="utf-8")
@@ -370,6 +585,372 @@ class ModelCacheValidationTests(unittest.TestCase):
                   ROOT / "rdt_connect" / "src" / "main.ts", RUST_RS]
         for path in active:
             self.assertNotIn('mlx-community/whisper-tiny"', path.read_text(encoding="utf-8"), str(path))
+
+    def test_run_action_releases_busy_when_status_refresh_fails(self):
+        source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
+        start = source.index("async function runAction(")
+        end = source.index("\n\n\nlet modelAvailabilityCheckInFlight", start)
+        function = source[start:end]
+        self.assertEqual(function.count("catch (refreshError)"), 2)
+        self.assertIn("await refreshBackendStatus();", function)
+        self.assertIn("await refreshOrphanedBackendStatus();", function)
+        cleanup = function.rfind("finally {")
+        release = function.rfind("setBusy(false);")
+        self.assertGreater(cleanup, 0)
+        self.assertGreater(release, cleanup)
+
+    def test_failed_model_switch_refuses_inconsistent_stale_pid(self):
+        source = (ROOT / "rdt_connect" / "src" / "main.ts").read_text(encoding="utf-8")
+        start = source.index("async function restorePreviousModelAfterFailedSwitch(")
+        end = source.index('startButton.addEventListener("click"', start)
+        function = source[start:end]
+        guard = "if (!observed.running && observed.pid != null)"
+        self.assertIn(guard, function)
+        self.assertLess(
+            function.index(guard),
+            function.index('const stopped = await invoke<BackendStatus>("stop_backend")'),
+        )
+        self.assertIn("RDT Connect left it untouched.", function)
+
+    def test_failed_model_switch_validates_saved_port_and_reports_unavailable_restore(self):
+        from pathlib import Path
+        source = (
+            Path(__file__).resolve().parents[1] / "src" / "main.ts"
+        ).read_text(encoding="utf-8")
+        self.assertIn('typeof previousPortValue === "number"', source)
+        self.assertIn(
+            "previousPortValue > 0 && previousPortValue <= 65535",
+            source,
+        )
+        self.assertIn(
+            "the previous server configuration could not be restored automatically",
+            source,
+        )
+
+    def test_model_start_finalizer_failure_returns_false_for_switch_rollback(self):
+        from pathlib import Path
+        source = (
+            Path(__file__).resolve().parents[1] / "src" / "main.ts"
+        ).read_text(encoding="utf-8")
+        start = source.index("async function startSelectedBackendModel(")
+        end = source.index(
+            "async function restorePreviousModelAfterFailedSwitch(",
+            start,
+        )
+        function_source = source[start:end]
+        run_action = function_source.index("await runAction(async () => {")
+        catch = function_source.index("} catch (error)", run_action)
+        fail_closed = function_source.index(
+            "startedAndVerified = false;", catch
+        )
+        returned = function_source.index(
+            "return startedAndVerified;", fail_closed
+        )
+        self.assertLess(run_action, catch)
+        self.assertLess(catch, fail_closed)
+        self.assertLess(fail_closed, returned)
+
+    def test_preservation_packager_uses_canonical_voice_sources_without_promoting(self):
+        from pathlib import Path
+        script = (
+            Path(__file__).resolve().parents[1]
+            / "scripts" / "prepare-macos-bundle-preserve.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("RDT_VOICE_WEB_SOURCE:-$HOME/dev/rdt-voice/alpha_testing", script)
+        self.assertIn("RDT_VOICE_BACKEND_SOURCE:-$HOME/dev/rdt-voice/backend/server.py", script)
+        self.assertIn('find "$VOICE_WEB_SOURCE" -maxdepth 1', script)
+        self.assertIn('cp -R "$VOICE_WEB_SOURCE/locales"', script)
+        self.assertIn('patch_desktop_backend.py" "$CONNECT_BACKEND_SOURCE"', script)
+        self.assertNotIn('"$REPO_ROOT/backend/apple/server.py"', script)
+        self.assertIn("RUN_ID=", script)
+        self.assertIn("live resources are deliberately not promoted", script.lower())
+
+    def test_preservation_packager_copies_and_verifies_voice_manifest(self):
+        from pathlib import Path
+        script = Path(__file__).with_name("prepare-macos-bundle-preserve.sh").read_text()
+        self.assertIn('if [[ ! -s "$RESOURCES/rdt_voice_web_manifest.json" ]]; then', script)
+        self.assertIn('if [[ ! -d "$RESOURCES/rdt_voice_web/assets" ]]; then', script)
+        self.assertIn('cp -p "$RESOURCES/rdt_voice_web_manifest.json" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"', script)
+        self.assertIn("verify-alpha-r82-staging.py", script)
+        self.assertIn('"$RESOURCES/rdt_voice_web/assets"', script)
+        self.assertIn('"$NEXT_RESOURCES/rdt_voice_web_manifest.json"', script)
+        self.assertLess(script.index("cp -p \"$RESOURCES/rdt_voice_web_manifest.json\""), script.index("prepare-offline-runtime.py"))
+        self.assertLess(script.rindex("\nRDT_RUNTIME_FINAL_CHECK\n"), script.index("verify-alpha-r82-staging.py"))
+
+
+
+    def test_cancel_completion_does_not_claim_model_ready_before_inference(self):
+        source = Path("src-tauri/src/main.rs").read_text(encoding="utf-8")
+        self.assertNotIn(
+            "The downloader has been safely stopped and the model is ready to use.",
+            source,
+        )
+        self.assertIn(
+            "Model loading and real inference have not yet been verified.",
+            source,
+        )
+        self.assertEqual(
+            source.count("let still_this_attempt = model_download_cancel_attempt_is_current("),
+            2,
+        )
+
+
+    def test_terminal_finalizer_requires_exact_identity_and_commits_both_stores(self):
+        source = Path("src-tauri/src/main.rs").read_text(encoding="utf-8")
+        self.assertIn("model_download_finalization: Arc<Mutex<()>>", source)
+        helper = source[
+            source.index("fn finalize_model_download_state_with"):
+            source.index("fn publish_model_download_failure_for_identity_with_gate")
+        ]
+        self.assertIn("model_download_process_identity_matches", helper)
+        self.assertIn("current_identity = None", helper)
+        self.assertIn("status.active = false", helper)
+        self.assertIn("cancel_requested.store(false, Ordering::SeqCst)", helper)
+        self.assertIn("require_canceling && status.phase != \"canceling\"", helper)
+        pid_lock = __import__("re").search(
+            r"\bpid_store\b(?:\s*\.\s*as_ref\s*\(\s*\))?\s*\.\s*lock\s*\(",
+            helper,
+        )
+        status_lock = __import__("re").search(
+            r"\bstatus_store\b(?:\s*\.\s*as_ref\s*\(\s*\))?\s*\.\s*lock\s*\(",
+            helper,
+        )
+        self.assertIsNotNone(pid_lock, "finalizer must acquire the PID mutex")
+        self.assertIsNotNone(status_lock, "finalizer must acquire the status mutex")
+        self.assertLess(pid_lock.start(), status_lock.start())
+
+    def test_worker_and_cancel_use_one_finalization_gate(self):
+        source = Path("src-tauri/src/main.rs").read_text(encoding="utf-8")
+        worker = source[
+            source.index("fn start_model_download_blocking("):
+            source.index("// Model downloads use their own process group")
+        ]
+        cancel = source[
+            source.index("fn cancel_model_download("):
+            source.index("fn canonical_mlx_cache_repository")
+        ]
+        self.assertIn("finalize_model_download_state_with(", worker)
+        self.assertIn("finalize_model_download_state_with(", cancel)
+        self.assertIn("model_download_cancel_transition(&current_snapshot)", cancel)
+        self.assertEqual(
+            cancel.count("let still_this_attempt = model_download_cancel_attempt_is_current("),
+            2,
+        )
+        self.assertNotIn("cancel_requested.swap(false", worker)
+
+    def test_retry_failure_does_not_release_pid_or_active_download(self):
+        source = Path("src-tauri/src/main.rs").read_text(encoding="utf-8")
+        helper = source[
+            source.index("fn publish_model_download_failure_for_identity_with_gate"):
+            source.index("fn model_download_group_members_are_owned")
+        ]
+        self.assertIn("model_download_process_identity_matches", helper)
+        self.assertIn("if !status.active", helper)
+        self.assertIn('status.phase = "failed".into();', helper)
+        self.assertNotIn("*current_identity = None", helper)
+
+
+
+
+class ModelDownloadLogCleanupContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with open("src-tauri/src/main.rs", encoding="utf-8") as handle:
+            cls.rust_source = handle.read()
+
+    def test_log_cleanup_attempts_unlink_after_mutex_poison(self):
+        start = self.rust_source.index(
+            "fn clear_model_download_log_path_with"
+        )
+        end = self.rust_source.index(
+            "\nfn clear_model_download_log_path(",
+            start,
+        )
+        helper = self.rust_source[start:end]
+
+        self.assertIn("match store.lock()", helper)
+        self.assertIn("Err(_) => Err(", helper)
+        self.assertIn("remove_file(expected_path)", helper)
+
+    def test_delayed_log_lock_error_is_not_silently_discarded(self):
+        start = self.rust_source.index("fn cancel_model_download(")
+        end = self.rust_source.index(
+            "\nfn canonical_mlx_cache_repository",
+            start,
+        )
+        cancel = self.rust_source[start:end]
+
+        self.assertIn(
+            "The model-download log-path mutex is poisoned; log cleanup may be skipped.",
+            cancel,
+        )
+        self.assertNotIn(
+            "log_path_store\n        .lock()\n        .ok()",
+            cancel,
+        )
+
+    def test_log_cleanup_is_after_terminal_finalization(self):
+        start = self.rust_source.index("fn cancel_model_download(")
+        end = self.rust_source.index(
+            "\nfn canonical_mlx_cache_repository",
+            start,
+        )
+        cancel = self.rust_source[start:end]
+
+        finalizer = cancel.index(
+            "let finalized = finalize_model_download_state_with"
+        )
+        cleanup = cancel.index("match expected_log_path")
+        self.assertLess(finalizer, cleanup)
+        self.assertIn("confirmed downloader shutdown", cancel[cleanup:])
+
+
+
+
+class ModelDownloadInspectionContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with open("src-tauri/src/main.rs", encoding="utf-8") as handle:
+            cls.rust_source = handle.read()
+
+    def test_downloader_ownership_uses_checked_snapshot(self):
+        start = self.rust_source.index(
+            "fn model_download_group_members_are_owned("
+        )
+        end = self.rust_source.index(
+            "// Send TERM to only the verified download process group",
+            start,
+        )
+        body = self.rust_source[start:end]
+        self.assertIn("process_snapshot_result()?", body)
+        self.assertNotIn("process_snapshot()", body)
+
+    def test_identity_capture_uses_checked_snapshot(self):
+        start = self.rust_source.index(
+            "fn capture_model_download_identity("
+        )
+        end = self.rust_source.index("\nfn ", start + 5)
+        body = self.rust_source[start:end]
+        self.assertIn("process_snapshot_result()?", body)
+        self.assertNotIn("process_snapshot()", body)
+
+    def test_worker_status_poison_does_not_disable_watchdog(self):
+        start = self.rust_source.index("fn start_model_download_blocking(")
+        end = self.rust_source.index(
+            "\nfn finalize_model_download_state_with",
+            start,
+        )
+        body = self.rust_source[start:end]
+        self.assertIn("inspect_model_download_status", body)
+        self.assertIn("keeping the watchdog armed", body)
+        self.assertNotIn(".unwrap_or(false)", body)
+
+    def test_process_inspection_errors_are_explicit(self):
+        start = self.rust_source.index("fn checked_process_snapshot_output<")
+        end = self.rust_source.index("\nfn parse_unix_process_snapshot", start)
+        body = self.rust_source[start:end]
+        self.assertIn("command_output.map_err", body)
+        self.assertIn("if !successful", body)
+        self.assertIn("let snapshot = parse(&stdout)?", body)
+
+    def test_windows_group_liveness_fails_closed(self):
+        cfg = self.rust_source.index("#[cfg(windows)]\nfn process_group_alive")
+        end = self.rust_source.index(
+            "\n#[cfg(windows)]\nfn windows_descendant_pids",
+            cfg,
+        )
+        body = self.rust_source[cfg:end]
+        self.assertIn("process_snapshot_result()", body)
+        self.assertIn("Err(_) => true", body)
+
+
+
+
+class ModelDownloadCheckedStopInspectionContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with open("src-tauri/src/main.rs", encoding="utf-8") as handle:
+            cls.rust_source = handle.read()
+
+    @staticmethod
+    def function_bodies(source, name):
+        import re
+        bodies = []
+        for match in re.finditer(
+            rf"(?m)^fn {re.escape(name)}\s*\(", source
+        ):
+            next_fn = re.search(
+                r"(?m)^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+[A-Za-z_]\w*",
+                source[match.end():],
+            )
+            end = match.end() + next_fn.start() if next_fn else len(source)
+            bodies.append(source[match.start():end])
+        return bodies
+
+    def test_windows_signal_checks_process_table_before_and_after_taskkill(self):
+        bodies = self.function_bodies(self.rust_source, "send_signal_checked")
+        windows = [body for body in bodies if "taskkill" in body]
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0].count("process_snapshot_result()?"), 2)
+        self.assertNotIn("process_snapshot()", windows[0])
+
+    def test_downloader_group_ownership_uses_checked_process_snapshot(self):
+        bodies = self.function_bodies(
+            self.rust_source, "model_download_group_members_are_owned"
+        )
+        self.assertEqual(len(bodies), 1)
+        self.assertIn("process_snapshot_result()?", bodies[0])
+
+    def test_windows_group_liveness_uses_checked_process_snapshot(self):
+        bodies = self.function_bodies(self.rust_source, "process_group_alive")
+        windows = [body for body in bodies if "windows_descendant_pids" in body]
+        self.assertEqual(len(windows), 1)
+        self.assertIn("process_snapshot_result()", windows[0])
+
+    def test_worker_has_no_lock_unwrap_or_false_fallback(self):
+        bodies = self.function_bodies(
+            self.rust_source, "start_model_download_blocking"
+        )
+        self.assertEqual(len(bodies), 1)
+        self.assertNotRegex(
+            bodies[0],
+            r"\.lock\(\)\s*\.unwrap_or\(false\)",
+        )
+
+
+
+
+class ModelDownloadRegistrationMutexContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with open("src-tauri/src/main.rs", encoding="utf-8") as handle:
+            cls.rust_source = handle.read()
+
+    def test_registration_stores_are_locked_before_spawn(self):
+        start = self.rust_source.index(
+            "fn start_model_download_blocking("
+        )
+        end = self.rust_source.index("\nfn ", start + 1)
+        worker = self.rust_source[start:end]
+        self.assertLess(
+            worker.index("lock_model_download_registration_stores("),
+            worker.index("command.spawn()"),
+        )
+        self.assertIn("*download_pid = Some(identity.clone())", worker)
+        self.assertIn("*stored_log = Some(log_path.clone())", worker)
+        self.assertNotIn("if let Ok(mut download_pid)", worker)
+        self.assertNotIn("if let Ok(mut stored_log)", worker)
+
+    def test_both_registration_mutex_errors_are_propagated(self):
+        start = self.rust_source.index(
+            "fn lock_model_download_registration_stores<"
+        )
+        end = self.rust_source.index(
+            "\nfn start_model_download_blocking(", start
+        )
+        helper_body = self.rust_source[start:end]
+        self.assertEqual(helper_body.count(".lock()"), 2)
+        self.assertEqual(helper_body.count(".map_err("), 2)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,7 @@ input[type="number"] { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace
 .qr-placeholder strong { display: block; margin-bottom: 5px; color: #c1ccd8; font-size: 13px; }
 #qr-countdown { margin: 10px 0 7px; color: #f7c76f; font: 800 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-line; }
 .qr-copy { font-size: 11px; }
+.qr-primary-actions.copy-link-wrapped #copy-link { box-sizing: border-box; flex: 1 0 100%; }
 .list-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #303741; }
 .list-header h3 { margin: 0; font-size: 12px; letter-spacing: .025em; }
 .counter { color: #9dcfe3; border: 1px solid #365362; border-radius: 7px; padding: 2px 7px; font-size: 10px; }
@@ -2064,9 +2065,9 @@ html[dir="rtl"] [data-l10n-ignore] {
   box-shadow: 0 0 0 1px rgba(248,113,133,.30), 0 0 8px rgba(248,75,93,.13) !important;
 }
 
-/* Bright but smooth breathing gold halo. Disabled/busy actions never glow. */
-#local-https-quick-setup-button:not(:disabled):not([aria-busy="true"]),
-#model-download-button:not(:disabled):not([aria-busy="true"]) {
+/* Both secure actions share one synchronized eligibility gate. */
+body.rdt-secure-actions-glow-active #local-https-quick-setup-button,
+body.rdt-secure-actions-glow-active #model-download-button {
   animation: rdtSecureActionGlow0D13 6.0s ease-in-out infinite;
   will-change: filter;
 }
@@ -2083,7 +2084,7 @@ html[dir="rtl"] [data-l10n-ignore] {
 }
 
 /* Preserve the existing short download-attention nudge while the gold halo breathes. */
-#model-download-button.needs-download-attention:not(:disabled):not([aria-busy="true"]) {
+body.rdt-secure-actions-glow-active #model-download-button.needs-download-attention {
   animation: rdtSecureActionGlow0D13 6.0s ease-in-out infinite,
              rdtDownloadButtonAttention .82s ease-in-out 4 !important;
 }
@@ -5715,5 +5716,84 @@ button[aria-busy="true"] * {
   @keyframes rdt-update-success-enter {
     from { opacity: 0; transform: translateY(8px) scale(.985); }
     to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  body.rdt-secure-actions-glow-active #local-https-quick-setup-button,
+  body.rdt-secure-actions-glow-active #model-download-button {
+    animation: none !important;
+    filter: none !important;
+    will-change: auto;
+  }
+}
+
+/* Verified per-model cache location in the downloaded-model selector. */
+.model-cache-path {
+  display: block;
+  max-width: 100%;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.78em;
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* RDT_MODEL_STORAGE_CENTERED_ACTIONS_1D43 */
+.model-storage-controls {
+  justify-content: center !important;
+}
+.model-cleanup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+/* RDT_MODEL_STORAGE_OPEN_ICON_COMPACT */
+.model-storage-row-actions .model-storage-open-button {
+  display: inline-flex !important;
+  flex: 0 0 26px !important;
+  align-items: center;
+  justify-content: center;
+  width: 26px !important;
+  min-width: 26px !important;
+  max-width: 26px !important;
+  height: 26px;
+  padding: 0 !important;
+  line-height: 1;
+  font-size: 15px;
+}
+
+/* RDT model storage and management button interaction feedback */
+.settings-models-grid .model-storage-card button:not(:disabled),
+.settings-models-grid .model-cleanup-card button:not(:disabled) {
+  transition: transform 150ms ease, filter 150ms ease, box-shadow 150ms ease;
+}
+.settings-models-grid .model-storage-card button:not(:disabled):hover,
+.settings-models-grid .model-cleanup-card button:not(:disabled):hover {
+  transform: translateY(-2px) !important;
+  filter: brightness(1.08) !important;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, .24);
+}
+.settings-models-grid .model-storage-card button:not(:disabled):active,
+.settings-models-grid .model-cleanup-card button:not(:disabled):active {
+  transform: translateY(0) scale(.98) !important;
+  filter: brightness(.94) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .20);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-models-grid .model-storage-card button:not(:disabled),
+  .settings-models-grid .model-cleanup-card button:not(:disabled) {
+    transition: none !important;
+  }
+  .settings-models-grid .model-storage-card button:not(:disabled):hover,
+  .settings-models-grid .model-cleanup-card button:not(:disabled):hover,
+  .settings-models-grid .model-storage-card button:not(:disabled):active,
+  .settings-models-grid .model-cleanup-card button:not(:disabled):active {
+    transform: none !important;
   }
 }

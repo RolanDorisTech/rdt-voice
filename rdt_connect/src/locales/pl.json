@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Pominięto porównanie sprzętu",
     "msg.benchmark_slower.1d20": "wolniej",
     "msg.benchmark_test_order.1d22": "Zamówienie testowe",
-    "msg.benchmark_timing_limit.1d22": "Ogranicz czas testu porównawczego do 60 sekund na wybrany sprzęt",
+    "msg.benchmark_timing_limit.1d22": "Zastosuj limit czasu dla każdego urządzenia",
+    "msg.benchmark_audio_label.1d23": "Dźwięk testowy",
+    "msg.benchmark_audio_12s.1d23": "Nagranie 12-sekundowe · 60 sekund na sprzęt",
+    "msg.benchmark_audio_21s.1d23": "Nagranie 20,7-sekundowe · 120 sekund na sprzęt",
     "msg.benchmark_title.1d22": "Uwolnij swój sprzęt",
     "msg.benchmark_tooltip_faster_context.1d20": "Szybciej dzięki współczynnikowi pomiaru w czasie rzeczywistym, ale",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Prędkość prawie równa, ale",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Aktualizacja została zainstalowana. Korzystasz teraz z tej wersji.",
     "msg.update_success_version.1d40": "Wersja",
     "msg.update_success_build.1d40": "Numer kompilacji",
-    "msg.update_success_continue.1d40": "Kontynuuj"
+    "msg.update_success_continue.1d40": "Kontynuuj",
+    "msg.open_model_storage_folder.1d43": "Otwórz",
+    "msg.stop_server_to_change_default_folder.1d43": "Najpierw zatrzymaj serwer, aby zmienić folder domyślny.",
+    "msg.could_not_open_model_storage_folder.1d43": "Nie można otworzyć tego folderu: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Automatycznie instaluj aktualizacje przy następnym uruchomieniu",
   "msg.install_verified_updates_on_app_restart.1d30": "Po wybraniu ponownego uruchomienia RDT Connect aktualizacja zostanie pobrana i zweryfikowana. Aplikacja nigdy nie uruchamia się ponownie samoczynnie."

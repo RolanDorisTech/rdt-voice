@@ -13,24 +13,55 @@ class AboutMenuUpdateContractTests(unittest.TestCase):
         self.assertNotIn("aboutVersionObserver", main)
         self.assertIn('id="about-version-label"', html)
         build_id = (ROOT / "scripts/build-id-sequence.txt").read_text(encoding="utf-8").strip()
-        self.assertIn(f"Build {build_id}", html)
+        self.assertIn(f'id="header-build-id">{build_id}</span>', html)
         self.assertNotIn("Version 0.2.0-dev.10 (0.2.0-dev.10)", html)
 
     def test_original_icon_and_about_navigation(self):
         rust = (ROOT / "src-tauri/src/main.rs").read_text(encoding="utf-8")
-        self.assertIn('icons/rdt-menu-bar-icon.png', rust)
-        self.assertIn('.icon_as_template(false)', rust)
+        self.assertIn('tauri::include_image!("icons/rdt-menu-bar-template.png")', rust)
+        self.assertIn('tauri::include_image!("icons/rdt-menu-bar-icon.png")', rust)
+        self.assertIn('.icon_as_template(tray_icon_is_template)', rust)
+        self.assertIn('#[cfg(target_os = "macos")]', rust)
+        self.assertIn('#[cfg(not(target_os = "macos"))]', rust)
         self.assertNotIn('rdt-menu-bar-template-0D45.png', rust)
-        self.assertNotIn('"app-menu-about-rdt-connect" => {', rust)
-        self.assertIn('let app_about = PredefinedMenuItem::about(', rust)
-        self.assertNotIn('let _ = app.emit("rdt-connect-open-about", ());', rust)
+
+        lines = rust.splitlines()
+
+        def menu_arm(item_id):
+            target = f'"{item_id}" => {{'
+            starts = [i for i, line in enumerate(lines) if line.strip() == target]
+            self.assertEqual(len(starts), 1, f"Expected one {item_id} menu arm")
+            body = [lines[starts[0]]]
+            for line in lines[starts[0] + 1:]:
+                stripped = line.strip()
+                if (stripped.startswith('"') and '=>' in stripped) or stripped.startswith('_ =>'):
+                    break
+                body.append(line)
+            return "\\n".join(body)
+
+        for item_id in ("about-app", "tray-about-app"):
+            action = menu_arm(item_id)
+            self.assertIn('app.run_on_main_thread(|| show_about_panel_on_top())', action)
+            self.assertNotIn('show_main_window(app)', action)
+            self.assertNotIn('rdt-connect-open-about', action)
+
+        panel_start = rust.index('fn show_about_panel_on_top()')
+        panel_end = rust.index('fn restore_dock_icon()', panel_start)
+        panel = rust[panel_start:panel_end]
+        self.assertIn('application.activate();', panel)
+        self.assertIn('NSModalPanelWindowLevel', panel)
+        self.assertIn('window.orderFrontRegardless();', panel)
+        self.assertNotIn('show_main_window(app)', panel)
         self.assertNotIn('show_about_window(app)', rust)
         self.assertIn('"app-menu-check-updates" => {', rust)
-        self.assertIn('if let Err(error) = show_update_window(app)', rust)
+        self.assertIn('if let Err(error) = show_update_window(app, true)', rust)
         start = rust.index('let app_submenu = Submenu::with_items(')
         end = rust.index(';', start) + 1
-        submenu = rust[start:end]
-        self.assertNotRegex(submenu, r'(?i)github|youtube')
+        self.assertNotRegex(rust[start:end], r'(?i)github|youtube')
+
+
+
+
 
     def test_native_about_credits_show_build_and_exact_links(self):
         credits = (ROOT / "src-tauri/resources/Credits.html").read_text(encoding="utf-8")
@@ -77,7 +108,7 @@ class AboutMenuUpdateContractTests(unittest.TestCase):
     def test_reopen_action_and_update_reliability_remain(self):
         main = (ROOT / "src/main.ts").read_text(encoding="utf-8")
         self.assertIn('await update.install({ restartAfterInstall: false })', main)
-        self.assertIn('setApplicationUpdateAction("reopen")', main)
+        self.assertIn('if (status === "restart-required") return "reopen";', main)
         self.assertIn('rdt-connect-update-relaunch-request', main)
         css = (ROOT / "src/style.css").read_text(encoding="utf-8")
         self.assertIn('rdtDownloadSpotlightCue0D47', css)

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "ハードウェアの比較はスキップされました",
     "msg.benchmark_slower.1d20": "もっとゆっくり",
     "msg.benchmark_test_order.1d22": "テストの順序",
-    "msg.benchmark_timing_limit.1d22": "ベンチマークのタイミングをハードウェア選択ごとに 60 秒に制限する",
+    "msg.benchmark_timing_limit.1d22": "ハードウェアごとに時間制限を適用",
+    "msg.benchmark_audio_label.1d23": "ベンチマーク音声",
+    "msg.benchmark_audio_12s.1d23": "12秒の録音 · ハードウェアごとに60秒",
+    "msg.benchmark_audio_21s.1d23": "20.7秒の録音 · ハードウェアごとに120秒",
     "msg.benchmark_title.1d22": "ハードウェアを解き放つ",
     "msg.benchmark_tooltip_faster_context.1d20": "測定されたリアルタイム係数により高速になりますが、",
     "msg.benchmark_tooltip_near_tie_context.1d20": "速度的にはほぼ互角ですが、",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "アップデートが正常にインストールされました。現在このバージョンを使用しています。",
     "msg.update_success_version.1d40": "バージョン",
     "msg.update_success_build.1d40": "ビルド番号",
-    "msg.update_success_continue.1d40": "続行"
+    "msg.update_success_continue.1d40": "続行",
+    "msg.open_model_storage_folder.1d43": "開く",
+    "msg.stop_server_to_change_default_folder.1d43": "既定のフォルダーを変更するには、先にサーバーを停止してください。",
+    "msg.could_not_open_model_storage_folder.1d43": "このフォルダーを開けませんでした: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "次回の再起動時にアップデートを自動インストール",
   "msg.install_verified_updates_on_app_restart.1d30": "RDT Connect の再起動を選択すると、再度開く前に利用可能なアップデートをダウンロードして検証します。アプリが自動的に再起動することはありません。"

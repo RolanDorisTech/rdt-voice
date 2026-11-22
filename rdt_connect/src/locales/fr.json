@@ -1185,7 +1185,10 @@
     "msg.benchmark_skipped_description.1d20": "La comparaison matérielle obligatoire a été interrompue à deux reprises. RDT Connect l'a ignoré afin que vous puissiez utiliser l'application normalement. Vous pouvez exécuter la comparaison facultative ultérieurement dans les options du développeur, sous Matériel d'inférence.",
     "msg.benchmark_skipped_title.1d20": "Comparaison du matériel ignorée",
     "msg.benchmark_test_order.1d22": "Ordre de test",
-    "msg.benchmark_timing_limit.1d22": "Limiter le timing de référence à 60 secondes par sélection de matériel",
+    "msg.benchmark_timing_limit.1d22": "Appliquer la limite de temps par matériel",
+    "msg.benchmark_audio_label.1d23": "Audio de test",
+    "msg.benchmark_audio_12s.1d23": "Enregistrement de 12 secondes · 60 secondes par matériel",
+    "msg.benchmark_audio_21s.1d23": "Enregistrement de 20,7 secondes · 120 secondes par matériel",
     "msg.benchmark_title.1d22": "Libérez votre matériel",
     "msg.benchmark_unsupported_notice.1d21": "L'optimisation matérielle automatique est actuellement disponible sur les Mac Apple Silicon. RDT Connect utilisera son paramètre automatique normal.",
     "msg.benchmark_warmup_active.1d23": "en cours",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "La mise à jour a été installée. Vous utilisez maintenant cette version.",
     "msg.update_success_version.1d40": "Version",
     "msg.update_success_build.1d40": "Numéro de build",
-    "msg.update_success_continue.1d40": "Continuer"
+    "msg.update_success_continue.1d40": "Continuer",
+    "msg.open_model_storage_folder.1d43": "Ouvrir",
+    "msg.stop_server_to_change_default_folder.1d43": "Arrêtez d’abord le serveur pour modifier le dossier par défaut.",
+    "msg.could_not_open_model_storage_folder.1d43": "Impossible d’ouvrir ce dossier : {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Installer automatiquement les mises à jour au prochain redémarrage",
   "msg.install_verified_updates_on_app_restart.1d30": "Lorsque vous choisissez de redémarrer RDT Connect, la mise à jour disponible est téléchargée et vérifiée avant la réouverture. L’application ne redémarre jamais d’elle-même."

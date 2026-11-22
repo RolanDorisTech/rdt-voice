@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Porovnání hardwaru bylo přeskočeno",
     "msg.benchmark_slower.1d20": "pomalejší",
     "msg.benchmark_test_order.1d22": "Testovací objednávka",
-    "msg.benchmark_timing_limit.1d22": "Omezte načasování benchmarku na 60 sekund na výběr hardwaru",
+    "msg.benchmark_timing_limit.1d22": "Použít časový limit pro každé zařízení",
+    "msg.benchmark_audio_label.1d23": "Testovací zvuk",
+    "msg.benchmark_audio_12s.1d23": "12sekundová nahrávka · 60 sekund na zařízení",
+    "msg.benchmark_audio_21s.1d23": "20,7sekundová nahrávka · 120 sekund na zařízení",
     "msg.benchmark_title.1d22": "Uvolněte svůj hardware",
     "msg.benchmark_tooltip_faster_context.1d20": "Rychlejší díky měřenému faktoru v reálném čase, ale",
     "msg.benchmark_tooltip_near_tie_context.1d20": "V rychlosti téměř shodný, ale",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Aktualizace byla úspěšně nainstalována. Nyní používáte tuto verzi.",
     "msg.update_success_version.1d40": "Verze",
     "msg.update_success_build.1d40": "Číslo sestavení",
-    "msg.update_success_continue.1d40": "Pokračovat"
+    "msg.update_success_continue.1d40": "Pokračovat",
+    "msg.open_model_storage_folder.1d43": "Otevřít",
+    "msg.stop_server_to_change_default_folder.1d43": "Před změnou výchozí složky nejprve zastavte server.",
+    "msg.could_not_open_model_storage_folder.1d43": "Tuto složku se nepodařilo otevřít: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Automaticky instalovat aktualizace při příštím restartu",
   "msg.install_verified_updates_on_app_restart.1d30": "Při restartu RDT Connect se dostupná aktualizace stáhne a ověří před opětovným spuštěním. Aplikace se nikdy nerestartuje sama."

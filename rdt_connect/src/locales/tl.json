@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Nilaktawan ang paghahambing ng hardware",
     "msg.benchmark_slower.1d20": "mas mabagal",
     "msg.benchmark_test_order.1d22": "Test order",
-    "msg.benchmark_timing_limit.1d22": "Limitahan ang benchmark na timing sa 60 segundo bawat pagpili ng hardware",
+    "msg.benchmark_timing_limit.1d22": "Ilapat ang limitasyon sa oras bawat hardware",
+    "msg.benchmark_audio_label.1d23": "Benchmark na audio",
+    "msg.benchmark_audio_12s.1d23": "12 segundong recording · 60 segundo bawat hardware",
+    "msg.benchmark_audio_21s.1d23": "20.7 segundong recording · 120 segundo bawat hardware",
     "msg.benchmark_title.1d22": "Ilabas ang Iyong Hardware",
     "msg.benchmark_tooltip_faster_context.1d20": "Mas mabilis sa pamamagitan ng nasusukat na real-time na kadahilanan, ngunit",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Malapit na magkatali sa bilis, ngunit",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Matagumpay na na-install ang update. Ginagamit mo na ang bersyong ito.",
     "msg.update_success_version.1d40": "Bersyon",
     "msg.update_success_build.1d40": "Build number",
-    "msg.update_success_continue.1d40": "Magpatuloy"
+    "msg.update_success_continue.1d40": "Magpatuloy",
+    "msg.open_model_storage_folder.1d43": "Buksan",
+    "msg.stop_server_to_change_default_folder.1d43": "Ihinto muna ang server upang mapalitan ang default na folder.",
+    "msg.could_not_open_model_storage_folder.1d43": "Hindi mabuksan ang folder na ito: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Awtomatikong i-install ang mga update sa susunod na pag-restart",
   "msg.install_verified_updates_on_app_restart.1d30": "Kapag pinili mong i-restart ang RDT Connect, ida-download at ibe-verify ang update bago muling magbukas. Hindi ito kusang magre-restart."

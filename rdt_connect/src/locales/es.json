@@ -1185,7 +1185,10 @@
     "msg.benchmark_skipped_description.1d20": "La comparación obligatoria de hardware se interrumpió dos veces. RDT Connect lo ha omitido para que puedas usar la aplicación normalmente. Puede ejecutar la comparación opcional más adelante en Opciones de desarrollador, en Hardware de inferencia.",
     "msg.benchmark_skipped_title.1d20": "Se omitió la comparación de hardware",
     "msg.benchmark_test_order.1d22": "Orden de prueba",
-    "msg.benchmark_timing_limit.1d22": "Limite el tiempo de referencia a 60 segundos por selección de hardware",
+    "msg.benchmark_timing_limit.1d22": "Aplicar límite de tiempo por hardware",
+    "msg.benchmark_audio_label.1d23": "Audio de prueba",
+    "msg.benchmark_audio_12s.1d23": "Grabación de 12 segundos · 60 segundos por hardware",
+    "msg.benchmark_audio_21s.1d23": "Grabación de 20,7 segundos · 120 segundos por hardware",
     "msg.benchmark_title.1d22": "Libera tu hardware",
     "msg.benchmark_unsupported_notice.1d21": "La optimización automática de hardware está actualmente disponible en Apple Silicon Macs. RDT Connect utilizará su configuración automática normal.",
     "msg.benchmark_warmup_active.1d23": "en curso",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "La actualización se instaló correctamente. Ahora estás usando esta versión.",
     "msg.update_success_version.1d40": "Versión",
     "msg.update_success_build.1d40": "Número de compilación",
-    "msg.update_success_continue.1d40": "Continuar"
+    "msg.update_success_continue.1d40": "Continuar",
+    "msg.open_model_storage_folder.1d43": "Abrir",
+    "msg.stop_server_to_change_default_folder.1d43": "Detén primero el servidor para cambiar la carpeta predeterminada.",
+    "msg.could_not_open_model_storage_folder.1d43": "No se pudo abrir esta carpeta: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Instalar actualizaciones automáticamente al reiniciar",
   "msg.install_verified_updates_on_app_restart.1d30": "Al elegir reiniciar RDT Connect, se descargará y verificará la actualización disponible antes de volver a abrirse. Nunca se reinicia por sí solo."

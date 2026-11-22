@@ -60,9 +60,10 @@ type BackendStatus = {
   model: string | null;
   localUrl: string | null;
   logPath: string;
+  appliedInferenceDevicePreference: InferenceDevicePreference | null;
 };
 
-let backend: BackendStatus = { running: false, pid: null, port: null, model: null, localUrl: null, logPath: "" };
+let backend: BackendStatus = { running: false, pid: null, port: null, model: null, localUrl: null, logPath: "", appliedInferenceDevicePreference: null };
 
 type OrphanBackend = { pid: number; port: number | null; description: string };
 type OrphanScan = { managerLockedElsewhere: boolean; instances: OrphanBackend[] };
@@ -95,7 +96,7 @@ type PairedDevice = {
 type PairingQr = { pairingUrl: string; qrDataUrl: string; expiresAt: number };
 type BrowserOption = { id: string; name: string };
 type LocalHttpsStatus = { mode: string; configured: boolean; trusted: boolean; generated: boolean; certificatePath: string | null; privateKeyPath: string | null; caCertificatePath: string | null; rdtAddedTrustCount: number; message: string };
-type ModelStorageStatus = { model: string; locations: string[]; locationsAvailability: string[]; activeRoot: string; selectedRoot: string; modelCached: boolean; serverRunning: boolean };
+type ModelStorageStatus = { model: string; locations: string[]; locationsAvailability: string[]; activeRoot: string; selectedRoot: string; modelCached: boolean; cachedModelPath: string | null; serverRunning: boolean };
 type ModelDownloadStatus = { active: boolean; model: string | null; destinationRoot: string | null; phase: string; message: string; progressPercent: number; downloadedBytes: number; totalBytes: number | null; plannedFiles: number | null; sizeIsEstimate: boolean };
 type ModelCacheDeleteResult = { deletedRepositories: number; locationsChecked: number; approximateBytesFreed: number; message: string };
 type AppBuildInfo = { version: string; buildId: string };
@@ -512,7 +513,7 @@ function setDeveloperOptions(enabled: boolean) {
   syncDeveloperToggleButton();
   try { localStorage.setItem("rdt_connect_developer_options", String(enabled)); } catch { /* optional preference */ }
   localPortTools.classList.toggle("hidden", !enabled);
-  inferenceBenchmarkCard.classList.toggle("hidden", !enabled);
+  inferenceBenchmarkCard.classList.remove("hidden");
   if (!enabled && localServerDetails) localServerDetails.open = false;
   if (!enabled && document.getElementById("view-developer")?.classList.contains("hidden") === false) setAppView("local");
   // Keep the model panel in sync immediately when Developer Options changes.
@@ -759,7 +760,7 @@ const inferenceBenchmarkCard = $("inference-benchmark-card");
 const openNativeBenchmarkButton = $("open-native-benchmark-button") as HTMLButtonElement;
 const trayTestPhraseStatus = document.querySelector<HTMLElement>("#tray-test-phrase-status");
 localPortTools.classList.toggle("hidden", !developerOptionsEnabled);
-inferenceBenchmarkCard.classList.toggle("hidden", !developerOptionsEnabled);
+inferenceBenchmarkCard.classList.remove("hidden");
 if (!developerOptionsEnabled && localServerDetails) localServerDetails.open = false;
 const portHelp = $("port-help");
 const displayPort = $("display-port");
@@ -958,6 +959,10 @@ function syncModelSwitchControl() {
   }
 }
 
+function displayModelCachePath(cachePath: string): string {
+  return cachePath.replace(/[\\/]+snapshots[\\/]+[^\\/]+[\\/]*$/i, "");
+}
+
 function renderModelCacheSelection() {
   modelCacheSelectionList.replaceChildren();
   const options = Array.from(modelSelect.options);
@@ -990,6 +995,14 @@ function renderModelCacheSelection() {
     const modelId = document.createElement("code");
     modelId.textContent = option.value;
     copy.append(name, modelId);
+    const cachedPath = option.dataset.cachedModelPath;
+    if (cachedPath) {
+      const path = document.createElement("small");
+      path.className = "model-cache-path";
+      path.textContent = displayModelCachePath(cachedPath);
+      path.title = displayModelCachePath(cachedPath);
+      copy.appendChild(path);
+    }
     row.append(checkbox, copy);
     modelCacheSelectionList.appendChild(row);
   }
@@ -1095,6 +1108,7 @@ function closeModelSelectMenu(restoreFocus: boolean) {
   modelSelectTooltip.classList.remove("open");
   modelSelectTrigger.setAttribute("aria-expanded", "false");
   modelSelectMenu.setAttribute("aria-hidden", "true");
+  window.requestAnimationFrame(() => updateVisualSetupGuide());
   if (restoreFocus) modelSelectTrigger.focus();
 }
 function openModelSelectMenu() {
@@ -1102,6 +1116,7 @@ function openModelSelectMenu() {
   modelSelectTooltip.classList.add("open");
   modelSelectTrigger.setAttribute("aria-expanded", "true");
   modelSelectMenu.setAttribute("aria-hidden", "false");
+  clearVisualSetupGuideSpotlight();
   window.requestAnimationFrame(() => {
     const selected = modelSelectMenu.querySelector<HTMLButtonElement>('.model-select-option[aria-selected="true"]');
     (selected || modelSelectMenu.querySelector<HTMLButtonElement>(".model-select-option"))?.focus();
@@ -1218,14 +1233,18 @@ let modelBadgeRefreshSerial = 0;
 async function refreshModelCacheBadges() {
   const serial = ++modelBadgeRefreshSerial;
   const options = Array.from(modelSelect.options);
-    const results: Array<{ value: string; cached: boolean | null }> = [];
+    const results: Array<{ value: string; cached: boolean | null; cachedModelPath: string | null }> = [];
   for (const option of options) {
     if (serial !== modelBadgeRefreshSerial) return;
     try {
       const status = await requestModelStorageStatus(option.value);
-      results.push({ value: option.value, cached: Boolean(status.modelCached) });
+      results.push({
+  value: option.value,
+  cached: Boolean(status.modelCached),
+  cachedModelPath: status.modelCached && typeof status.cachedModelPath === "string" ? status.cachedModelPath : null,
+});
     } catch {
-      results.push({ value: option.value, cached: null });
+      results.push({ value: option.value, cached: null, cachedModelPath: null });
     }
   }
   if (serial !== modelBadgeRefreshSerial) return;
@@ -1233,6 +1252,8 @@ async function refreshModelCacheBadges() {
     const option = options.find((candidate) => candidate.value === result.value);
     const baseLabel = modelOptionBaseLabels.get(result.value) || result.value;
     if (!option) continue;
+    if (result.cachedModelPath) option.dataset.cachedModelPath = result.cachedModelPath;
+    else delete option.dataset.cachedModelPath;
     option.textContent = result.cached === true ? translateKey("msg.baselabel_downloaded.bf85439f", { baseLabel: baseLabel }, getActiveLocale()) : baseLabel;
     if (result.cached === true) option.dataset.cacheState = "downloaded";
     else if (result.cached === false) option.dataset.cacheState = "not-downloaded";
@@ -1244,7 +1265,6 @@ async function refreshModelCacheBadges() {
 const modelStorageSummary = $("model-storage-summary");
 const modelStorageLocationsEl = $("model-storage-locations");
 const modelStorageAddButton = $("model-storage-add-button") as HTMLButtonElement;
-const modelStorageSaveButton = $("model-storage-save-button") as HTMLButtonElement;
 const modelDownloadPanel = $("model-download-panel");
 const modelDownloadTitle = $("model-download-title");
 const modelDownloadDetail = $("model-download-detail");
@@ -1275,6 +1295,68 @@ const headerServerStatusDot = $("header-server-status-dot");
 const setupRemoteButton = $("setup-remote") as HTMLButtonElement;
 const generateQrButton = $("generate-qr") as HTMLButtonElement;
 const copyLinkButton = $("copy-link") as HTMLButtonElement;
+const qrPrimaryActions = document.querySelector<HTMLElement>(".qr-primary-actions");
+const qrPrimaryActionsColumn = qrPrimaryActions?.parentElement ?? null;
+let qrCopyLinkWrapFrame: number | null = null;
+
+// Measure a hidden copy of the unmodified flex row. The measurement never
+// depends on the expanded Copy link button, so changing its width cannot
+// change the result and cannot create a ResizeObserver feedback loop.
+const updateQrCopyLinkWrapState = () => {
+  if (!qrPrimaryActions || !qrPrimaryActionsColumn || !qrPrimaryActions.isConnected) return;
+
+  const naturalRow = document.createElement("div");
+  naturalRow.className = qrPrimaryActions.className;
+  naturalRow.classList.remove("copy-link-wrapped");
+  naturalRow.setAttribute("aria-hidden", "true");
+
+  const rowStyle = window.getComputedStyle(qrPrimaryActions);
+  Object.assign(naturalRow.style, {
+    position: "absolute",
+    left: "0",
+    top: "0",
+    width: rowStyle.width,
+    margin: "0",
+    visibility: "hidden",
+    pointerEvents: "none",
+    zIndex: "-1",
+  });
+
+  const naturalGenerateButton = generateQrButton.cloneNode(true) as HTMLButtonElement;
+  const naturalCopyButton = copyLinkButton.cloneNode(true) as HTMLButtonElement;
+  naturalRow.append(naturalGenerateButton, naturalCopyButton);
+  qrPrimaryActionsColumn.append(naturalRow);
+
+  try {
+    const generateTop = naturalGenerateButton.getBoundingClientRect().top;
+    const copyTop = naturalCopyButton.getBoundingClientRect().top;
+    const wouldWrap = copyTop > generateTop + 1;
+    qrPrimaryActions.classList.toggle("copy-link-wrapped", wouldWrap);
+  } finally {
+    naturalRow.remove();
+  }
+};
+
+const scheduleQrCopyLinkWrapUpdate = () => {
+  if (qrCopyLinkWrapFrame !== null) return;
+  qrCopyLinkWrapFrame = window.requestAnimationFrame(() => {
+    qrCopyLinkWrapFrame = null;
+    updateQrCopyLinkWrapState();
+  });
+};
+
+if (qrPrimaryActions && qrPrimaryActionsColumn) {
+  if (typeof ResizeObserver !== "undefined") {
+    const qrCopyLinkResizeObserver = new ResizeObserver(
+      scheduleQrCopyLinkWrapUpdate,
+    );
+    // Observe the containing column only, never the buttons whose widths change.
+    qrCopyLinkResizeObserver.observe(qrPrimaryActionsColumn);
+  }
+  window.addEventListener("resize", scheduleQrCopyLinkWrapUpdate, { passive: true });
+  appInterfaceScaleSelect.addEventListener("change", scheduleQrCopyLinkWrapUpdate);
+  scheduleQrCopyLinkWrapUpdate();
+}
 const qrImage = $("pairing-qr") as HTMLImageElement;
 const qrPlaceholder = $("qr-placeholder");
 const qrStatus = $("qr-status");
@@ -2351,7 +2433,7 @@ void listenNative<ModelDownloadStatus>("rdt-model-download-status", (event) => {
       }, 2650);
     }
   }
-  renderModelDownloadUI();
+  setBusy(busy);
   scheduleVisualSetupGuideUpdate();
   if (!incoming.active && incoming.phase === "complete") {
     showNotice(incoming.message, "good");
@@ -2460,10 +2542,13 @@ async function refreshBackendStatus(silent = true) {
     const previous = backend;
     const next = await invoke<BackendStatus>("get_backend_status");
     const identityChanged = previous.running !== next.running || previous.pid !== next.pid || previous.port !== next.port;
-    const changed = (["running", "pid", "port", "model", "localUrl", "logPath"] as const)
+    const changed = (["running", "pid", "port", "model", "localUrl", "logPath", "appliedInferenceDevicePreference"] as const)
       .some((key) => previous[key] !== next[key]);
     backend = next;
-    if (!next.running || identityChanged) appliedInferenceDevicePreference = null;
+    if (!next.running) appliedInferenceDevicePreference = null;
+    else if (next.appliedInferenceDevicePreference !== null) {
+      appliedInferenceDevicePreference = next.appliedInferenceDevicePreference;
+    } else if (identityChanged) appliedInferenceDevicePreference = null;
     renderInferenceHardwareStatus();
     if (!backend.running || (lastConnectionCheck && (lastConnectionCheck.port !== backend.port || lastConnectionCheck.pid !== backend.pid || lastConnectionCheck.running !== backend.running))) lastConnectionCheck = null;
     if (changed) renderBackendStatus();
@@ -2709,6 +2794,10 @@ function positionVisualSetupGuideSpotlight(target: HTMLElement) {
   visualSetupGuideOverlay.style.setProperty("--spot-ry", `${radiusY}px`);
 }
 function updateVisualSetupGuide() {
+  if (modelSelectTrigger.getAttribute("aria-expanded") === "true" || modelSelectMenu.classList.contains("open")) {
+    clearVisualSetupGuideSpotlight();
+    return;
+  }
   const localView = document.getElementById("view-local");
   const localViewVisible = Boolean(
     localView &&
@@ -2716,11 +2805,20 @@ function updateVisualSetupGuide() {
     localView.getClientRects().length > 0
   );
 
-  // The model stage is independent of HTTPS; readiness is checked for step two.
+  // The existing guide is relevant only until local HTTPS is fully trusted.
+  // Unknown HTTPS state is not treated as a setup requirement.
+  const httpsReady = Boolean(
+    currentLocalHttps &&
+    currentLocalHttps.mode === "https" &&
+    currentLocalHttps.configured &&
+    currentLocalHttps.trusted
+  );
   if (
     !visualSetupGuideToggle.checked ||
     visualSetupGuideDismissedUntilIdle ||
-    !localViewVisible
+    !localViewVisible ||
+    currentLocalHttps === null ||
+    httpsReady
   ) {
     clearVisualSetupGuideSpotlight();
     return;
@@ -2846,7 +2944,6 @@ function updateSettingsLockHelp() {
   settingsLockHint?.classList.toggle("hidden", !locked);
   const titledControls: Array<[HTMLElement, string]> = [
     [modelStorageAddButton, "Add a model-storage folder."],
-    [modelStorageSaveButton, "Save the storage-folder priority for future downloads and model lookup."],
     [setupLocalHttpsButton, "Set up a trusted local HTTPS certificate."],
     [chooseTlsCertButton, "Choose the server certificate file."],
     [chooseTlsKeyButton, "Choose the matching private key file."],
@@ -2874,6 +2971,49 @@ function updateSettingsLockHelp() {
   transportHttpInput.title = stopServerSettingTitle(translateKey("msg.http_is_unencrypted_and_intended_for_local_d.38719d9d", {}, getActiveLocale()));
 }
 
+async function persistModelStorageDraft(nextLocations: string[], nextRoot: string) {
+  if (backend.running && (
+    nextLocations.length <= savedStorageLocations.length ||
+    !nextLocations.slice(0, savedStorageLocations.length).every((path, index) => path === savedStorageLocations[index]) ||
+    nextRoot !== savedSelectedStorageRoot
+  )) {
+    showNotice(translateKey("msg.stop_the_server_before_editing_storage_locat.1f64929b", {}, getActiveLocale()), "warning");
+    return false;
+  }
+
+  const previousLocations = [...storageLocationDraft];
+  const previousRoot = selectedStorageRootDraft;
+  storageLocationDraft = [...nextLocations];
+  selectedStorageRootDraft = nextRoot;
+  modelStorageBusy = true;
+  renderModelStorageSettings();
+
+  try {
+    const status = await invoke<ModelStorageStatus>("set_model_storage_locations", {
+      model: modelSelect.value,
+      locations: storageLocationDraft,
+      activeRoot: selectedStorageRootDraft,
+    });
+    modelStorageStatus = status;
+    storageLocationDraft = [...status.locations];
+    savedStorageLocations = [...status.locations];
+    selectedStorageRootDraft = status.selectedRoot;
+    savedSelectedStorageRoot = status.selectedRoot;
+    renderModelStorageSummary(status);
+    void refreshModelCacheBadges();
+    showNotice(translateKey("msg.model_storage_locations_saved_the_next_serve.abe7ee05", {}, getActiveLocale()), "good");
+    return true;
+  } catch (error) {
+    storageLocationDraft = previousLocations;
+    selectedStorageRootDraft = previousRoot;
+    showNotice(translateKey("msg.could_not_save_model_storage_settings_error.3a4cc317", { error: formatHardwareDeviceText(String(error)) }, getActiveLocale()), "error");
+    return false;
+  } finally {
+    modelStorageBusy = false;
+    renderModelStorageSettings();
+  }
+}
+
 function modelStorageDraftIsDirty(): boolean {
   return JSON.stringify(storageLocationDraft) !== JSON.stringify(savedStorageLocations) || selectedStorageRootDraft !== savedSelectedStorageRoot;
 }
@@ -2887,19 +3027,24 @@ function renderModelStorageSettings() {
     destination.value = path; destination.checked = path === selectedStorageRootDraft;
     destination.className = "model-storage-destination-radio";
     destination.disabled = backend.running || modelStorageBusy;
+    const destinationBlockedTitle = backend.running
+      ? translateKey("msg.stop_server_to_change_default_folder.1d43", {}, getActiveLocale())
+      : "";
+    destination.title = destinationBlockedTitle;
+    row.title = destinationBlockedTitle;
     destination.setAttribute("aria-label", translateKey("msg.use_path_for_the_next_model_download.1d20", { path }, getActiveLocale()));
     destination.addEventListener("change", () => {
-      selectedStorageRootDraft = path;
-      renderModelStorageSettings();
+      void persistModelStorageDraft([...storageLocationDraft], path);
     });
     const pathWrap = document.createElement("div"); pathWrap.className = "model-storage-path-wrap";
+    pathWrap.title = destinationBlockedTitle;
     const pathText = document.createElement("code"); pathText.className = "model-storage-path"; pathText.textContent = path; pathText.title = path;
     const role = document.createElement("small"); role.className = "model-storage-role";
     role.textContent = path === selectedStorageRootDraft ? translateKey("msg.next_model_download_destination.1d20", {}, getActiveLocale()) : translateKey("msg.available_for_finding_existing_models.1d20", {}, getActiveLocale());
     const availability = document.createElement("small"); availability.className = "model-storage-availability";
     const savedIndex = modelStorageStatus?.locations.indexOf(path) ?? -1;
     if (savedIndex < 0 && modelStorageDraftIsDirty()) {
-      availability.textContent = translateKey("msg.pending_save.3bdd6c5f", {}, getActiveLocale()); availability.classList.add("unsaved");
+      availability.textContent = translateKey("msg.not_checked_model_is_already_available_earli.4fb9d856", {}, getActiveLocale());
     } else if (savedIndex >= 0 && modelStorageStatus?.locationsAvailability[savedIndex] === "available") {
       availability.textContent = modelStorageStatus?.modelCached && modelStorageStatus.activeRoot === path ? translateKey("msg.available_selected_model_is_cached_here.a1ce60d7", {}, getActiveLocale()) : translateKey("msg.available.e6744473", {}, getActiveLocale());
     } else if (savedIndex >= 0 && modelStorageStatus?.locationsAvailability[savedIndex] === "not-checked") {
@@ -2911,21 +3056,43 @@ function renderModelStorageSettings() {
     }
     pathWrap.append(pathText, role, availability);
     const actions = document.createElement("div"); actions.className = "model-storage-row-actions";
+    const folderUnavailable = savedIndex >= 0 &&
+      modelStorageStatus?.locationsAvailability[savedIndex] === "unavailable";
+    const openFolder = document.createElement("button");
+    openFolder.className = "mini-button model-storage-open-button";
+    openFolder.type = "button";
+    const openFolderLabel = translateKey("msg.open_model_storage_folder.1d43", {}, getActiveLocale());
+    openFolder.textContent = "↗";
+    openFolder.disabled = modelStorageBusy || folderUnavailable;
+    openFolder.title = folderUnavailable
+      ? translateKey("msg.unavailable_reconnect_the_drive_or_remove_th.0f55c774", {}, getActiveLocale())
+      : `${openFolderLabel}: ${path}`;
+    openFolder.setAttribute("aria-label", `${openFolderLabel}: ${path}`);
+    openFolder.addEventListener("click", () => {
+      void invoke("reveal_model_storage_folder", { path }).catch((error) => {
+        showNotice(translateKey(
+          "msg.could_not_open_model_storage_folder.1d43",
+          { error: formatHardwareDeviceText(String(error)) },
+          getActiveLocale(),
+        ), "error");
+      });
+    });
     const remove = document.createElement("button"); remove.className = "mini-button deny"; remove.type = "button";
     remove.textContent = translateKey("msg.remove.c3812fc4", {}, getActiveLocale());
     remove.dataset.baseTitle = translateKey("msg.remove_this_model_storage_folder_from_the_li.c967032d", {}, getActiveLocale());
     remove.title = stopServerSettingTitle(remove.dataset.baseTitle);
     remove.disabled = storageLocationDraft.length <= 1 || backend.running || modelStorageBusy;
-    remove.addEventListener("click", () => { const removed = storageLocationDraft.splice(index, 1)[0]; if (selectedStorageRootDraft === removed) selectedStorageRootDraft = storageLocationDraft[0] || ""; renderModelStorageSettings(); });
-    actions.append(remove);
+    remove.addEventListener("click", () => {
+      const nextLocations = storageLocationDraft.filter((_, itemIndex) => itemIndex !== index);
+      const nextRoot = selectedStorageRootDraft === path ? (nextLocations[0] || "") : selectedStorageRootDraft;
+      void persistModelStorageDraft(nextLocations, nextRoot);
+    });
+    actions.append(openFolder, remove);
     row.append(destination, pathWrap, actions);
     modelStorageLocationsEl.appendChild(row);
   });
   modelStorageAddButton.title = translateKey("msg.add_a_model_storage_folder.d01586c6", {}, getActiveLocale());
-  modelStorageSaveButton.title = stopServerSettingTitle(translateKey("msg.save_selected_download_destination_and_all_model_access_folders.1d20", {}, getActiveLocale()));
   modelStorageAddButton.disabled = modelStorageBusy || storageLocationDraft.length >= 20;
-  modelStorageSaveButton.disabled = backend.running || modelStorageBusy || !modelStorageDraftIsDirty() || storageLocationDraft.length < 1 || storageLocationDraft.length > 20;
-  modelStorageSaveButton.textContent = modelStorageBusy ? translateKey("msg.saving.23e39291", {}, getActiveLocale()) : translateKey("msg.save_model_storage_locations.1d20", {}, getActiveLocale());
 }
 
 function renderModelStorageSummary(status: ModelStorageStatus) {
@@ -3255,7 +3422,7 @@ modelDownloadButton.addEventListener("click", async () => {
   if (modelDownloadStatus.active) { showNotice(translateKey("msg.a_model_download_is_already_running.22223145", {}, getActiveLocale()), "warning"); return; }
   modelDownloadButton.disabled = true;
   modelDownloadStatus = { active: true, model, destinationRoot: modelStorageStatus?.activeRoot || null, phase: "checking", message: translateKey("msg.checking_model_availability_and_total_size.1aed63d9", {}, getActiveLocale()), progressPercent: 0, downloadedBytes: 0, totalBytes: null, plannedFiles: null, sizeIsEstimate: false };
-  renderModelDownloadUI();
+  setBusy(busy);
   try {
     const status = await invoke<ModelDownloadStatus>("start_model_download", { model });
     acceptModelDownloadStatus(status);
@@ -3269,7 +3436,7 @@ modelDownloadButton.addEventListener("click", async () => {
     }
   } catch (error) {
     acceptModelDownloadStatus({ ...modelDownloadStatus, active: false, phase: "failed", message: formatHardwareDeviceText(String(error)) });
-    renderModelDownloadUI();
+    setBusy(busy);
     showNotice(translateKey("msg.could_not_download_the_model_error.a226b9d2", { error: formatHardwareDeviceText(String(error)) }, getActiveLocale()), "error");
   }
   finally { renderModelDownloadUI(); }
@@ -3333,38 +3500,20 @@ deleteRdtModelsButton.addEventListener("click", async () => {
 });
 
 modelStorageAddButton.addEventListener("click", async () => {
-  if (backend.running) { showNotice(translateKey("msg.stop_the_local_server_before_changing_model.1a36c7e8", {}, getActiveLocale()), "warning"); return; }
   if (storageLocationDraft.length >= 20) { showNotice(translateKey("msg.up_to_20_model_storage_locations_are_support.20545645", {}, getActiveLocale()), "warning"); return; }
   modelStorageBusy = true; renderModelStorageSettings();
   try {
     const selected = await invoke<string | null>("pick_model_storage_directory");
     if (!selected) return;
     if (storageLocationDraft.includes(selected)) { showNotice(translateKey("msg.that_folder_is_already_listed.294a80f8", {}, getActiveLocale()), "info"); return; }
-    storageLocationDraft.push(selected);
-    if (!selectedStorageRootDraft) selectedStorageRootDraft = selected;
-    renderModelStorageSettings();
-    showNotice(translateKey("msg.folder_added_to_the_draft_list_save_storage.c0819cab", {}, getActiveLocale()), "info");
-  } catch (error) { showNotice(translateKey("msg.could_not_choose_a_model_storage_folder_erro.0f408147", { error: formatHardwareDeviceText(String(error)) }, getActiveLocale()), "error"); }
-  finally { modelStorageBusy = false; renderModelStorageSettings(); }
-});
-
-modelStorageSaveButton.addEventListener("click", async () => {
-  if (backend.running) { showNotice(translateKey("msg.stop_the_local_server_before_saving_model_st.1949e9c3", {}, getActiveLocale()), "warning"); return; }
-  modelStorageBusy = true; renderModelStorageSettings();
-  try {
-    const status = await invoke<ModelStorageStatus>("set_model_storage_locations", { model: modelSelect.value, locations: storageLocationDraft, activeRoot: selectedStorageRootDraft });
-    modelStorageStatus = status;
-    storageLocationDraft = [...status.locations];
-    savedStorageLocations = [...status.locations];
-    selectedStorageRootDraft = status.selectedRoot;
-    savedSelectedStorageRoot = status.selectedRoot;
-    renderModelStorageSummary(status); renderModelStorageSettings();
-    void refreshModelCacheBadges();
-    showNotice(translateKey("msg.model_storage_locations_saved_the_next_serve.abe7ee05", {}, getActiveLocale()), "good");
+    const nextLocations = [...storageLocationDraft, selected];
+    const nextRoot = selectedStorageRootDraft || selected;
+    await persistModelStorageDraft(nextLocations, nextRoot);
   } catch (error) {
     showNotice(translateKey("msg.could_not_save_model_storage_settings_error.3a4cc317", { error: formatHardwareDeviceText(String(error)) }, getActiveLocale()), "error");
   } finally { modelStorageBusy = false; renderModelStorageSettings(); }
 });
+
 
 async function chooseTlsFile(kind: "certificate" | "private-key" | "ca") {
   try {
@@ -3920,10 +4069,27 @@ async function runAction(action: () => Promise<unknown>, successMessage?: string
     }
   }
   finally {
-    await refreshBackendStatus();
-    await refreshOrphanedBackendStatus();
-    setBusy(false);
-    renderBackendStatus();
+    try {
+      try {
+        await refreshBackendStatus();
+      } catch (refreshError) {
+        showNotice(
+          `Could not refresh backend status after the operation. ${formatHardwareDeviceText(String(refreshError))}`,
+          "warning",
+        );
+      }
+      try {
+        await refreshOrphanedBackendStatus();
+      } catch (refreshError) {
+        showNotice(
+          `Could not refresh orphaned backend status after the operation. ${formatHardwareDeviceText(String(refreshError))}`,
+          "warning",
+        );
+      }
+    } finally {
+      setBusy(false);
+      renderBackendStatus();
+    }
   }
 }
 
@@ -3940,51 +4106,140 @@ function nudgeModelDownloadButton(): void {
   modelDownloadButton.focus({ preventScroll: true });
 }
 
-async function startSelectedBackendModel(preverifiedCache?: ModelStorageStatus) {
-  const selectedCache = preverifiedCache ?? await requestModelStorageStatus(modelSelect.value);
-  modelStorageStatus = selectedCache;
-  renderModelStorageSummary(selectedCache);
-  renderModelDownloadUI();
+async function startSelectedBackendModel(
+  preverifiedCache?: ModelStorageStatus,
+  preferredPortOverride?: number,
+): Promise<boolean> {
+  let selectedCache: ModelStorageStatus;
+  try {
+    selectedCache = preverifiedCache ?? await requestModelStorageStatus(modelSelect.value);
+    modelStorageStatus = selectedCache;
+    renderModelStorageSummary(selectedCache);
+    renderModelDownloadUI();
+  } catch (error) {
+    showNotice(
+      `Could not verify the selected model cache. The server was not started. ${formatHardwareDeviceText(String(error))}`,
+      "error",
+    );
+    return false;
+  }
+
   if (!selectedCache.modelCached) {
     nudgeModelDownloadButton();
-    return;
+    return false;
   }
-  await runAction(async () => {
-    await inferenceDevicePreferenceReady;
-    const current = await invoke<BackendStatus>("get_backend_status");
-    let startedBackendHere = false;
-    if (current.running) {
-      if (current.model !== modelSelect.value || !current.pid) {
-        throw new Error("A different or unverified backend is already running. RDT Connect left it untouched; use Stop Server before starting another process.");
+
+  let startedAndVerified = false;
+  try {
+    await runAction(async () => {
+      await inferenceDevicePreferenceReady;
+      const current = await invoke<BackendStatus>("get_backend_status");
+      let startedBackendHere = false;
+      if (current.running) {
+        if (current.model !== modelSelect.value || !current.pid) {
+          throw new Error("A different or unverified backend is already running. RDT Connect left it untouched; use Stop Server before starting another process.");
+        }
+        backend = current;
+      } else {
+        const startPort = preferredPortOverride
+          ?? (Number(preferredPortInput.value) || 8888);
+        backend = await invoke<BackendStatus>("start_backend", {
+          model: modelSelect.value,
+          preferredPort: startPort,
+        });
+        startedBackendHere = true;
       }
-      backend = current;
-    } else {
-      backend = await invoke<BackendStatus>("start_backend", {
-        model: modelSelect.value,
-        preferredPort: Number(preferredPortInput.value) || 8888,
-      });
-      startedBackendHere = true;
-    }
-    renderBackendStatus();
-    await refreshConnectionStatus();
-    if (!backend.running || !backend.pid || backend.model !== modelSelect.value
-        || lastConnectionCheck?.healthOk !== true || lastConnectionCheck.authOk !== true) {
-      throw new Error("The backend did not pass authenticated health verification. Any running process was left untouched.");
-    }
-    if (startedBackendHere) {
-      appliedInferenceDevicePreference = inferenceDevicePreferenceReadError
-        ? null
-        : inferenceDevicePreference;
-    }
-    renderInferenceHardwareStatus();
-    if (browserPreflightPassed()) {
-      showNotice(translateKey("msg.rdt_connect_started_on_localurl_server_and_a.e4c94cb9", { localUrl: backend.localUrl ?? "" }, getActiveLocale()), "good");
-    } else {
-      showNotice(translateKey("msg.the_server_started_but_open_rdt_voice_is_dis.086dfa50", { browserPreflightFailure: browserPreflightFailure() }, getActiveLocale()), "warning");
-    }
-    await refreshRemoteStatus();
-  });
+      renderBackendStatus();
+      await refreshConnectionStatus();
+      if (!backend.running || !backend.pid || backend.model !== modelSelect.value
+          || lastConnectionCheck?.healthOk !== true || lastConnectionCheck.authOk !== true) {
+        throw new Error("The backend did not pass authenticated health verification. Any running process was left untouched.");
+      }
+      startedAndVerified = true;
+      if (startedBackendHere) {
+        appliedInferenceDevicePreference = backend.appliedInferenceDevicePreference;
+      }
+      renderInferenceHardwareStatus();
+      if (browserPreflightPassed()) {
+        showNotice(translateKey("msg.rdt_connect_started_on_localurl_server_and_a.e4c94cb9", { localUrl: backend.localUrl ?? "" }, getActiveLocale()), "good");
+      } else {
+        showNotice(translateKey("msg.the_server_started_but_open_rdt_voice_is_dis.086dfa50", { browserPreflightFailure: browserPreflightFailure() }, getActiveLocale()), "warning");
+      }
+      await refreshRemoteStatus();
+    });
+  } catch (error) {
+    startedAndVerified = false;
+    showNotice(
+      `The selected model could not be confirmed healthy. ${formatHardwareDeviceText(String(error))}`,
+      "error",
+    );
+  }
+  return startedAndVerified;
 }
+
+async function restorePreviousModelAfterFailedSwitch(
+  previousModel: string,
+  previousPort: number,
+  failedTargetModel: string,
+): Promise<void> {
+  try {
+    const observed = await invoke<BackendStatus>("get_backend_status");
+    if (!observed.running && observed.pid != null) {
+      throw new Error(
+        "Backend status is inconsistent: the server is marked stopped but still reports a process ID. RDT Connect left it untouched.",
+      );
+    }
+    if (observed.running) {
+      if (!observed.pid || observed.model !== failedTargetModel) {
+        throw new Error(
+          "A different or unverified backend is running. RDT Connect left it untouched.",
+        );
+      }
+      const stopped = await invoke<BackendStatus>("stop_backend");
+      if (stopped.running || stopped.pid) {
+        throw new Error(
+          "The failed target backend could not be confirmed stopped safely.",
+        );
+      }
+    }
+
+    if (conflictingBackendPresent || modelDownloadStatus.active || modelStorageBusy) {
+      throw new Error(
+        "Another backend, model download, or storage operation prevents safe restoration.",
+      );
+    }
+
+    modelSelect.value = previousModel;
+    modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    const previousCache = await requestModelStorageStatus(previousModel);
+    modelStorageStatus = previousCache;
+    renderModelStorageSummary(previousCache);
+    if (!previousCache.modelCached) {
+      throw new Error(
+        "The previous model is no longer present as a verified local cache.",
+      );
+    }
+
+    const restored = await startSelectedBackendModel(previousCache, previousPort);
+    if (!restored) {
+      throw new Error(
+        "The previous model did not pass authenticated health verification.",
+      );
+    }
+    showNotice(
+      `The selected model could not start. Your previous model (${previousModel}) was successfully restored.`,
+      "warning",
+    );
+  } catch (error) {
+    modelSelect.value = previousModel;
+    modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    showNotice(
+      `The selected model could not start, and the previous server could not be fully restored. The previous model remains selected for recovery. ${formatHardwareDeviceText(String(error))}`,
+      "error",
+    );
+  }
+}
+
 
 startButton.addEventListener("click", async () => {
   if (busy || benchmarkRunInProgress) return;
@@ -4000,6 +4255,12 @@ startButton.addEventListener("click", async () => {
   renderBrowserChoiceRow();
   const wasRunning = backend.running;
   const requestedModel = modelSelect.value;
+  const previousModel = wasRunning && backend.model ? backend.model : null;
+  const previousPortValue = backend.port;
+  const previousPort = wasRunning && typeof previousPortValue === "number"
+    && Number.isInteger(previousPortValue)
+    && previousPortValue > 0 && previousPortValue <= 65535
+    ? previousPortValue : null;
   let precheckedStartupCache: ModelStorageStatus | null = null;
   if (!wasRunning) {
     if (modelAvailabilityCheckInFlight) { setBusy(false); return; }
@@ -4090,6 +4351,7 @@ startButton.addEventListener("click", async () => {
         nudgeModelDownloadButton();
         return;
       }
+      precheckedStartupCache = selectedCache;
     } catch (error) {
       showNotice(translateKey("msg.could_not_verify_the_selected_model_cache_the_current_server_was.4456b302", { arg1: formatHardwareDeviceText(String(error)) }, getActiveLocale()), "error");
       setBusy(false);
@@ -4140,7 +4402,23 @@ startButton.addEventListener("click", async () => {
         showNotice(translateKey("msg.the_previous_server_is_stopped_starting_the_selected_model.b3fd7cda", {}, getActiveLocale()), "info");
         renderBackendStatus();
         await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        await startSelectedBackendModel(precheckedStartupCache ?? undefined);
+        const targetStarted = await startSelectedBackendModel(
+          precheckedStartupCache ?? undefined,
+        );
+        if (!targetStarted) {
+          if (previousModel !== null && previousPort !== null) {
+            await restorePreviousModelAfterFailedSwitch(
+              previousModel,
+              previousPort,
+              targetModel,
+            );
+          } else {
+            showNotice(
+              "The selected model did not start, and the previous server configuration could not be restored automatically. Choose a cached model and start the server again.",
+              "error",
+            );
+          }
+        }
       }
     } else {
       await startSelectedBackendModel(precheckedStartupCache ?? undefined);
@@ -5426,6 +5704,13 @@ benchmarkInviteOverlay.innerHTML = `
       </label>
       <p id="benchmark-selection-warning" class="benchmark-selection-warning hidden" role="status" aria-live="polite">${benchmarkMessage("msg.benchmark_many_options_warning.1d22")}</p>
       <p id="benchmark-selection-error" class="benchmark-selection-error hidden" role="alert">${benchmarkMessage("msg.benchmark_minimum_selection.1d22")}</p>
+      <label class="benchmark-selection-order" for="benchmark-audio-fixture">
+        <span>${benchmarkMessage("msg.benchmark_audio_label.1d23")}</span>
+        <select id="benchmark-audio-fixture">
+          <option value="12s">${benchmarkMessage("msg.benchmark_audio_12s.1d23")}</option>
+          <option value="21s">${benchmarkMessage("msg.benchmark_audio_21s.1d23")}</option>
+        </select>
+      </label>
       <label class="benchmark-timing-limit">
         <input id="benchmark-limit-per-hardware" type="checkbox" checked>
         <span>${benchmarkMessage("msg.benchmark_timing_limit.1d22")}</span>
@@ -5502,10 +5787,17 @@ const manualHardwareCancelButton = benchmarkHardwareSelector.querySelector<HTMLB
 const manualHardwareSelectionWarning = benchmarkHardwareSelector.querySelector<HTMLElement>("#benchmark-selection-warning")!;
 const manualHardwareSelectionError = benchmarkHardwareSelector.querySelector<HTMLElement>("#benchmark-selection-error")!;
 const manualHardwareTimingLimitCheckbox = benchmarkHardwareSelector.querySelector<HTMLInputElement>("#benchmark-limit-per-hardware")!;
+const manualHardwareAudioSelect = benchmarkHardwareSelector.querySelector<HTMLSelectElement>("#benchmark-audio-fixture")!;
 
 type ManualHardwareDevice = "gpu" | "cpu";
 type ManualHardwareOrder = "recommended" | ManualHardwareDevice;
-let pendingManualHardwareSelection: { devices: ManualHardwareDevice[]; order: ManualHardwareOrder } | null = null;
+type ManualBenchmarkFixture = "12s" | "21s";
+let pendingManualHardwareSelection: {
+  devices: ManualHardwareDevice[];
+  order: ManualHardwareOrder;
+  fixture: ManualBenchmarkFixture;
+  timeLimitEnabled: boolean;
+} | null = null;
 let forceManualHardwareSelectorForDev = false;
 let manualHardwareSelectionAttempted = false;
 
@@ -5622,32 +5914,21 @@ function selectedManualHardwareDevices(): ManualHardwareDevice[] {
 
 function updateManualHardwareSelector(): void {
   const count = selectedManualHardwareDevices().length;
-  manualHardwareRunButton.disabled = count < 2;
+  manualHardwareRunButton.disabled = count < 1;
   manualHardwareSelectionWarning.classList.toggle("hidden", count <= 5);
-  manualHardwareSelectionError.classList.toggle("hidden", count >= 2 || !manualHardwareSelectionAttempted);
+  manualHardwareSelectionError.classList.toggle("hidden", count >= 1 || !manualHardwareSelectionAttempted);
 }
 
 function openManualHardwareSelector(): void {
   renderDeveloperHardwarePreviewPanels();
-  if (!developerOptionsEnabled) return;
   pendingManualHardwareSelection = null;
   manualHardwareSelectionAttempted = false;
   manualHardwareDeviceInputs.forEach((input) => { input.checked = true; });
   manualHardwareOrderSelect.value = "recommended";
   updateManualHardwareSelector();
 
-  // Two supported devices are always compared; a selector is only useful for 3+.
-  if (manualHardwareDeviceInputs.length <= 2 && !forceManualHardwareSelectorForDev) {
-    const devices = selectedManualHardwareDevices();
-    if (devices.length < 2) {
-      showNotice(benchmarkMessage("msg.benchmark_minimum_devices.1d20"), "error");
-      return;
-    }
-    pendingManualHardwareSelection = { devices, order: "recommended" };
-    startSelectedManualHardwareBenchmark();
-    return;
-  }
-
+  // Manual runs always show the hardware selector before starting, including
+  // when exactly two native candidates are available.
   benchmarkProgressPanel.classList.add("hidden");
   benchmarkInviteStatus.classList.add("hidden");
   benchmarkInviteResult.classList.add("hidden");
@@ -5663,11 +5944,17 @@ function startSelectedManualHardwareBenchmark(): void {
   manualHardwareSelectionAttempted = true;
   updateManualHardwareSelector();
   const devices = selectedManualHardwareDevices();
-  if (devices.length < 2) return;
+  if (devices.length < 1) return;
 
+  const fixture = manualHardwareAudioSelect.value;
+  if (fixture !== "12s" && fixture !== "21s") {
+    throw new Error("Select a supported benchmark audio recording.");
+  }
   pendingManualHardwareSelection = {
     devices,
     order: manualHardwareOrderSelect.value as ManualHardwareOrder,
+    fixture,
+    timeLimitEnabled: manualHardwareTimingLimitCheckbox.checked,
   };
   benchmarkHardwareSelector.classList.add("hidden");
   benchmarkInvitePanel.classList.remove("is-selecting-hardware");
@@ -6655,7 +6942,7 @@ async function runHardwareOptimizationFlow(
   qaFirstRunSimulation = false,
 ): Promise<HardwareOptimizationChoice | "skipped"> {
   if (benchmarkRunInProgress || benchmarkFlowReserved) return "skipped";
-  if (source !== "first-run" && !developerOptionsEnabled) return "skipped";
+  if (source === "preview" && !developerOptionsEnabled) return "skipped";
   benchmarkFlowReserved = true;
   try {
     return await runHardwareOptimizationFlowReserved(source, qaFirstRunSimulation);
@@ -6670,20 +6957,21 @@ async function runHardwareOptimizationFlowReserved(
 ): Promise<HardwareOptimizationChoice | "skipped"> {
   if (benchmarkRunInProgress) return "skipped";
   benchmarkInviteIntroFirstLine.textContent = benchmarkMessage("msg.benchmark_intro_finding.1d22");
-  if (source !== "first-run" && !developerOptionsEnabled) return "skipped";
-  const manualFiniteCandidateCount =
-    source === "manual" && manualHardwareTimingLimitCheckbox.checked
-      ? (pendingManualHardwareSelection?.devices.length ?? 0)
-      : 0;
+  if (source === "preview" && !developerOptionsEnabled) return "skipped";
+  // Only the mandatory first-run benchmark has a shared 180-second budget.
+  // Manual runs have no aggregate deadline; their optional per-candidate
+  // limit is applied independently inside the candidate loop.
   const benchmarkBudgetMs = source === "first-run"
-    ? 250_000
-    : manualFiniteCandidateCount > 0
-      ? manualFiniteCandidateCount * 60_000
-      : Number.POSITIVE_INFINITY;
-  let benchmarkDeadline = 0;
+    ? 180_000
+    : Number.POSITIVE_INFINITY;
+  let benchmarkDeadline = source === "first-run"
+    ? performance.now() + benchmarkBudgetMs
+    : 0;
   let activeCandidateDeadline = Number.POSITIVE_INFINITY;
   let nativeBenchmarkInProgress = false;
-  let candidateStartCutoff = 0;
+  let candidateStartCutoff = source === "first-run"
+    ? benchmarkDeadline - 15_000
+    : Number.POSITIVE_INFINITY;
   keepWinnerBackendRunning = false;
 
   // Manual MLX support is deliberately separate from mandatory first-run policy.
@@ -6728,10 +7016,7 @@ async function runHardwareOptimizationFlowReserved(
   }
 
   benchmarkInviteOverlay.classList.remove("hidden");
-  if (source === "first-run") {
-    benchmarkDeadline = performance.now() + benchmarkBudgetMs;
-    candidateStartCutoff = benchmarkDeadline - 100_000;
-  } else {
+  if (source !== "first-run") {
     benchmarkDeadline = Number.isFinite(benchmarkBudgetMs)
       ? performance.now() + benchmarkBudgetMs
       : Number.POSITIVE_INFINITY;
@@ -6774,6 +7059,7 @@ async function runHardwareOptimizationFlowReserved(
   let originalBackendRestored = false;
   let originalBackendPreserved = false;
   const originalInferenceDevicePreference = inferenceDevicePreference;
+  const originalAppliedInferenceDevicePreference = appliedInferenceDevicePreference;
 
   const verifyAndPreserveReusedOriginal = async (notifyUser = true): Promise<"preserved" | "stopped" | "unsafe"> => {
     const unsafe = (message: string): "unsafe" => {
@@ -6830,6 +7116,8 @@ async function runHardwareOptimizationFlowReserved(
       }
 
       originalBackendPreserved = true;
+      appliedInferenceDevicePreference = originalAppliedInferenceDevicePreference;
+      renderInferenceHardwareStatus();
       candidateStarted = false;
       reusedOriginalBackend = false;
       keepWinnerBackendRunning = true;
@@ -6897,6 +7185,8 @@ async function runHardwareOptimizationFlowReserved(
           throw new Error("The explicit hardware preference no longer matches its original value.");
         }
 
+        appliedInferenceDevicePreference = originalAppliedInferenceDevicePreference;
+        renderInferenceHardwareStatus();
         originalBackendRestored = true;
         showNotice(
           `The original local server was restored on ${originalBackendSnapshot.model}, port ${originalBackendSnapshot.port}, with its original verified transport and provider.`,
@@ -6938,9 +7228,7 @@ async function runHardwareOptimizationFlowReserved(
     : ["gpu", "cpu"];
   if (source === "manual" && (
     !manualHardwareSelection
-    || selectedDeviceIds.length !== 2
-    || !selectedDeviceIds.includes("gpu")
-    || !selectedDeviceIds.includes("cpu")
+    || selectedDeviceIds.length < 1
     || new Set(selectedDeviceIds).size !== selectedDeviceIds.length
   )) {
     throw new Error(benchmarkMessage("msg.benchmark_minimum_devices.1d20"));
@@ -7055,14 +7343,19 @@ async function runHardwareOptimizationFlowReserved(
     const candidateCount = candidates.length;
     const candidateFailures: Record<string, string> = {};
     for (const [candidateOffset, candidate] of candidates.entries()) {
+      const candidateStartedAt = performance.now();
+      const candidateStartWindowClosed =
+        source === "first-run" && candidateStartedAt >= candidateStartCutoff;
+      const manualCandidateLimitMs =
+        manualHardwareSelection?.fixture === "21s" ? 120_000 : 60_000;
       const candidateDeadline = source === "manual"
-        ? (manualHardwareTimingLimitCheckbox.checked
-            ? performance.now() + 60_000
+        ? (manualHardwareSelection?.timeLimitEnabled
+            ? candidateStartedAt + manualCandidateLimitMs
             : Number.POSITIVE_INFINITY)
-        : candidateStartCutoff;
+        : Math.min(candidateStartedAt + 60_000, benchmarkDeadline);
       activeCandidateDeadline = candidateDeadline;
       updateBenchmarkCountdown();
-      if (performance.now() >= candidateDeadline) {
+      if (candidateStartWindowClosed || candidateStartedAt >= candidateDeadline) {
         candidateFailures[candidate.device] = benchmarkMessage("msg.benchmark_time_reserve_candidate.1d20");
         break;
       }
@@ -7073,8 +7366,9 @@ async function runHardwareOptimizationFlowReserved(
       let timeoutCount = 0;
       let startupRecoveryAttempts = 0;
       let startupRecoveryFailures = 0;
-      // Up to 90 seconds for process startup, local health/auth checks,
-      // and recovery. The eight benchmark requests never count against this clock.
+      // Startup, health checks, inference and recovery share this candidate's
+      // deadline. Mandatory candidates are capped at 60 seconds; manual timing
+      // is independently controlled by the user's per-hardware checkbox.
       let candidateStartupSpentMs = 0;
       renderDigitalBenchmarkProgress(candidateIndex, candidateCount, candidate.label, completedCandidates, 0, 8);
 
@@ -7085,7 +7379,7 @@ async function runHardwareOptimizationFlowReserved(
         }
         const remainingStartupMs = Math.min(
           90_000 - candidateStartupSpentMs,
-          Math.floor(candidateDeadline - performance.now()) - 20_750,
+          Math.floor(candidateDeadline - performance.now()) - 1_000,
         );
         if (remainingStartupMs < 1_000) {
           lastError = benchmarkMessage("msg.benchmark_startup_allowance_expired.1d20");
@@ -7146,18 +7440,14 @@ async function runHardwareOptimizationFlowReserved(
           updateNativeBenchmarkStage(3, benchmarkMessage("msg.benchmark_initializing_runtime.1d23"), {
             candidateLabel: candidate.label,
           });
-          const remainingCandidateBudgetMs = source === "manual"
-            ? 150_000
-            : Math.max(0, Math.floor(candidateDeadline - performance.now()) - 750);
-          if (source !== "manual" && Number.isFinite(candidateDeadline) && remainingCandidateBudgetMs < 20_000) {
-            lastError = "Less than 20 seconds remain in the first-run candidate phase; no new inference test was started.";
-            skipRemainingCandidates = true;
-            break;
-          }
+          const remainingCandidateBudgetMs = Number.isFinite(candidateDeadline)
+            ? Math.max(0, Math.floor(candidateDeadline - performance.now()) - 750)
+            : null;
 nativeBenchmarkStarted = true;
             const nativeRunPromise = invoke<unknown>("run_hardware_native_benchmark", {
               remainingBudgetMs: remainingCandidateBudgetMs,
               fixtureMode: source === "manual" ? "manual" : "first-run",
+              manualFixture: source === "manual" ? manualHardwareSelection?.fixture ?? null : null,
               candidate: candidate.device,
               optimizationSessionId,
               backendReadyMs: candidate.reuse && attempt === 1 ? 0 : Math.max(1, Math.round(candidateStartupSpentMs)),
@@ -7569,7 +7859,7 @@ window.addEventListener("rdt-connect-open-benchmark-invite", () => {
   openManualHardwareSelector();
 });
 document.getElementById("open-native-benchmark-button")?.addEventListener("click", () => {
-  if (developerOptionsEnabled) window.dispatchEvent(new Event("rdt-connect-open-benchmark-invite"));
+  window.dispatchEvent(new Event("rdt-connect-open-benchmark-invite"));
 });
 /* RDT_HARDWARE_OPTIMIZATION_END */
 
@@ -7592,3 +7882,71 @@ document.getElementById("open-native-benchmark-button")?.addEventListener("click
 void bootstrapRdtConnect().catch((error: unknown) => {
   console.error("RDT Connect application initialization failed.", error);
 });
+
+// Keep both secure-action glows synchronized as a single eligible pair.
+function syncSecureActionGlow() {
+  const ids = ["local-https-quick-setup-button", "model-download-button"];
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+
+  const eligible = ids.every((id) => {
+    const element = document.getElementById(id) as HTMLButtonElement | null;
+    if (
+      !element ||
+      element.disabled ||
+      element.matches(":disabled") ||
+      element.getAttribute("aria-disabled") === "true" ||
+      element.getAttribute("aria-busy") === "true"
+    ) return false;
+
+    const rect = element.getBoundingClientRect();
+    if (
+      rect.width <= 0 ||
+      rect.height <= 0 ||
+      rect.right <= 0 ||
+      rect.bottom <= 0 ||
+      rect.left >= viewportWidth ||
+      rect.top >= viewportHeight
+    ) return false;
+
+    // A visible button inside a hidden/collapsed parent is not eligible.
+    let ancestor: HTMLElement | null = element;
+    while (ancestor) {
+      if (ancestor.hidden || ancestor.getAttribute("aria-hidden") === "true") {
+        return false;
+      }
+      const style = window.getComputedStyle(ancestor);
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        Number.parseFloat(style.opacity || "1") <= 0
+      ) return false;
+      ancestor = ancestor.parentElement;
+    }
+
+    return true;
+  });
+
+  document.body.classList.toggle("rdt-secure-actions-glow-active", eligible);
+}
+
+const rdtSecureActionGlowObserver = new MutationObserver(() => syncSecureActionGlow());
+rdtSecureActionGlowObserver.observe(document.body, {
+  subtree: true,
+  childList: true,
+  attributes: true,
+  attributeFilter: ["class", "hidden", "style", "disabled", "aria-disabled", "aria-busy"],
+});
+
+const rdtSecureActionGlowResizeObserver =
+  typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => syncSecureActionGlow()) : null;
+
+for (const id of ["local-https-quick-setup-button", "model-download-button"]) {
+  const element = document.getElementById(id);
+  if (element) rdtSecureActionGlowResizeObserver?.observe(element);
+}
+
+window.addEventListener("resize", syncSecureActionGlow, { passive: true });
+window.addEventListener("scroll", syncSecureActionGlow, { passive: true, capture: true });
+syncSecureActionGlow();

@@ -1185,7 +1185,10 @@
     "msg.benchmark_skipped_description.1d20": "A comparação obrigatória de hardware foi interrompida duas vezes. O RDT Connect ignorou-o para que você possa usar o aplicativo normalmente. Você pode executar a comparação opcional posteriormente em Opções do desenvolvedor, em Hardware de inferência.",
     "msg.benchmark_skipped_title.1d20": "Comparação de hardware ignorada",
     "msg.benchmark_test_order.1d22": "Ordem de teste",
-    "msg.benchmark_timing_limit.1d22": "Limite o tempo de benchmark a 60 segundos por seleção de hardware",
+    "msg.benchmark_timing_limit.1d22": "Aplicar limite de tempo por hardware",
+    "msg.benchmark_audio_label.1d23": "Áudio de benchmark",
+    "msg.benchmark_audio_12s.1d23": "Gravação de 12 segundos · 60 segundos por hardware",
+    "msg.benchmark_audio_21s.1d23": "Gravação de 20,7 segundos · 120 segundos por hardware",
     "msg.benchmark_title.1d22": "Liberte o seu hardware",
     "msg.benchmark_unsupported_notice.1d21": "A otimização automática de hardware está atualmente disponível em Apple Silicon Macs. O RDT Connect usará sua configuração automática normal.",
     "msg.benchmark_warmup_active.1d23": "em andamento",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "A atualização foi instalada. Você está usando esta versão.",
     "msg.update_success_version.1d40": "Versão",
     "msg.update_success_build.1d40": "Número da compilação",
-    "msg.update_success_continue.1d40": "Continuar"
+    "msg.update_success_continue.1d40": "Continuar",
+    "msg.open_model_storage_folder.1d43": "Abrir",
+    "msg.stop_server_to_change_default_folder.1d43": "Pare o servidor primeiro para alterar a pasta predefinida.",
+    "msg.could_not_open_model_storage_folder.1d43": "Não foi possível abrir esta pasta: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Instalar atualizações automaticamente na próxima reinicialização",
   "msg.install_verified_updates_on_app_restart.1d30": "Ao escolher reiniciar o RDT Connect, a atualização disponível será baixada e verificada antes de o aplicativo abrir novamente. O aplicativo nunca reinicia sozinho."

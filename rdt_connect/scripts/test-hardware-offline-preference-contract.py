@@ -53,3 +53,26 @@ print("PASS: revert, failed restart, successful restart, stop and unknown-state 
 print("PASS: Offline Mode toggle state contract.")
 print("PASS: startup check remains after saved preference restoration.")
 print("PASS: Lifetime Statistics attribution remains unchanged.")
+
+
+# RDT_BENCHMARK_APPLIED_PREFERENCE_RESTORATION
+# Preserve/re-establish only the preference known to have been applied originally.
+benchmark_snapshot = source.split(
+    "const originalInferenceDevicePreference =", 1
+)[1].split("const verifyAndPreserveReusedOriginal", 1)[0]
+assert "const originalAppliedInferenceDevicePreference = appliedInferenceDevicePreference;" in benchmark_snapshot
+
+preserve_start = source.index("const verifyAndPreserveReusedOriginal")
+restore_start = source.index("const restoreOriginalBackendIfNeeded", preserve_start)
+preserve_block = source[preserve_start:restore_start]
+assert preserve_block.index("originalBackendPreserved = true;") < preserve_block.index(
+    "appliedInferenceDevicePreference = originalAppliedInferenceDevicePreference;"
+)
+assert "renderInferenceHardwareStatus();" in preserve_block
+
+restore_end = source.index("let preferredFirstDevice", restore_start)
+restore_block = source[restore_start:restore_end]
+assert restore_block.index("if (!check?.healthOk") < restore_block.index(
+    "appliedInferenceDevicePreference = originalAppliedInferenceDevicePreference;"
+) < restore_block.index("originalBackendRestored = true;")
+assert "renderInferenceHardwareStatus();" in restore_block

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "So sánh phần cứng bị bỏ qua",
     "msg.benchmark_slower.1d20": "chậm hơn",
     "msg.benchmark_test_order.1d22": "Thứ tự kiểm tra",
-    "msg.benchmark_timing_limit.1d22": "Giới hạn thời gian chuẩn ở mức 60 giây cho mỗi lựa chọn phần cứng",
+    "msg.benchmark_timing_limit.1d22": "Áp dụng giới hạn thời gian cho từng phần cứng",
+    "msg.benchmark_audio_label.1d23": "Âm thanh kiểm tra",
+    "msg.benchmark_audio_12s.1d23": "Bản ghi 12 giây · 60 giây cho mỗi phần cứng",
+    "msg.benchmark_audio_21s.1d23": "Bản ghi 20.7 giây · 120 giây cho mỗi phần cứng",
     "msg.benchmark_title.1d22": "Giải phóng phần cứng của bạn",
     "msg.benchmark_tooltip_faster_context.1d20": "Nhanh hơn bằng cách đo hệ số thời gian thực, nhưng",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Tốc độ gần bằng nhau nhưng",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Bản cập nhật đã được cài đặt. Bạn đang sử dụng phiên bản này.",
     "msg.update_success_version.1d40": "Phiên bản",
     "msg.update_success_build.1d40": "Số bản dựng",
-    "msg.update_success_continue.1d40": "Tiếp tục"
+    "msg.update_success_continue.1d40": "Tiếp tục",
+    "msg.open_model_storage_folder.1d43": "Mở",
+    "msg.stop_server_to_change_default_folder.1d43": "Hãy dừng máy chủ trước khi thay đổi thư mục mặc định.",
+    "msg.could_not_open_model_storage_folder.1d43": "Không thể mở thư mục này: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Tự động cài đặt bản cập nhật vào lần khởi động lại tiếp theo",
   "msg.install_verified_updates_on_app_restart.1d30": "Khi bạn chọn khởi động lại RDT Connect, bản cập nhật sẽ được tải xuống và xác minh trước khi ứng dụng mở lại. Ứng dụng không tự khởi động lại."

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "已跳过硬件比较",
     "msg.benchmark_slower.1d20": "慢点",
     "msg.benchmark_test_order.1d22": "测试订单",
-    "msg.benchmark_timing_limit.1d22": "将每个硬件选择的基准计时限制为 60 秒",
+    "msg.benchmark_timing_limit.1d22": "为每种硬件应用时间限制",
+    "msg.benchmark_audio_label.1d23": "基准测试音频",
+    "msg.benchmark_audio_12s.1d23": "12 秒录音 · 每种硬件 60 秒",
+    "msg.benchmark_audio_21s.1d23": "20.7 秒录音 · 每种硬件 120 秒",
     "msg.benchmark_title.1d22": "释放您的硬件",
     "msg.benchmark_tooltip_faster_context.1d20": "根据测量的实时因素更快，但是",
     "msg.benchmark_tooltip_near_tie_context.1d20": "速度接近平局，但是",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "更新已成功安装。您现在正在运行此版本。",
     "msg.update_success_version.1d40": "版本",
     "msg.update_success_build.1d40": "构建编号",
-    "msg.update_success_continue.1d40": "继续"
+    "msg.update_success_continue.1d40": "继续",
+    "msg.open_model_storage_folder.1d43": "打开",
+    "msg.stop_server_to_change_default_folder.1d43": "请先停止服务器，再更改默认文件夹。",
+    "msg.could_not_open_model_storage_folder.1d43": "无法打开此文件夹：{error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "下次重启时自动安装更新",
   "msg.install_verified_updates_on_app_restart.1d30": "当您选择重新启动 RDT Connect 时，应用会先下载并验证可用更新，然后再重新打开。应用绝不会自行重启。"

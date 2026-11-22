@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Perbandingan perkakasan dilangkau",
     "msg.benchmark_slower.1d20": "lebih perlahan",
     "msg.benchmark_test_order.1d22": "Perintah ujian",
-    "msg.benchmark_timing_limit.1d22": "Hadkan masa penanda aras kepada 60 saat setiap pemilihan perkakasan",
+    "msg.benchmark_timing_limit.1d22": "Gunakan had masa bagi setiap perkakasan",
+    "msg.benchmark_audio_label.1d23": "Audio penanda aras",
+    "msg.benchmark_audio_12s.1d23": "Rakaman 12 saat · 60 saat bagi setiap perkakasan",
+    "msg.benchmark_audio_21s.1d23": "Rakaman 20.7 saat · 120 saat bagi setiap perkakasan",
     "msg.benchmark_title.1d22": "Lepaskan Perkakasan Anda",
     "msg.benchmark_tooltip_faster_context.1d20": "Lebih pantas dengan faktor masa nyata yang diukur, tetapi",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Hampir seri dalam kelajuan, tetapi",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Kemas kini berjaya dipasang. Anda kini menggunakan versi ini.",
     "msg.update_success_version.1d40": "Versi",
     "msg.update_success_build.1d40": "Nombor binaan",
-    "msg.update_success_continue.1d40": "Teruskan"
+    "msg.update_success_continue.1d40": "Teruskan",
+    "msg.open_model_storage_folder.1d43": "Buka",
+    "msg.stop_server_to_change_default_folder.1d43": "Hentikan pelayan dahulu untuk menukar folder lalai.",
+    "msg.could_not_open_model_storage_folder.1d43": "Tidak dapat membuka folder ini: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Pasang kemas kini secara automatik pada mula semula seterusnya",
   "msg.install_verified_updates_on_app_restart.1d30": "Apabila anda memilih untuk memulakan semula RDT Connect, kemas kini dimuat turun dan disahkan sebelum dibuka semula. Aplikasi tidak dimulakan semula dengan sendiri."

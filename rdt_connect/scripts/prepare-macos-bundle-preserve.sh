@@ -2,9 +2,50 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="${1:-}"
-if [[ -z "$REPO_ROOT" ]]; then echo "Usage: bash scripts/prepare-macos-bundle.sh /path/to/rdt-voice-repository" >&2; exit 2; fi
-REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
+REPO_ROOT_INPUT="${1:-}"
+if [[ -z "$REPO_ROOT_INPUT" ]]; then
+  echo "Usage: bash scripts/prepare-macos-bundle-preserve.sh /path/to/connect-git-root-or-rdt_connect" >&2
+  exit 2
+fi
+if ! REPO_ROOT="$(cd "$REPO_ROOT_INPUT" 2>/dev/null && pwd)"; then
+  echo "ERROR: supplied repository root does not exist: $REPO_ROOT_INPUT" >&2
+  exit 2
+fi
+
+# Accept either the Git root (which contains rdt_connect/vendor) or the
+# nested Connect checkout (which contains vendor). Normalize to the Git root
+# because the offline-runtime preparer resolves rdt_connect/vendor from it.
+if [[ -d "$REPO_ROOT/rdt_connect/vendor/rdt-offline-runtime" ]]; then
+  :
+elif [[ "$(basename "$REPO_ROOT")" == "rdt_connect" &&
+        -d "$REPO_ROOT/vendor/rdt-offline-runtime" ]]; then
+  CONNECT_CHECKOUT="$REPO_ROOT"
+  REPO_ROOT="$(cd "$CONNECT_CHECKOUT/.." && pwd)"
+  echo "INFO: normalized nested Connect checkout to Git root: $REPO_ROOT"
+else
+  echo "ERROR: expected either <git-root>/rdt_connect/vendor/rdt-offline-runtime or <rdt_connect>/vendor/rdt-offline-runtime." >&2
+  echo "Supplied path: $REPO_ROOT_INPUT" >&2
+  exit 2
+fi
+
+RUNTIME_VENDOR="$REPO_ROOT/rdt_connect/vendor/rdt-offline-runtime"
+for required in \
+  "$REPO_ROOT/backend/rdt_model_lock.json" \
+  "$REPO_ROOT/assets/rdt_logo_BIG_yellow_halo_trans_bg.png" \
+  "$RUNTIME_VENDOR/runtime-assets-v1/runtime-manifest.json" \
+  "$RUNTIME_VENDOR/rdt-easywhisper-compat-sequential-r71.min.js"; do
+  if [[ ! -s "$required" ]]; then
+    echo "ERROR: required Connect packaging input is missing: $required" >&2
+    exit 2
+  fi
+done
+echo "PASS: normalized repository root and all pinned runtime inputs verified."
+VOICE_WEB_SOURCE="${RDT_VOICE_WEB_SOURCE:-$HOME/dev/rdt-voice/alpha_testing}"
+if [[ ! -d "$VOICE_WEB_SOURCE" ]]; then echo "ERROR: canonical RDT Voice Alpha Testing source missing: $VOICE_WEB_SOURCE" >&2; exit 2; fi
+VOICE_WEB_SOURCE="$(cd "$VOICE_WEB_SOURCE" && pwd)"
+CONNECT_BACKEND_SOURCE="${RDT_VOICE_BACKEND_SOURCE:-$HOME/dev/rdt-voice/backend/server.py}"
+if [[ ! -s "$CONNECT_BACKEND_SOURCE" ]]; then echo "ERROR: canonical RDT Voice backend source missing: $CONNECT_BACKEND_SOURCE" >&2; exit 2; fi
+echo "PASS: using canonical RDT Voice frontend and backend sources."
 # Keep PyInstaller analysis inside this candidate; ignore paths inherited
 # from the user's interactive shell and unrelated repository checkouts.
 cd "$PROJECT_DIR"
@@ -13,8 +54,17 @@ if [[ -n "${PYTHONPATH:-}" ]]; then
 fi
 unset PYTHONPATH
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then echo "ERROR: Build this macOS MLX bundle on an Apple Silicon Mac using native arm64 Python." >&2; exit 2; fi
-for required in index.html worker.js pcm-worklet.js models.manifest.json backend/apple/server.py backend/rdt_model_lock.json locales assets/opencc-js-1.4.2-full.js assets/rdt_logo_BIG_yellow_halo_trans_bg.png; do
-  if [[ ! -e "$REPO_ROOT/$required" ]]; then echo "ERROR: Required repository item is missing: $REPO_ROOT/$required" >&2; exit 2; fi
+for required in index.html worker.js pcm-worklet.js models.manifest.json locales assets/opencc-js-1.4.2-full.js; do
+  if [[ ! -e "$VOICE_WEB_SOURCE/$required" ]]; then
+    echo "ERROR: Required canonical Voice item is missing: $VOICE_WEB_SOURCE/$required" >&2
+    exit 2
+  fi
+done
+for required in backend/rdt_model_lock.json assets/rdt_logo_BIG_yellow_halo_trans_bg.png; do
+  if [[ ! -e "$REPO_ROOT/$required" ]]; then
+    echo "ERROR: Required Connect build item is missing: $REPO_ROOT/$required" >&2
+    exit 2
+  fi
 done
 DEFAULT_PY="$HOME/dev/testing/RDT_Voice_Desktop_POC/.venv/bin/python"
 if [[ ! -x "$DEFAULT_PY" ]]; then DEFAULT_PY="$HOME/dev/rdt-secure/servers/whisper/.venv/bin/python"; fi
@@ -36,6 +86,15 @@ if version != "0.4.3":
  raise SystemExit(f"Expected locked mlx-whisper==0.4.3, found {version}; align the build venv before packaging.")
 PY
 RESOURCES="$PROJECT_DIR/src-tauri/resources"
+
+if [[ ! -s "$RESOURCES/rdt_voice_web_manifest.json" ]]; then
+  echo "ERROR: required Voice web manifest is missing: $RESOURCES/rdt_voice_web_manifest.json" >&2
+  exit 4
+fi
+if [[ ! -d "$RESOURCES/rdt_voice_web/assets" ]]; then
+  echo "ERROR: required Voice web reference assets are missing: $RESOURCES/rdt_voice_web/assets" >&2
+  exit 4
+fi
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 RUN_ROOT="$PROJECT_DIR/build/macos-bundle-preserve-$RUN_ID"
 NEXT_RESOURCES="$RUN_ROOT/desktop-resources-new"
@@ -47,8 +106,12 @@ if [[ -e "$RUN_ROOT" ]]; then
   exit 3
 fi
 mkdir -p "$WEB" "$BACKEND" "$NOTICES" "$STAGE" "$WORK" "$SPEC" "$PROJECT_DIR/build"
-cp "$REPO_ROOT/index.html" "$WEB/index.html"; cp "$REPO_ROOT/worker.js" "$WEB/worker.js"; cp "$REPO_ROOT/pcm-worklet.js" "$WEB/pcm-worklet.js"
-cp "$REPO_ROOT/models.manifest.json" "$WEB/models.manifest.json"; cp -R "$REPO_ROOT/locales" "$WEB/locales"; cp -R "$REPO_ROOT/assets" "$WEB/assets"
+cp -p "$RESOURCES/rdt_voice_web_manifest.json" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
+find "$VOICE_WEB_SOURCE" -maxdepth 1 -type f ! -name '.DS_Store' ! -name '*.bak' ! -name '*.bak.*' -exec cp -p {} "$WEB/" ';'
+cp -R "$VOICE_WEB_SOURCE/locales" "$WEB/locales"
+find "$WEB/locales" -type f \( -name "*.bak" -o -name "*.bak.*" \) -delete
+mkdir -p "$WEB/assets"
+cp -R "$REPO_ROOT/assets/." "$WEB/assets/"
 "$PY" "$SCRIPT_DIR/prepare-offline-runtime.py" --repo-root "$REPO_ROOT" --web-root "$WEB" --notices "$NOTICES"
 LOGO_SOURCE="$REPO_ROOT/assets/rdt_logo_BIG_yellow_halo_trans_bg.png"
 if [[ ! -s "$PROJECT_DIR/public/rdt-brand-icon.png" ]] || ! cmp -s "$LOGO_SOURCE" "$PROJECT_DIR/public/rdt-brand-icon.png"; then
@@ -64,8 +127,13 @@ for icon_file in icon.png icon.icns 32x32.png 128x128.png 128x128@2x.png; do
     exit 4
   fi
 done
-"$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$REPO_ROOT/backend/apple/server.py" "$STAGE/server.py"
-ARGS=(--noconfirm --onedir --add-data "$REPO_ROOT/backend/rdt_model_lock.json:." --name rdt_voice_backend --distpath "$NEXT_RESOURCES" --workpath "$WORK" --specpath "$SPEC" --collect-all mlx --collect-data mlx_whisper --collect-all fastapi --collect-all uvicorn --collect-all huggingface_hub --collect-all qrcode --collect-all multipart --hidden-import qrcode.image.svg --exclude-module torch)
+"$PY" "$SCRIPT_DIR/patch_desktop_backend.py" "$CONNECT_BACKEND_SOURCE" "$STAGE/server.py"
+if ! grep -Fq '@app.get("/assets/{asset_path:path}")' "$STAGE/server.py"; then
+  echo "ERROR: staged canonical backend is missing the Connect same-origin asset route." >&2
+  exit 4
+fi
+echo "PASS: canonical Voice backend staged with Connect desktop adaptations."
+ARGS=(--runtime-hook "$SCRIPT_DIR/pyi_rth_rdt_resource_tracker.py" --noconfirm --onedir --add-data "$REPO_ROOT/backend/rdt_model_lock.json:." --name rdt_voice_backend --distpath "$NEXT_RESOURCES" --workpath "$WORK" --specpath "$SPEC" --collect-all mlx --collect-data mlx_whisper --collect-all fastapi --collect-all uvicorn --collect-all huggingface_hub --collect-all qrcode --collect-all multipart --hidden-import qrcode.image.svg --exclude-module torch)
 if "$PY" -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("mlx_metal") else 1)'; then ARGS+=(--collect-all mlx_metal); fi
 "$PY" -m PyInstaller "${ARGS[@]}" "$STAGE/server.py"
 if [[ ! -x "$BACKEND/rdt_voice_backend" ]]; then echo "ERROR: PyInstaller output missing; preserving previous resources." >&2; exit 4; fi
@@ -109,6 +177,13 @@ if [[ -s "$MLX_INTERNAL/mlx/mlx.metallib" ]]; then
   ln -sfn "mlx/mlx.metallib" "$MLX_INTERNAL/mlx.metallib"
 else
   echo "ERROR: Required MLX shader missing: $MLX_INTERNAL/mlx/mlx.metallib; preserving previous resources." >&2
+  exit 4
+fi
+
+# Keep one physical MLX shader and relative aliases in preserve mode,
+# matching the standard packager and the app-bundle size invariant.
+if ! python3 "$SCRIPT_DIR/dedupe-macos-mlx-metallib.py" --internal-dir "$MLX_INTERNAL"; then
+  echo "ERROR: could not normalize frozen-backend MLX shader aliases; preserving previous resources." >&2
   exit 4
 fi
 if [[ -d "$REPO_ROOT/licenses/third-party/opencc-js" ]]; then mkdir -p "$NOTICES/opencc-js"; cp -R "$REPO_ROOT/licenses/third-party/opencc-js/." "$NOTICES/opencc-js/"; else echo "ERROR: OpenCC license notices missing; preserving previous resources." >&2; exit 2; fi
@@ -162,6 +237,10 @@ for p in scan:
 print(f"PASS: all {len(required)} required runtime paths exist")
 print(f"PASS: no CDN references in {len(scan)} staged worker/runtime JS files")
 RDT_RUNTIME_FINAL_CHECK
+
+python3 "$SCRIPT_DIR/verify-alpha-r82-staging.py" \
+  "$VOICE_WEB_SOURCE" "$WEB" "$RESOURCES/rdt_voice_web/assets" \
+  "${RDT_VOICE_BUNDLE_VERSION:-alpha-testing-current}" "$NEXT_RESOURCES/rdt_voice_web_manifest.json"
 
 echo
 echo "Preservation-safe macOS resources staged successfully."

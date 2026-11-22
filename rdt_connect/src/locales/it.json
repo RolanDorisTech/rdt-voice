@@ -1185,7 +1185,10 @@
     "msg.benchmark_skipped_description.1d20": "Il confronto hardware obbligatorio è stato interrotto due volte. RDT Connect lo ha saltato in modo da poter utilizzare l'app normalmente. Puoi eseguire il confronto facoltativo in un secondo momento in Opzioni sviluppatore, in Hardware di inferenza.",
     "msg.benchmark_skipped_title.1d20": "Il confronto dell'hardware è stato saltato",
     "msg.benchmark_test_order.1d22": "Ordine di prova",
-    "msg.benchmark_timing_limit.1d22": "Limita i tempi del benchmark a 60 secondi per selezione hardware",
+    "msg.benchmark_timing_limit.1d22": "Applica il limite di tempo per hardware",
+    "msg.benchmark_audio_label.1d23": "Audio di benchmark",
+    "msg.benchmark_audio_12s.1d23": "Registrazione di 12 secondi · 60 secondi per hardware",
+    "msg.benchmark_audio_21s.1d23": "Registrazione di 20,7 secondi · 120 secondi per hardware",
     "msg.benchmark_title.1d22": "Scatena il tuo hardware",
     "msg.benchmark_unsupported_notice.1d21": "L'ottimizzazione automatica dell'hardware è attualmente disponibile sui Mac Apple Silicon. RDT Connect utilizzerà la normale impostazione automatica.",
     "msg.benchmark_warmup_active.1d23": "in corso",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "L'aggiornamento è stato installato. Ora stai usando questa versione.",
     "msg.update_success_version.1d40": "Versione",
     "msg.update_success_build.1d40": "Numero build",
-    "msg.update_success_continue.1d40": "Continua"
+    "msg.update_success_continue.1d40": "Continua",
+    "msg.open_model_storage_folder.1d43": "Apri",
+    "msg.stop_server_to_change_default_folder.1d43": "Arresta prima il server per modificare la cartella predefinita.",
+    "msg.could_not_open_model_storage_folder.1d43": "Impossibile aprire questa cartella: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Installa automaticamente gli aggiornamenti al prossimo riavvio",
   "msg.install_verified_updates_on_app_restart.1d30": "Quando scegli di riavviare RDT Connect, l’aggiornamento disponibile viene scaricato e verificato prima della riapertura. L’app non si riavvia mai da sola."

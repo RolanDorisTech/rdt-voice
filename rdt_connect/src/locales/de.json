@@ -1185,7 +1185,10 @@
     "msg.benchmark_skipped_description.1d20": "Der obligatorische Hardwarevergleich wurde zweimal unterbrochen. RDT Connect hat es übersprungen, sodass Sie die App normal verwenden können. Sie können den optionalen Vergleich später in den Entwickleroptionen unter Inferenzhardware ausführen.",
     "msg.benchmark_skipped_title.1d20": "Hardwarevergleich übersprungen",
     "msg.benchmark_test_order.1d22": "Testauftrag",
-    "msg.benchmark_timing_limit.1d22": "Begrenzen Sie das Benchmark-Timing auf 60 Sekunden pro Hardwareauswahl",
+    "msg.benchmark_timing_limit.1d22": "Zeitlimit pro jede Hardware anwenden",
+    "msg.benchmark_audio_label.1d23": "Benchmark-Audio",
+    "msg.benchmark_audio_12s.1d23": "12-Sekunden-Aufnahme · 60 Sekunden pro Hardware",
+    "msg.benchmark_audio_21s.1d23": "20,7-Sekunden-Aufnahme · 120 Sekunden pro Hardware",
     "msg.benchmark_title.1d22": "Entfesseln Sie Ihre Hardware",
     "msg.benchmark_unsupported_notice.1d21": "Die automatische Hardwareoptimierung ist derzeit auf Apple Silicon Macs verfügbar. RDT Connect verwendet die normale automatische Einstellung.",
     "msg.benchmark_warmup_active.1d23": "im Gange",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Das Update wurde erfolgreich installiert. Du verwendest jetzt diese Version.",
     "msg.update_success_version.1d40": "Version",
     "msg.update_success_build.1d40": "Build-Nummer",
-    "msg.update_success_continue.1d40": "Weiter"
+    "msg.update_success_continue.1d40": "Weiter",
+    "msg.open_model_storage_folder.1d43": "Öffnen",
+    "msg.stop_server_to_change_default_folder.1d43": "Beenden Sie zuerst den Server, um den Standardordner zu ändern.",
+    "msg.could_not_open_model_storage_folder.1d43": "Dieser Ordner konnte nicht geöffnet werden: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Updates beim nächsten Neustart automatisch installieren",
   "msg.install_verified_updates_on_app_restart.1d30": "Beim Neustart von RDT Connect wird das verfügbare Update vor dem erneuten Start heruntergeladen und überprüft. Die App startet niemals selbstständig neu."

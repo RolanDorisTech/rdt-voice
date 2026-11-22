@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Порівняння обладнання пропущено",
     "msg.benchmark_slower.1d20": "повільніше",
     "msg.benchmark_test_order.1d22": "Тестове замовлення",
-    "msg.benchmark_timing_limit.1d22": "Обмежте час тестування до 60 секунд для кожного вибору апаратного забезпечення",
+    "msg.benchmark_timing_limit.1d22": "Застосувати обмеження часу для кожного пристрою",
+    "msg.benchmark_audio_label.1d23": "Тестовий аудіозапис",
+    "msg.benchmark_audio_12s.1d23": "Запис 12 секунд · 60 секунд на обладнання",
+    "msg.benchmark_audio_21s.1d23": "Запис 20,7 секунди · 120 секунд на обладнання",
     "msg.benchmark_title.1d22": "Розкрийте своє обладнання",
     "msg.benchmark_tooltip_faster_context.1d20": "Швидше за виміряним коефіцієнтом реального часу, але",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Майже рівний у швидкості, але",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Оновлення успішно встановлено. Зараз ви використовуєте цю версію.",
     "msg.update_success_version.1d40": "Версія",
     "msg.update_success_build.1d40": "Номер збірки",
-    "msg.update_success_continue.1d40": "Продовжити"
+    "msg.update_success_continue.1d40": "Продовжити",
+    "msg.open_model_storage_folder.1d43": "Відкрити",
+    "msg.stop_server_to_change_default_folder.1d43": "Спочатку зупиніть сервер, щоб змінити типову папку.",
+    "msg.could_not_open_model_storage_folder.1d43": "Не вдалося відкрити цю папку: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Автоматично встановлювати оновлення під час наступного перезапуску",
   "msg.install_verified_updates_on_app_restart.1d30": "Коли ви виберете перезапуск RDT Connect, оновлення буде завантажено та перевірено. Застосунок ніколи не перезапускається самостійно."

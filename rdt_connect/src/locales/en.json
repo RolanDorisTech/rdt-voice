@@ -1130,7 +1130,10 @@
     "msg.benchmark_cpu_first.1d22": "Apple CPU first",
     "msg.benchmark_many_options_warning.1d22": "More than five hardware options are selected. This benchmark may take a while to run.",
     "msg.benchmark_minimum_selection.1d22": "Select at least two hardware options to compare their transcription speed.",
-    "msg.benchmark_timing_limit.1d22": "Limit benchmark timing to 60 seconds per hardware selection",
+    "msg.benchmark_timing_limit.1d22": "Apply time limit per hardware",
+    "msg.benchmark_audio_label.1d23": "Benchmark audio",
+    "msg.benchmark_audio_12s.1d23": "12-second recording · 60 seconds per hardware",
+    "msg.benchmark_audio_21s.1d23": "20.7-second recording · 120 seconds per hardware",
     "msg.benchmark_run_button.1d22": "Run Benchmark",
     "msg.benchmark_cancel_button.1d22": "Cancel",
     "msg.benchmark_progress_aria.1d22": "Hardware benchmark progress",
@@ -1285,7 +1288,10 @@
     "msg.update_success_body.1d40": "The update was installed successfully. You are now running this version.",
     "msg.update_success_version.1d40": "Version",
     "msg.update_success_build.1d40": "Build number",
-    "msg.update_success_continue.1d40": "Continue"
+    "msg.update_success_continue.1d40": "Continue",
+    "msg.open_model_storage_folder.1d43": "Open",
+    "msg.stop_server_to_change_default_folder.1d43": "Stop the server first to change the default folder.",
+    "msg.could_not_open_model_storage_folder.1d43": "Could not open this folder: {error}"
   },
   "msg.rdt_voice_rdt_connect_third_party_libraries.607f9167": "License terms can differ between RDT Connect, RDT Voice, third-party libraries, and models. RDT Voice's current source code is licensed under PolyForm Noncommercial 1.0.0; older MIT terms apply to earlier releases. Please check the license information for this RDT Connect release and the model you use.",
   "msg.model_weights_and_runtime_dependencies_retai.d56ae58f": "Models, third-party libraries, and runtime components may have their own license terms and notices. See the relevant license notices for details.",

@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Сравнение оборудования пропущено",
     "msg.benchmark_slower.1d20": "помедленнее",
     "msg.benchmark_test_order.1d22": "Тестовый заказ",
-    "msg.benchmark_timing_limit.1d22": "Ограничьте время тестирования до 60 секунд для каждого выбранного оборудования.",
+    "msg.benchmark_timing_limit.1d22": "Применять лимит времени для каждого устройства",
+    "msg.benchmark_audio_label.1d23": "Тестовая аудиозапись",
+    "msg.benchmark_audio_12s.1d23": "Запись 12 секунд · 60 секунд на устройство",
+    "msg.benchmark_audio_21s.1d23": "Запись 20,7 секунды · 120 секунд на устройство",
     "msg.benchmark_title.1d22": "Раскройте возможности своего оборудования",
     "msg.benchmark_tooltip_faster_context.1d20": "Быстрее по измеренному коэффициенту реального времени, но",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Почти равная скорость, но",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "Обновление успешно установлено. Сейчас вы используете эту версию.",
     "msg.update_success_version.1d40": "Версия",
     "msg.update_success_build.1d40": "Номер сборки",
-    "msg.update_success_continue.1d40": "Продолжить"
+    "msg.update_success_continue.1d40": "Продолжить",
+    "msg.open_model_storage_folder.1d43": "Открыть",
+    "msg.stop_server_to_change_default_folder.1d43": "Сначала остановите сервер, чтобы изменить папку по умолчанию.",
+    "msg.could_not_open_model_storage_folder.1d43": "Не удалось открыть эту папку: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Автоматически устанавливать обновления при следующем перезапуске",
   "msg.install_verified_updates_on_app_restart.1d30": "При выборе перезапуска RDT Connect доступное обновление будет загружено и проверено до повторного открытия. Приложение никогда не перезапускается самостоятельно."

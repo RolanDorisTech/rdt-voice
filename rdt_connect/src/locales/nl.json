@@ -1172,7 +1172,10 @@
     "msg.benchmark_skipped_title.1d20": "Hardwarevergelijking overgeslagen",
     "msg.benchmark_slower.1d20": "langzamer",
     "msg.benchmark_test_order.1d22": "Testbestelling",
-    "msg.benchmark_timing_limit.1d22": "Beperk de benchmarktiming tot 60 seconden per hardwareselectie",
+    "msg.benchmark_timing_limit.1d22": "Pas de tijdslimiet per hardware toe",
+    "msg.benchmark_audio_label.1d23": "Benchmarkaudio",
+    "msg.benchmark_audio_12s.1d23": "Opname van 12 seconden · 60 seconden per hardware",
+    "msg.benchmark_audio_21s.1d23": "Opname van 20,7 seconden · 120 seconden per hardware",
     "msg.benchmark_title.1d22": "Laat uw hardware los",
     "msg.benchmark_tooltip_faster_context.1d20": "Sneller door gemeten real-time factor, maar",
     "msg.benchmark_tooltip_near_tie_context.1d20": "Bijna gelijke snelheid, maar",
@@ -1284,7 +1287,10 @@
     "msg.update_success_body.1d40": "De update is geïnstalleerd. Je gebruikt nu deze versie.",
     "msg.update_success_version.1d40": "Versie",
     "msg.update_success_build.1d40": "Buildnummer",
-    "msg.update_success_continue.1d40": "Doorgaan"
+    "msg.update_success_continue.1d40": "Doorgaan",
+    "msg.open_model_storage_folder.1d43": "Openen",
+    "msg.stop_server_to_change_default_folder.1d43": "Stop eerst de server om de standaardmap te wijzigen.",
+    "msg.could_not_open_model_storage_folder.1d43": "Deze map kan niet worden geopend: {error}"
   },
   "msg.automatically_install_updates_on_next_restart.1d30": "Updates automatisch installeren bij de volgende herstart",
   "msg.install_verified_updates_on_app_restart.1d30": "Wanneer je RDT Connect opnieuw start, wordt de beschikbare update gedownload en gecontroleerd voordat de app opnieuw wordt geopend. De app start nooit vanzelf opnieuw."

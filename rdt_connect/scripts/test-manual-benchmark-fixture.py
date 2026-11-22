@@ -39,7 +39,7 @@ def validate_pair(base, label):
     assert fixture.get("sample_rate_hz") == 16000
     assert 20.0 <= fixture.get("duration_seconds", 0) <= 21.5
 
-    reference = fixture.get("reference")
+    reference = fixture.get("transcript")
     assert isinstance(reference, str) and len(reference.split()) == 50
     assert owner.get("source_sha256") == actual_sha
     assert owner.get("transcript") == reference

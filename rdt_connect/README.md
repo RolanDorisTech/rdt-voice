@@ -6,7 +6,7 @@ RDT Connect is an optional desktop companion for [RDT Voice](https://rolandorist
 
 | Platform | Installer | Version | Build | File size |
 | --- | --- | --- | --- | --- |
-| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d42/RDT_Connect_0.2.0-dev.12.1D42_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d42) | `0.2.0-dev.12.1D42` | `1D42` | 227,767,296 bytes |
+| macOS (Apple Silicon) | [**Download (.dmg)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d46/RDT_Connect_0.2.0-dev.12.1D46_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d46) | `0.2.0-dev.12.1D42` | `1D42` | 227,767,296 bytes |
 | Windows (ARM64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) | `0.2.0-dev.11.2A07` | `2A07` | 101979239 bytes |
 | Windows (x64) | [**Download (.exe)**](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) | `0.2.0-dev.11.3A03` | `3A03` | 137365296 bytes |
 

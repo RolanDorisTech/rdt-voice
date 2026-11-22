@@ -5,7 +5,7 @@
   <p>Choose a Whisper model, start or stop your local server, and open RDT Voice in your browser—all from one app.</p>
   <p><strong>Available for macOS and Windows; Linux packages are untested prereleases</strong></p>
   <p>
-  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d46/RDT_Connect_0.2.0-dev.12.1D46_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS"></a>
+  <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d47/RDT_Connect_0.2.0-dev.12.1D47_aarch64.dmg"><img src="https://img.shields.io/badge/RDT%20Connect-macOS-238636?style=for-the-badge&amp;logo=apple&amp;logoColor=white&amp;labelColor=24292f" alt="RDT Connect macOS"></a>
   <a href="#rdt-connect-downloads"><img src="assets/badges/windows.svg" alt="Windows" height="28"></a><a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe"><img src="https://img.shields.io/badge/Windows%20ARM64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows ARM64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe"><img src="https://img.shields.io/badge/Windows%20x64-0078D4?style=for-the-badge&amp;logo=windows&amp;logoColor=white&amp;labelColor=24292f" alt="Windows x64"></a>
   <a href="https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-4u01/RDT.Connect_0.2.0-dev.11.4U.1_arm64.deb"><img src="https://img.shields.io/badge/Ubuntu%20ARM64-E95420?style=for-the-badge&amp;logo=ubuntu&amp;logoColor=white&amp;labelColor=24292f" alt="Ubuntu ARM64"></a>
@@ -95,11 +95,11 @@ RDT Connect is optional. You can also use RDT Voice directly in a supported brow
 
 ## RDT Connect Downloads
 
-The macOS Dev 12 Build 1D42 package and the listed Dev 11 Windows/Linux packages are development prereleases. Platform-specific qualification is not interchangeable; use the release notes for the applicable build.
+The macOS Dev 12 Build 1D47 package and the listed Dev 11 Windows/Linux packages are development prereleases. Platform-specific qualification is not interchangeable; use the release notes for the applicable build.
 
 | Platform | Download | Version | Build | Size |
 |:---|:---:|:---:|:---:|---:|
-| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d46/RDT_Connect_0.2.0-dev.12.1D46_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d46) | `0.2.0-dev.12.1D42` | `1D42` | 227.8 MB |
+| macOS (Apple Silicon) | [DMG](https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d47/RDT_Connect_0.2.0-dev.12.1D47_aarch64.dmg) · [Release notes](https://github.com/RolanDorisTech/rdt-voice/releases/tag/rdt-connect-v0.2.0-dev.12-1d47) | `0.2.0-dev.12.1D47` | `1D47` | 227.8 MB |
 | Windows&nbsp;ARM64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-2a07/RDT.Connect_0.2.0-dev.11.2A07_arm64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `2A07` | 102.0&nbsp;MB |
 | Windows&nbsp;x64 | [EXE installer](https://github.com/RolanDorisTech/rdt-voice/releases/download/connect-v0.2.0-dev.11-3a03/RDT.Connect_0.2.0-dev.11.3A03_x64-setup.exe) · [Guide](docs/installation-guides/Windows/RDT_Connect_Windows_Installation_Guide.html) | `0.2.0-dev.11` | `3A03` | 137.4&nbsp;MB |
 | Linux&nbsp;ARM64 | Not&nbsp;yet&nbsp;published | `0.2.0-dev.11` | `4L001` | 78.39&nbsp;MiB |
@@ -115,9 +115,9 @@ The macOS Dev 12 Build 1D42 package and the listed Dev 11 Windows/Linux packages
 
 <p align="center"><a href="docs/installation-guides/macOS/RDT_Connect_macOS_Installation_Guide.html"><img src="assets/RDT_Connect_Installation_Guide.png" alt="Open the complete RDT Connect macOS installation guide" width="100%"></a></p>
 
-**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. Build 1D42 is for Apple Silicon, not Intel Macs. The macOS updater feed and version-selection fix are included in 1D42 and are designed to support subsequent same-platform builds.
+**macOS note:** RDT Connect is ad-hoc-signed and not notarized by Apple, so macOS may show a first-launch security warning. Build 1D47 is for Apple Silicon, not Intel Macs. The macOS updater feed and version-selection fix are included in 1D47 and are designed to support subsequent same-platform builds.
 
-**Known 1D04 updater issue:** the macOS updater feed used by Build 1D04 was broken, so 1D04 may not discover the 1D42 update in-app. If you are still on 1D04, download and install Build 1D42 manually using the DMG above; do not rely on 1D04's in-app updater to find it.
+**Known 1D04 updater issue:** the macOS updater feed used by Build 1D04 was broken, so 1D04 may not discover the 1D47 update in-app. If you are still on 1D04, download and install Build 1D47 manually using the DMG above; do not rely on 1D04's in-app updater to find it.
 
 ### Windows
 
@@ -162,14 +162,25 @@ These controls reduce specific connection risks; they are not a guarantee agains
 
 ## Offline use
 
-RDT Connect is designed to manage transcription through a local Whisper service instead of requiring audio to be sent to a remote transcription API.
+Both EasyWhisper and RDT Connect can transcribe locally. The preparation is different.
 
-Once the app is installed, the required model is available locally, and the selected backend and RDT Voice interface are running, transcription can work without an internet connection. This depends on your backend and configuration.
+### EasyWhisper in the browser
 
-An internet connection may still be needed to download the app, obtain models that are not already installed, check for application updates, or access online documentation. Offline transcription does not mean first-time setup and every supporting feature work offline.
+1. While connected to the internet, open the RDT Voice page and let the page and its required runtime files finish loading.
+2. Download and fully load the EasyWhisper model you intend to use.
+3. Once the page, runtime files, and model are available in the browser, EasyWhisper can continue transcribing offline.
 
-**Planning to work offline?** Install the app, download your intended model, start the local service, and complete a test transcription before disconnecting.
+Keep in mind that browser site data or cached files can be cleared or evicted. A fresh browser profile, cleared site data, or a missing cached resource may require an internet connection to load the page or download the model again.
 
+### RDT Connect desktop app
+
+1. Download and install RDT Connect while online.
+2. Open RDT Connect and download at least one transcription model. Wait for the download to finish.
+3. Start the local server and complete a test transcription before going offline.
+
+After the app and model are installed, RDT Connect performs transcription through its local backend. An ongoing internet connection is not required for local transcription with an already-downloaded model. Internet access is still needed to download the app, obtain additional models, receive online updates, or access online documentation.
+
+**Planning to work offline?** Complete the setup steps above and verify a test transcription before disconnecting. Keep the required app, model, and browser data available on the device.
 ## Troubleshooting RDT Connect
 
 If transcription does not start or RDT Voice cannot reach the local service:
@@ -348,6 +359,14 @@ The following are observations from development and real-device testing, not uni
 - **Accuracy varies:** quality may range from excellent to poor depending on noise, microphone distance, accents, speakers, language, and the model. Check important names, numbers, and technical details before using or publishing a transcript.
 - **Code-switching / mixed languages:** EasyWhisper Auto Detect may not follow rapid language changes within a sentence reliably. In our tests, handling language changes in shorter chunks—around **30 seconds**—worked better. For important mixed-language material, split the audio or specify the language for each segment when practical.
 - **Model download progress:** byte counts can be approximate or temporarily exceed the displayed total, and repeat downloads can be much faster than the first. The cause of all such discrepancies has not been confirmed. Use the final model-ready status rather than a byte counter alone.
+
+### Background-tab recording
+
+Some browsers may pause, throttle, or interrupt microphone capture when the RDT Voice tab is moved into the background. This behavior varies by browser version, operating system, and power-management settings; continuous background recording is not guaranteed. For important or long recordings, keep the RDT Voice tab in the foreground and confirm that recording is continuing before switching away.
+
+### macOS menu-bar About window
+
+A known macOS issue can cause the **About RDT Connect** window, opened from the menu-bar icon menu, to appear behind other windows. If it seems that About did not open, check behind the active windows and bring the About window to the front.
 
 ### Browser testing scope
 

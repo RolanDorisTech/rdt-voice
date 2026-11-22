@@ -5753,6 +5753,16 @@ button[aria-busy="true"] * {
 }
 
 
+/* Keep the two model-management actions visually aligned. */
+.model-storage-controls > #model-storage-add-button,
+.model-cleanup-actions > #delete-rdt-models-button {
+  flex: 0 1 220px !important;
+  width: 220px !important;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 /* RDT_MODEL_STORAGE_OPEN_ICON_COMPACT */
 .model-storage-row-actions .model-storage-open-button {
   display: inline-flex !important;

@@ -25,11 +25,16 @@ success = main.index("await update.install({ restartAfterInstall: false });")
 armed = main.index("recordSuccessfulUpdateInstall(update.version);", success)
 assert armed < main.index("pendingTauriUpdate = null;", success)
 assert "consumePendingUpdateSuccess(info.version, info.buildId);" in main
-assert "record.version !== actualVersion || record.buildId !== actualBuildId" in main
+assert "normalizeUpdateVersionForComparison(pendingVersion) ===" in main
+assert "normalizeUpdateVersionForComparison(actualVersion)" in main
+assert "pendingBuildId.toUpperCase() === actualBuildId.trim().toUpperCase()" in main
+assert "if (!versionMatches || !buildMatches) return;" in main
 assert "localStorage.removeItem(UPDATE_SUCCESS_STORAGE_KEY);" in main
-assert "Date.now() - record.installedAt > 30 * 24 * 60 * 60 * 1000" in main
+assert "now - record.installedAt >= 0" in main
+assert "now - record.installedAt <= 30 * 24 * 60 * 60 * 1000" in main
+assert "Number.isFinite(record.installedAt)" in main
 assert 'role="dialog"' in html and 'aria-modal="true"' in html
 assert 'id="rdt-update-success-continue"' in html
 assert ".rdt-update-success-overlay[hidden]" in css
 assert "@media (prefers-reduced-motion: no-preference)" in css
-print("PASS: update success arms only after install, exact version/build match, one-time consumption, expiry, accessible dialog, reduced motion, and all 26 localized catalogs.")
+print("PASS: update success arms only after install, normalized version/build-ID match, one-time consumption, expiry, accessible dialog, reduced motion, and all 26 localized catalogs.")

@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0-dev.12.1D46",
-  "notes": "RDT Connect 0.2.0-dev.12.1D46 (Build 1D46): Apple Silicon prerelease with bundled RDT Voice R82 offline runtime, signed updater package, more reliable model-download and backend lifecycle handling, benchmark policy and interface refinements, and updated localization.",
-  "pub_date": "2026-11-22T15:07:23Z",
+  "version": "0.2.0-dev.12.1D47",
+  "notes": "RDT Connect 0.2.0-dev.12.1D47 (Build 1D47): macOS Apple Silicon prerelease with bundled RDT Voice R82 offline runtime, verified signed updater package, improved update-success confirmation, Developer Options benchmark visibility, and Model Management layout and wording refinements. The custom DMG includes the installation guide. This build is ad-hoc signed and is not notarized; macOS may require Open Anyway.",
+  "pub_date": "2026-11-22T18:12:38Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d46/RDT.Connect.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3FzdzhtejVZUFRWVjNaQWxPRGpNWnZxaVZiM3VUekVPc1pkOEdkWU1RYmc1YmNneXQvOGtxZmx3Zk1wQVpERmhOOWIxcWo4dnYxOUk1NGdwNUtWdmwvZWdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MzU5NzEyCWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMi4xRDQ2Ck9FRXJjZDRkTi8yMzNmdzJ2MTB4dGJGcG1RRytXTWRpSitMVDhWT0tiNFprYVhxSjhwR2x5K3R2UUZJclc0bmR0N0dMZDlmRmtKK0lEYXRJVGVnNkFRPT0K"
+      "url": "https://github.com/RolanDorisTech/rdt-voice/releases/download/rdt-connect-v0.2.0-dev.12-1d47/RDT.Connect.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbWdvQWVmT3Fzd3kvUzhraFFGMDdMTEdzZmVVWVlLZUQxRlRoMEZyeXpwWndCVCtaTXFwOGNTYloza0lkQVpKOEtKaWdQMWVMRldBOWFzUUc1QXdJcVdwSnJvTndPZXc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MzcwNjYxCWZpbGU6UkRUIENvbm5lY3QuYXBwLnRhci5negl2ZXJzaW9uOjAuMi4wLWRldi4xMi4xRDQ3CnR3Zkw5QlYzVG1QdHdTQTdPb3lkR3NOdWppcFR1eXU3RUZYTW9oMUtHWnErS1RFVVNFS0xpaHVoUEk1a1lMYXpETkNCREd1YjJPcmtBbmF1aHFteEFnPT0K"
     }
   }
 }

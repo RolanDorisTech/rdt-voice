@@ -197,15 +197,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $arm64 = $env:PROCESSOR_ARCHITECTURE -eq 'ARM64'
-          if ($arm64) {
-            $file = 'cuda_13.5.0_windows_arm64.exe'
-          } else {
-            $file = 'cuda_13.5.0_windows_x86_64.exe'
-          }
+          $file = 'cuda_13.5.0_windows_x86_64.exe'
           $base = 'https://developer.download.nvidia.com/compute/cuda/13.5.0'
           $installer = Join-Path $env:RUNNER_TEMP $file
           $checksums = Join-Path $env:RUNNER_TEMP 'cuda-13.5-md5sum.txt'
+          Write-Host "CUDA_INSTALLER=$file"
           curl.exe --fail --location --retry 5 --retry-all-errors --retry-delay 10 --output $installer "$base/local_installers/$file"
           if ($LASTEXITCODE -ne 0) { throw "CUDA installer download failed: $LASTEXITCODE" }
           curl.exe --fail --location --retry 5 --retry-all-errors --output $checksums "$base/docs/sidebar/md5sum.txt"
@@ -217,15 +213,36 @@ jobs:
           $expected = $match.Value.ToLowerInvariant()
           $actual = (Get-FileHash -LiteralPath $installer -Algorithm MD5).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "CUDA installer checksum mismatch. Expected $expected; got $actual." }
-          & $installer -s nvcc_13.5 cudart_13.5 cccl_13.5 cublas_13.5 cublas_dev_13.5
+          Write-Host "CUDA_INSTALLER_MD5=$actual"
+          & $installer -s
           if ($LASTEXITCODE -ne 0) { throw "CUDA toolkit installation failed: $LASTEXITCODE" }
-          $cudaRoot = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA\v13.5'
-          $nvcc = Join-Path $cudaRoot 'bin\nvcc.exe'
-          if (-not (Test-Path -LiteralPath $nvcc -PathType Leaf)) { throw "CUDA nvcc missing after installation: $nvcc" }
-          "$cudaRoot\bin" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+          $defaultRoot = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA\v13.5'
+          $registryRoot = 'HKLM:\SOFTWARE\NVIDIA Corporation\GPU Computing Toolkit\CUDA\v13.5'
+          $registryInstall = (Get-ItemProperty -LiteralPath $registryRoot -ErrorAction SilentlyContinue).InstallDir
+          $roots = @($env:CUDA_PATH, $env:CUDA_PATH_V13_5, [Environment]::GetEnvironmentVariable("CUDA_PATH","Machine"), [Environment]::GetEnvironmentVariable("CUDA_PATH_V13_5","Machine"), $registryInstall, $defaultRoot) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) } | Select-Object -Unique
+          $toolkitParent = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA'
+          if (Test-Path -LiteralPath $toolkitParent -PathType Container) {
+            $roots += Get-ChildItem -LiteralPath $toolkitParent -Directory | Where-Object { $_.Name -match "13\.5" } | Select-Object -ExpandProperty FullName
+          }
+          $roots = @($roots | Select-Object -Unique)
+          $cudaRoot = $null
+          foreach ($candidate in $roots) {
+            $compiler = Get-ChildItem -LiteralPath $candidate -Filter 'nvcc.exe' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $compiler) { $cudaRoot = $candidate; $nvcc = $compiler.FullName; break }
+          }
+          if (-not $nvcc) {
+            Write-Host "CUDA_ROOT_CANDIDATES=$($roots -join `"; `")"
+            if (Test-Path -LiteralPath $toolkitParent) { Get-ChildItem -LiteralPath $toolkitParent -Force | Select-Object -ExpandProperty FullName | Write-Host }
+            throw "CUDA 13.5 installer returned success but nvcc.exe was not installed. Inspect NVIDIA installer logs on this runner."
+          }
+          Write-Host "CUDA_NVCC_PATH=$nvcc"
+          $nvccOutput = & $nvcc --version
+          if ($LASTEXITCODE -ne 0 -or ($nvccOutput -join "`n") -notmatch "release 13\.5") { throw "CUDA compiler is not verified as version 13.5: $($nvccOutput -join `"; `")" }
+          $nvccOutput
           "CUDA_PATH=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUDA_PATH_V13_5=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "CUDAToolkit_ROOT=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-          & $nvcc --version
+          "$((Split-Path -Path $nvcc -Parent))" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Prepare native Windows backend and web resources
         env:
           RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}

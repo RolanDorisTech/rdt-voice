@@ -18,11 +18,11 @@ class WindowsArm64CudaCrossCompileContractTests(unittest.TestCase):
         self.assertIn("runs-on: windows-2022", self.workflow)
         self.assertIn("needs: [signing-preflight, build-cuda-arm64-worker]", self.workflow)
         self.assertIn("needs: [signing-preflight, build-cuda-arm64-worker]", self.workflow)
-        self.assertIn("uses: actions/download-artifact@v7.0.2", self.workflow)
+        self.assertIn("uses: actions/download-artifact@v7.0.0", self.workflow)
         self.assertIn("name: rdt-windows-arm64-cuda-worker", self.workflow)
         self.assertIn("rdt-windows-arm64-cuda-worker", self.workflow)
         self.assertNotIn("gh run download", self.workflow)
-        self.assertIn("actions/download-artifact@v7.0.2", self.workflow)
+        self.assertIn("actions/download-artifact@v7.0.0", self.workflow)
         self.assertIn("actions/upload-artifact@v7.0.2", self.workflow)
 
     def test_nvidia_cross_toolchain_is_pinned_and_arm64_outputs_are_verified(self):
@@ -95,10 +95,10 @@ class WindowsArm64CudaArtifactHandoffContractTests(unittest.TestCase):
         self.assertIsNotNone(package_job_match, "ARM64 package job missing")
         package_job = package_job_match.group("body")
         self.assertIn("uses: actions/checkout@v7.0.1", package_job)
-        self.assertIn("uses: actions/download-artifact@v7.0.2", package_job)
+        self.assertIn("uses: actions/download-artifact@v7.0.0", package_job)
         self.assertLess(
             package_job.index("uses: actions/checkout@v7.0.1"),
-            package_job.index("uses: actions/download-artifact@v7.0.2"),
+            package_job.index("uses: actions/download-artifact@v7.0.0"),
         )
         workflow = Path(".github/workflows/windows-arm64-installer.yml").read_text(
             encoding="utf-8"
@@ -106,7 +106,7 @@ class WindowsArm64CudaArtifactHandoffContractTests(unittest.TestCase):
         package_match = re.search(r"(?ms)^  package:\s*\n(?P<package>.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\Z)", workflow)
         self.assertIsNotNone(package_match)
         package = package_match.group("package")
-        self.assertIn("uses: actions/download-artifact@v7.0.2", package)
+        self.assertIn("uses: actions/download-artifact@v7.0.0", package)
         self.assertIn("name: rdt-windows-arm64-cuda-worker", package)
         self.assertIn("RDT_PREBUILT_CUDA_WORKER=$worker", package)
         self.assertIn("RDT_PREBUILT_CUDA_WORKER_MANIFEST=$manifest", package)

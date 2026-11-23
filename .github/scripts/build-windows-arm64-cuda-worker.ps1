@@ -86,7 +86,7 @@ function Install-VerifiedCudaComponents(
   $process = Start-Process -FilePath $installer `
     -ArgumentList (@('-s') + $Components) -NoNewWindow -Wait -PassThru
   if ($process.ExitCode -notin @(0, 3010)) {
-    throw "NVIDIA component installation failed for $FileName: $($process.ExitCode)"
+    throw "NVIDIA component installation failed for ${FileName}: $($process.ExitCode)"
   }
   Remove-Item -LiteralPath $installer -Force
 }

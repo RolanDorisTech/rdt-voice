@@ -195,19 +195,26 @@ jobs:
           set -euo pipefail
           RESOURCE_ROOT="rdt_connect/src-tauri/resources"
           TEMP_BACKEND="$RESOURCE_ROOT/rdt_voice_backend"
+          TEMP_LINUX_NOTICES="$RESOURCE_ROOT/linux-third-party-notices"
 
-          if [[ -e "$TEMP_BACKEND" ]]; then
-            echo "STOP: Backend resource path already exists: $TEMP_BACKEND" >&2
+          if [[ -e "$TEMP_BACKEND" || -e "$TEMP_LINUX_NOTICES" ]]; then
+            echo "STOP: A temporary Tauri Rust-test resource path already exists." >&2
             exit 1
           fi
 
           # Tauri validates configured resource paths during cargo test.
-          # This temporary placeholder is removed on success or failure.
-          trap 'rm -rf -- "$TEMP_BACKEND"' EXIT
-          mkdir -p "$TEMP_BACKEND"
+          # These placeholders are test-only and removed before this step exits.
+          # The real platform notice inventory is merged later for packaging.
+          trap 'rm -rf -- "$TEMP_BACKEND" "$TEMP_LINUX_NOTICES"' EXIT
+          mkdir -p "$TEMP_BACKEND" "$TEMP_LINUX_NOTICES"
           printf '%s\n' \
             "Temporary Rust-test placeholder; never package this directory." \
             > "$TEMP_BACKEND/.qualification-placeholder"
+          printf '%s\n' \
+            "Temporary Rust-test placeholder; never package this directory." \
+            > "$TEMP_LINUX_NOTICES/.qualification-placeholder"
+
+          python3 backend/linux/tests/test_linux_tls_resource_contract.py -v
 
           cargo test --locked --manifest-path rdt_connect/src-tauri/Cargo.toml \
             linux_tls::tests --no-fail-fast \

@@ -214,8 +214,10 @@ jobs:
           $actual = (Get-FileHash -LiteralPath $installer -Algorithm MD5).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "CUDA installer checksum mismatch. Expected $expected; got $actual." }
           Write-Host "CUDA_INSTALLER_MD5=$actual"
-          & $installer -s
-          if ($LASTEXITCODE -ne 0) { throw "CUDA toolkit installation failed: $LASTEXITCODE" }
+          $installerArgs = @('-s', 'nvcc_13.5', 'cudart_13.5', 'cccl_13.5', 'crt_13.5', 'cublas_13.5', 'cublas_dev_13.5')
+          $installerProcess = Start-Process -FilePath $installer -ArgumentList $installerArgs -NoNewWindow -Wait -PassThru
+          Write-Host "CUDA_INSTALLER_EXIT_CODE=$($installerProcess.ExitCode)"
+          if ($installerProcess.ExitCode -notin @(0, 3010)) { throw "CUDA toolkit installer failed: $($installerProcess.ExitCode)" }
           $defaultRoot = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA\v13.5'
           $registryRoot = 'HKLM:\SOFTWARE\NVIDIA Corporation\GPU Computing Toolkit\CUDA\v13.5'
           $registryInstall = (Get-ItemProperty -LiteralPath $registryRoot -ErrorAction SilentlyContinue).InstallDir

@@ -61,6 +61,15 @@ class WindowsFfmpegDistributionContractTests(unittest.TestCase):
             self.assertNotIn("Invoke-WebRequest -Uri $uri", workflow)
             self.assertNotIn("releases/download/latest/", workflow)
 
+    def test_x64_cuda_installer_uses_official_architecture_asset_and_checksum(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[3]
+        workflow = (root / '.github/workflows/windows-x64-installer.yml').read_text(encoding='utf-8')
+        self.assertIn('cuda_13.5.0_windows_x86_64.exe', workflow)
+        self.assertNotIn('cuda_13.5.0_windows.exe', workflow)
+        self.assertIn('docs/sidebar/md5sum.txt', workflow)
+        self.assertIn('-Algorithm MD5', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -44,6 +44,44 @@ jobs:
           print("PASS: Tauri v2 NSIS updater artifact contract")
           PYCONTRACT
 
+  build-cuda-arm64-worker:
+    name: Cross-build verified Windows ARM64 CUDA worker
+    needs: updater-contract
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up x64 Python for pinned source verification
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.13.16'
+          architecture: 'x64'
+      - name: Install Ninja
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            choco install ninja -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Ninja installation failed: $LASTEXITCODE" }
+          }
+          ninja --version
+      - name: Build and verify ARM64 CUDA worker on x64 host
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .github/scripts/build-windows-arm64-cuda-worker.ps1 `
+            -OutputDirectory "$env:RUNNER_TEMP\rdt-windows-arm64-cuda"
+      - name: Upload verified ARM64 CUDA worker
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rdt-windows-arm64-cuda-worker
+          path: |
+            ${{ runner.temp }}/rdt-windows-arm64-cuda/rdt_whisper_worker_cuda.exe
+            ${{ runner.temp }}/rdt-windows-arm64-cuda/rdt_whisper_worker_cuda.manifest.json
+          if-no-files-found: error
+          retention-days: 3
+
   signing-preflight:
     needs: updater-contract
     runs-on: windows-11-arm
@@ -99,13 +137,36 @@ jobs:
           }
 
   package:
-    needs: signing-preflight
+    needs: [signing-preflight, build-cuda-arm64-worker]
+    permissions:
+      contents: read
     runs-on: windows-11-arm
     timeout-minutes: 120
 
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
+      - name: Download verified ARM64 CUDA worker artifact
+        uses: actions/download-artifact@v7.0.2
+        with:
+          name: rdt-windows-arm64-cuda-worker
+          path: ${{ runner.temp }}/rdt-prebuilt-arm64-cuda
+
+      - name: Validate downloaded ARM64 CUDA worker artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactDir = Join-Path $env:RUNNER_TEMP 'rdt-prebuilt-arm64-cuda'
+          $worker = Join-Path $artifactDir 'rdt_whisper_worker_cuda.exe'
+          $manifest = Join-Path $artifactDir 'rdt_whisper_worker_cuda.manifest.json'
+          if (-not (Test-Path -LiteralPath $worker -PathType Leaf)) {
+            throw 'Downloaded ARM64 CUDA worker is missing.'
+          }
+          if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+            throw 'Downloaded ARM64 CUDA worker manifest is missing.'
+          }
+          "RDT_PREBUILT_CUDA_WORKER=$worker" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "RDT_PREBUILT_CUDA_WORKER_MANIFEST=$manifest" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
@@ -188,39 +249,58 @@ jobs:
       - name: Verify shared lifetime statistics and packaging contract
         run: python backend/whisper_cpp/tests/test_lifetime_statistics.py
 
-      - name: Install CUDA 13.5 toolkit (no NVIDIA driver)
+      - name: Install and verify native ARM64 CUDA runtime (no compiler or driver)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $arm64 = $env:PROCESSOR_ARCHITECTURE -eq 'ARM64'
-          if ($arm64) {
-            $file = 'cuda_13.5.0_windows_arm64.exe'
-          } else {
-            $file = 'cuda_13.5.0_windows.exe'
-          }
+          $file = 'cuda_13.5.0_windows_arm64.exe'
           $base = 'https://developer.download.nvidia.com/compute/cuda/13.5.0'
           $installer = Join-Path $env:RUNNER_TEMP $file
           $checksums = Join-Path $env:RUNNER_TEMP 'cuda-13.5-md5sum.txt'
           curl.exe --fail --location --retry 5 --retry-all-errors --retry-delay 10 --output $installer "$base/local_installers/$file"
-          if ($LASTEXITCODE -ne 0) { throw "CUDA installer download failed: $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "CUDA ARM64 runtime download failed: $LASTEXITCODE" }
           curl.exe --fail --location --retry 5 --retry-all-errors --output $checksums "$base/docs/sidebar/md5sum.txt"
           if ($LASTEXITCODE -ne 0) { throw "CUDA checksum download failed: $LASTEXITCODE" }
-          $line = Select-String -LiteralPath $checksums -SimpleMatch $file | Select-Object -First 1
-          if ($null -eq $line) { throw "NVIDIA checksum entry not found for $file" }
-          $match = [regex]::Match($line.Line, '(?i)\b[0-9a-f]{32}\b')
-          if (-not $match.Success) { throw "Could not parse NVIDIA MD5 entry for $file" }
-          $expected = $match.Value.ToLowerInvariant()
+          $rows = @(Select-String -LiteralPath $checksums -SimpleMatch $file)
+          if ($rows.Count -ne 1) { throw "Expected one official NVIDIA checksum entry for $file." }
+          $checksumMatch = [regex]::Match($rows[0].Line, '(?i)\b[0-9a-f]{32}\b')
+          if (-not $checksumMatch.Success) { throw "Could not parse NVIDIA MD5 entry for $file." }
+          $expected = $checksumMatch.Value.ToLowerInvariant()
           $actual = (Get-FileHash -LiteralPath $installer -Algorithm MD5).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) { throw "CUDA installer checksum mismatch. Expected $expected; got $actual." }
-          & $installer -s nvcc_13.5 cudart_13.5 cccl_13.5 cublas_13.5 cublas_dev_13.5
-          if ($LASTEXITCODE -ne 0) { throw "CUDA toolkit installation failed: $LASTEXITCODE" }
+          if ($actual -ne $expected) { throw "CUDA ARM64 installer checksum mismatch. Expected $expected; got $actual." }
+          & $installer -s cudart_13.5 cublas_13.5
+          if ($LASTEXITCODE -notin @(0, 3010)) { throw "CUDA ARM64 runtime installation failed: $LASTEXITCODE" }
           $cudaRoot = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA\v13.5'
-          $nvcc = Join-Path $cudaRoot 'bin\nvcc.exe'
-          if (-not (Test-Path -LiteralPath $nvcc -PathType Leaf)) { throw "CUDA nvcc missing after installation: $nvcc" }
-          "$cudaRoot\bin" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+          $cudaBin = Join-Path $cudaRoot 'bin'
+          if (-not (Test-Path -LiteralPath $cudaBin -PathType Container)) { throw "CUDA runtime bin directory missing: $cudaBin" }
+          function Get-PeMachine([string]$Path) {
+            $stream = [IO.File]::OpenRead($Path)
+            $reader = [IO.BinaryReader]::new($stream)
+            try {
+              if ($reader.ReadUInt16() -ne 0x5A4D) { throw "Invalid PE/DOS header: $Path" }
+              $stream.Position = 0x3C
+              $offset = $reader.ReadInt32()
+              $stream.Position = $offset
+              if ($reader.ReadUInt32() -ne 0x4550) { throw "Invalid PE signature: $Path" }
+              return [int]$reader.ReadUInt16()
+            } finally {
+              $reader.Dispose()
+              $stream.Dispose()
+            }
+          }
+          foreach ($pattern in @('cudart64_*.dll', 'cublas64_*.dll', 'cublasLt64_*.dll')) {
+            $dlls = @(Get-ChildItem -LiteralPath $cudaBin -Filter $pattern -File -Recurse)
+            if ($dlls.Count -eq 0) { throw "Required ARM64 CUDA runtime DLL missing: $pattern" }
+            foreach ($dll in $dlls) {
+              if ((Get-PeMachine $dll.FullName) -ne 0xAA64) {
+                throw "CUDA runtime DLL is not ARM64: $($dll.FullName)"
+              }
+            }
+          }
           "CUDA_PATH=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "CUDAToolkit_ROOT=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-          & $nvcc --version
+          Write-Host "Verified native ARM64 CUDA runtime at $cudaRoot"
+
       - name: Prepare native Windows backend and web resources
         env:
           RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}
@@ -249,6 +329,8 @@ jobs:
             -FfmpegDir $env:RDT_FFMPEG_DIR `
             -EnableVulkan `
             -EnableCuda `
+            -PrebuiltCudaWorker $env:RDT_PREBUILT_CUDA_WORKER `
+            -PrebuiltCudaWorkerManifest $env:RDT_PREBUILT_CUDA_WORKER_MANIFEST `
             -RequireGpuWorker
 
       - name: Upload Windows ARM64 native worker diagnostics

@@ -87,6 +87,25 @@ class EmbeddedVoiceResourceGeneratorTests(unittest.TestCase):
         self.assertLess(x64.index("generate-embedded-rdt-voice.py"), x64.index("Build frontend"))
         self.assertLess(arm64.index("generate-embedded-rdt-voice.py"), arm64.index("Build frontend"))
 
+    def test_linux_generates_r82_before_python_resource_dependent_tests(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        workflow = (root / ".github/workflows/linux-native-qualification.yml").read_text(
+            encoding="utf-8"
+        )
+        generator = "- name: Generate canonical R82 resources before Rust tests"
+        regression = "- name: Run Linux server regression suite"
+
+        self.assertEqual(workflow.count(generator), 1, "R82 generator step must exist exactly once")
+        self.assertEqual(regression.count("- name:"), 1)
+        self.assertEqual(workflow.count(regression), 1, "Linux regression step must exist exactly once")
+        self.assertLess(
+            workflow.index(generator),
+            workflow.index(regression),
+            "R82 resources must be generated before Python tests inspect embedded resources",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

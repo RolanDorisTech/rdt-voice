@@ -201,7 +201,7 @@ jobs:
           if ($arm64) {
             $file = 'cuda_13.5.0_windows_arm64.exe'
           } else {
-            $file = 'cuda_13.5.0_windows.exe'
+            $file = 'cuda_13.5.0_windows_x86_64.exe'
           }
           $base = 'https://developer.download.nvidia.com/compute/cuda/13.5.0'
           $installer = Join-Path $env:RUNNER_TEMP $file

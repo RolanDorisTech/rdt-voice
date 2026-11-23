@@ -161,6 +161,9 @@ jobs:
           "$RUNNER_TEMP/rdt-python/bin/python" -c \
             'import fastapi, starlette, uvicorn, multipart, qrcode, numpy, httpx, backports.tarfile, PyInstaller; print("qualification Python imports OK")'
 
+      - name: Generate canonical R82 resources before Rust tests
+        run: python3 rdt_connect/scripts/generate-embedded-rdt-voice.py --repo-root "$GITHUB_WORKSPACE"
+
       - name: Run Linux server regression suite
         run: |
           set -euo pipefail
@@ -186,9 +189,6 @@ jobs:
           bash -n backend/whisper_cpp/scripts/build-linux-worker.sh
           bash -n rdt_connect/scripts/prepare-linux-bundle.sh
           git diff --check
-
-      - name: Generate canonical R82 resources before Rust tests
-        run: python3 rdt_connect/scripts/generate-embedded-rdt-voice.py --repo-root "$GITHUB_WORKSPACE"
 
       - name: Run shared Rust Linux TLS tests
         run: |

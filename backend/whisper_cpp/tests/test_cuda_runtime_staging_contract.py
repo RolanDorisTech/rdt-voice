@@ -1,9 +1,21 @@
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
+
+
+def write_pe_fixture(path: Path, machine: int = 0x8664) -> None:
+    # Minimal DOS + PE/COFF header sufficient for architecture inspection.
+    data = bytearray(0x86)
+    data[0:2] = b"MZ"
+    struct.pack_into("<I", data, 0x3C, 0x80)
+    data[0x80:0x84] = bytes((0x50, 0x45, 0x00, 0x00))
+    struct.pack_into("<H", data, 0x84, machine)
+    path.write_bytes(data)
+
 
 from backend.whisper_cpp import stage_cuda_runtime as stager
 
@@ -76,12 +88,12 @@ class CudaRuntimeStagingTests(unittest.TestCase):
         cuda_bin = self.cuda / "bin"
         cuda_bin.mkdir()
         worker = self.root / "rdt_whisper_worker_cuda.exe"
-        worker.write_bytes(b"PE worker fixture")
+        write_pe_fixture(worker, 0x8664)
         cudart = cuda_bin / "cudart64_13.dll"
         cublas = cuda_bin / "cublas64_13.dll"
         cublas_lt = cuda_bin / "cublasLt64_13.dll"
         for item in (cudart, cublas, cublas_lt):
-            item.write_bytes(item.name.encode())
+            write_pe_fixture(item, 0x8664)
 
         def imports(_dumpbin, binary):
             name = Path(binary).name.lower()
@@ -104,6 +116,26 @@ class CudaRuntimeStagingTests(unittest.TestCase):
         manifest = json.loads(manifest_path.read_text())
         self.assertEqual(len(manifest["dependencies"]), 3)
         self.assertTrue(manifest["licenses"])
+
+    def test_windows_rejects_runtime_dll_with_wrong_pe_architecture(self):
+        cuda_bin = self.cuda / "bin"
+        cuda_bin.mkdir()
+        worker = self.root / "rdt_whisper_worker_cuda.exe"
+        write_pe_fixture(worker, 0xAA64)
+        wrong_arch_dll = cuda_bin / "cudart64_13.dll"
+        write_pe_fixture(wrong_arch_dll, 0x8664)
+
+        def imports(_dumpbin, binary):
+            if Path(binary).name.lower() == worker.name.lower():
+                return ["cudart64_13.dll"]
+            return []
+
+        with (
+            patch.object(stager, "find_dumpbin", return_value="dumpbin"),
+            patch.object(stager, "dumpbin_imports", side_effect=imports),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unresolved Windows import"):
+                stager.stage_windows([worker], self.cuda, self.destination)
 
     def test_notice_attachment_copies_manifest_and_license(self):
         lib_dir = self.cuda / "lib64"

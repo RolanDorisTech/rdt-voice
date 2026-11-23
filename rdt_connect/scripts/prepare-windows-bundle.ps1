@@ -6,6 +6,8 @@ param(
   [string]$WhisperCppSource = $env:WHISPER_CPP_SOURCE,
   [switch]$EnableVulkan,
   [switch]$EnableCuda,
+  [string]$PrebuiltCudaWorker = '',
+  [string]$PrebuiltCudaWorkerManifest = '',
   [switch]$RequireGpuWorker
 )
 $ErrorActionPreference = 'Stop'
@@ -92,8 +94,32 @@ Write-Host "Verified whisper.cpp source root: $cmakeWhisperSource"
 if ($EnableVulkan -and -not $env:VULKAN_SDK) {
   throw 'Vulkan was requested, but VULKAN_SDK is not set. Install the Vulkan SDK before building.'
 }
-if ($EnableCuda -and -not (Get-Command nvcc -ErrorAction SilentlyContinue)) {
-  throw 'CUDA was requested, but nvcc is unavailable. Install a compatible CUDA Toolkit before building.'
+$hasPrebuiltCudaWorker = -not [string]::IsNullOrWhiteSpace($PrebuiltCudaWorker)
+$hasPrebuiltCudaManifest = -not [string]::IsNullOrWhiteSpace($PrebuiltCudaWorkerManifest)
+if ($hasPrebuiltCudaWorker -ne $hasPrebuiltCudaManifest) {
+  throw 'A prebuilt CUDA worker and its manifest must be supplied together.'
+}
+if ($hasPrebuiltCudaWorker -and (-not $EnableCuda -or $TargetArch -ne 'ARM64')) {
+  throw 'The prebuilt CUDA worker handoff is supported only for an enabled ARM64 CUDA package.'
+}
+if ($EnableCuda -and -not $hasPrebuiltCudaWorker -and
+    -not (Get-Command nvcc -ErrorAction SilentlyContinue)) {
+  throw 'CUDA was requested, but nvcc is unavailable. Install a compatible CUDA Toolkit or supply a verified ARM64 prebuilt worker.'
+}
+function Get-PeMachine([string]$Path) {
+  $stream = [IO.File]::OpenRead($Path)
+  $reader = [IO.BinaryReader]::new($stream)
+  try {
+    if ($reader.ReadUInt16() -ne 0x5A4D) { throw "Invalid PE/DOS header: $Path" }
+    $stream.Position = 0x3C
+    $offset = $reader.ReadInt32()
+    $stream.Position = $offset
+    if ($reader.ReadUInt32() -ne 0x4550) { throw "Invalid PE signature: $Path" }
+    return [int]$reader.ReadUInt16()
+  } finally {
+    $reader.Dispose()
+    $stream.Dispose()
+  }
 }
 
 function Build-WorkerVariant {
@@ -147,9 +173,41 @@ if ($TargetArch -eq 'ARM64') {
   }
 }
 if ($EnableCuda) {
-  $workers += [pscustomobject]@{
-    Path = (Build-WorkerVariant -Variant 'cuda' -Cuda 'ON' -Vulkan 'OFF')
-    Name = 'rdt_whisper_worker_cuda.exe'
+  if ($hasPrebuiltCudaWorker) {
+    foreach ($candidate in @($PrebuiltCudaWorker, $PrebuiltCudaWorkerManifest)) {
+      if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw "Prebuilt ARM64 CUDA worker input is missing: $candidate"
+      }
+      if ((Get-Item -LiteralPath $candidate).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Prebuilt ARM64 CUDA worker input must not be a symlink: $candidate"
+      }
+    }
+    $workerItem = Get-Item -LiteralPath $PrebuiltCudaWorker
+    $manifest = Get-Content -LiteralPath $PrebuiltCudaWorkerManifest -Raw | ConvertFrom-Json
+    $workerHash = (Get-FileHash -LiteralPath $PrebuiltCudaWorker -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($manifest.schema -ne 'rdt-windows-arm64-cuda-worker-v1' -or
+        $manifest.architecture -ne 'ARM64' -or
+        $manifest.machine -ne '0xAA64' -or
+        $manifest.filename -ne 'rdt_whisper_worker_cuda.exe' -or
+        $manifest.cuda_version -ne '13.5' -or
+        $manifest.whisper_cpp_commit -ne $Pins.source_commit -or
+        $manifest.sha256 -ne $workerHash -or
+        [long]$manifest.size_bytes -ne [long]$workerItem.Length) {
+      throw 'Prebuilt ARM64 CUDA worker manifest, hash, size, pin or architecture validation failed.'
+    }
+    if ((Get-PeMachine $PrebuiltCudaWorker) -ne 0xAA64) {
+      throw 'Prebuilt CUDA worker PE machine is not ARM64 (0xAA64).'
+    }
+    Write-Host "Using verified cross-built ARM64 CUDA worker SHA256=$workerHash"
+    $workers += [pscustomobject]@{
+      Path = (Resolve-Path -LiteralPath $PrebuiltCudaWorker).Path
+      Name = 'rdt_whisper_worker_cuda.exe'
+    }
+  } else {
+    $workers += [pscustomobject]@{
+      Path = (Build-WorkerVariant -Variant 'cuda' -Cuda 'ON' -Vulkan 'OFF')
+      Name = 'rdt_whisper_worker_cuda.exe'
+    }
   }
 }
 if ($EnableVulkan) {
@@ -223,6 +281,10 @@ Copy-Item -LiteralPath $fixtureSource -Destination (Join-Path $backendStage 'rdt
 foreach ($variant in $workers) {
   Copy-Item -LiteralPath $variant.Path -Destination (Join-Path $backendStage $variant.Name) -Force
   Write-Host "Staged worker: $($variant.Name)"
+}
+if ($hasPrebuiltCudaWorker) {
+  Copy-Item -LiteralPath $PrebuiltCudaWorkerManifest `
+    -Destination (Join-Path $backendStage 'RDT-CUDA-WORKER-PROVENANCE.json') -Force
 }
 if ($EnableCuda) {
   if (-not $env:CUDA_PATH -or -not (Test-Path -LiteralPath $env:CUDA_PATH -PathType Container)) {

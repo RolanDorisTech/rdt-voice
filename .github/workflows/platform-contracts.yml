@@ -74,6 +74,8 @@ jobs:
           gh extension install github/gh-actions-lock --pin v0.5.1
           gh actions-lock --help >/dev/null
 
+      - name: Generate canonical R82 resources before saved validation
+        run: python3 rdt_connect/scripts/generate-embedded-rdt-voice.py --repo-root "$GITHUB_WORKSPACE"
       - name: Run saved cross-platform validation
         env:
           PYTHON312: python3.12

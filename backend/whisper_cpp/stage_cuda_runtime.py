@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import struct
 import sys
 from pathlib import Path
 
@@ -299,18 +300,48 @@ def dumpbin_imports(dumpbin: str, binary: Path) -> list[str]:
     ]
 
 
-def resolve_windows_dll(name: str, dirs: list[Path]) -> Path | None:
+def read_pe_machine(path: Path) -> int:
+    try:
+        with path.open("rb") as stream:
+            if stream.read(2) != b"MZ":
+                raise RuntimeError(f"not a PE/DOS executable: {path}")
+            stream.seek(0x3C)
+            raw_offset = stream.read(4)
+            if len(raw_offset) != 4:
+                raise RuntimeError(f"truncated PE header offset: {path}")
+            pe_offset = struct.unpack("<I", raw_offset)[0]
+            stream.seek(pe_offset)
+            if stream.read(4) != bytes((0x50, 0x45, 0x00, 0x00)):
+                raise RuntimeError(f"invalid PE signature: {path}")
+            raw_machine = stream.read(2)
+            if len(raw_machine) != 2:
+                raise RuntimeError(f"truncated PE machine field: {path}")
+            return struct.unpack("<H", raw_machine)[0]
+    except OSError as exc:
+        raise RuntimeError(f"could not inspect PE architecture for {path}: {exc}") from exc
+
+
+def resolve_windows_dll(
+    name: str, dirs: list[Path], expected_machine: int | None = None
+) -> Path | None:
     for directory in dirs:
-        candidate = directory / name
-        if candidate.is_file():
-            return candidate.resolve()
+        candidates = [directory / name]
         if directory.is_dir():
-            match = next(
-                (p for p in directory.iterdir() if p.is_file() and p.name.lower() == name.lower()),
-                None,
+            candidates.extend(
+                p for p in directory.iterdir()
+                if p.is_file() and p.name.lower() == name.lower()
             )
-            if match:
-                return match.resolve()
+        for candidate in candidates:
+            if not candidate.is_file():
+                continue
+            resolved = candidate.resolve()
+            if expected_machine is not None:
+                try:
+                    if read_pe_machine(resolved) != expected_machine:
+                        continue
+                except RuntimeError:
+                    continue
+            return resolved
     return None
 
 
@@ -322,12 +353,22 @@ def stage_windows(binaries: list[Path], cuda_root: Path, destination: Path) -> P
     destination.mkdir(parents=True, exist_ok=False)
     dumpbin = find_dumpbin()
     system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+    target_machines = {
+        read_pe_machine(Path(binary).resolve(strict=True)) for binary in binaries
+    }
+    if len(target_machines) != 1:
+        raise RuntimeError("Windows CUDA worker inputs do not share one PE architecture")
+    expected_machine = next(iter(target_machines))
     search_dirs = [
         cuda_bin,
         destination,
         *(Path(p) for p in os.environ.get("PATH", "").split(os.pathsep) if p),
         system_root / "System32",
     ]
+    search_dirs.extend(
+        sorted((path for path in cuda_bin.rglob("*") if path.is_dir()),
+               key=lambda path: str(path).lower())
+    )
     search_dirs.extend(Path(p).resolve().parent for p in binaries)
     pending = [Path(p).resolve(strict=True) for p in binaries]
     visited = set()
@@ -343,7 +384,7 @@ def stage_windows(binaries: list[Path], cuda_root: Path, destination: Path) -> P
             lowered = name.lower()
             if is_driver(name) or lowered.startswith(("api-ms-win-", "ext-ms-win-")):
                 continue
-            source = resolve_windows_dll(name, search_dirs)
+            source = resolve_windows_dll(name, search_dirs, expected_machine)
             if source is None:
                 raise RuntimeError(f"unresolved Windows import {name} from {binary.name}")
             if not inside(source, cuda_root):

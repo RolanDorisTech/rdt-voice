@@ -1,7 +1,7 @@
 {
   "catalog": "src/locales/en.json",
-  "status": "V10 REMEDIATION CANDIDATE — independent audit required before translation",
-  "translationGate": "BLOCKED_PENDING_V10_INDEPENDENT_AUDIT",
+  "status": "CURRENT CATALOG V5 RECONCILIATION — structural validation required; independent translation-quality and platform-runtime review remain open",
+  "translationGate": "STRUCTURAL_CATALOG_RECONCILED_PENDING_INDEPENDENT_TRANSLATION_REVIEW",
   "previousCatalogSha256": "a002bdd910dd8cf5633eb17b0cceae75d82624a20d5336f06e31f400839c9612",
   "sourceHashesBefore": {
     "index.html": "be06fcbf1a435325f0e05d60f2f6061e3786847243011073b38f32df5da5f019",
@@ -15,13 +15,13 @@
     "src/style.css": "76a8fdd06fc71d7d512e7c2e7bb7d57ee39def413454cc7522c414306baf913b",
     "src-tauri/src/main.rs": "add00ee69b4372fa175c4b6ff7d31bdea9e0bb4318eebcef403d36397f2e6fe5"
   },
-  "messageCount": 881,
+  "messageCount": 1305,
   "classificationCounts": {
-    "KEEP_ENGLISH": 122,
-    "TRANSLATE": 759
+    "KEEP_ENGLISH": 125,
+    "TRANSLATE": 1180
   },
-  "messagesWithNamedPlaceholders": 298,
-  "distinctPlaceholderNames": 126,
+  "messagesWithNamedPlaceholders": 385,
+  "distinctPlaceholderNames": 150,
   "additionalPlaceholderContextFixes": [
     "msg.cli_candidate_checks_join.303fbf3d: {join} renamed to {candidateChecksSummary} after source inspection.",
     "msg.pid_pid_port_unknown_description.bdfadb5c: {unknown} renamed to {port} after source inspection."
@@ -80,7 +80,42 @@
     "remoteAccess.vpnRequirement",
     "settings.language.activeStatus",
     "settings.modelStorage.cacheHomeHelp",
-    "settings.security.existingCertificateHelp"
+    "settings.security.existingCertificateHelp",
+    {
+      "key": "msg.permanently_delete_only_these_selected_rdt_connect_mlx_model_caches_models_unselected_models_other_hugging_face_repositories_and_easywhisper_browser_data_will_remain_untouched.4235eebe",
+      "english": "Permanently delete only these selected RDT Connect MLX model caches?\n\n{models}\n\nUnselected models, other Hugging Face repositories, and EasyWhisper browser data will remain untouched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.add_the_rdt_connect_local_root_ca_to_this_computer_s_system_trust_store_your_system_will_ask_for_administrator_authorization_the_ca_is_restricted_to_localhost_127_0_0_1_and_1_and_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later_firefox_and_chrome_chromium_may_keep_separate_certificate_stores_and_are_not_changed.50cb7d5d",
+      "english": "Add the RDT Connect local root CA to this computer's system trust store? Your system will ask for administrator authorization. The CA is restricted to localhost, 127.0.0.1 and ::1, and RDT Connect records its exact fingerprint so it can remove only this entry later. Firefox and Chrome/Chromium may keep separate certificate stores and are not changed.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.add_the_rdt_connect_local_root_ca_to_the_windows_current_user_certificate_trust_store_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later.15d3811e",
+      "english": "Add the RDT Connect local root CA to the Windows current-user certificate trust store? RDT Connect records its exact fingerprint so it can remove only this entry later.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.ed4f1479",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_linux_system_trust_store_your_system_will_ask_for_administrator_authorization_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.48ac1519",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Linux system trust store? Your system will ask for administrator authorization. Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entry_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.52dd3e5b",
+      "english": "Remove {count} exact CA trust entry that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    },
+    {
+      "key": "msg.remove_count_exact_ca_trust_entries_that_rdt_connect_previously_added_to_the_windows_current_user_certificate_trust_store_certificate_and_private_key_files_will_not_be_deleted_independently_installed_certificates_will_not_be_touched.6e6bda5a",
+      "english": "Remove {count} exact CA trust entries that RDT Connect previously added to the Windows current-user certificate trust store? Certificate and private-key files will not be deleted. Independently installed certificates will not be touched.",
+      "status": "PROVISIONAL_PENDING_TRANSLATION"
+    }
   ],
   "resolvedMissingSourceRows": [
     "src/main.ts:171 replaced by settings.language.activeStatus; obsolete HTML selector title removed."
@@ -96,9 +131,9 @@
     "The native RDT Voice resource folder and ~/dev/rdt-voice browser project are outside this patch scope.",
     "V10 consistency correction: keyMigrationReportSha256 is recalculated from the exact packaged key_migration_report.json; validator and installer cross-check all four catalog metadata hashes."
   ],
-  "englishCatalogSha256": "ee4833815b195b3e83450bac29ae0cd0ada9457219f2cc878d729466fc36ef42",
-  "inventorySha256": "8ddb7729770d02e21405c5e6eacb695e20ca86aa3746627020937289e52da8d0",
-  "sourceMapSha256": "a7ef8e75ec4c9599f80663a04ff7d0b3e304c9f3c9ebc7a48f3d83a4d909ec6d",
+  "englishCatalogSha256": "c47861d3bfc578dd85ee4a73b5f6b5072b784b62f28631430983a8d4c25c44f3",
+  "inventorySha256": "902bf91e22e1380d8fbf3d46cdc2c5038fff823d7ac0bf8f69f5d105760be87e",
+  "sourceMapSha256": "c533d54b0376046e13faf1ce8b2c860ab43373f3e636c3cf3a62a60038fe7bd9",
   "v6SemanticPlaceholderFixes": {
     "msg.tcp_port_listener_pid_s_arg1_arg2.41f3d3b1": "TCP {port} listener process IDs: {listener_pids}. Port owner details: {port_owner_details}",
     "msg.backend_pid_stopped_pid_was_stopped_but_port.9c4659af": "Backend PID {stopped_pid} was stopped, but port {port} is still occupied by these listener process IDs: {listener_pids}. RDT Connect did not stop any other processes. {port_owner_details}",
@@ -172,5 +207,75 @@
     "zipAndPayloadChecksums": "PASS — ZIP integrity and all listed payload/helper SHA-256 entries verified.",
     "rustTauriBuild": "NOT RUN here; requires native macOS build after the user applies the guarded patch."
   },
-  "keyMigrationReportSha256": "7ae795613f59b2ec4b4f7a70ee3dcba252ad0f7b01c4917b3c20c3cf72c956fe"
+  "keyMigrationReportSha256": "f8179896fab1c33992bea7891d2797e52b48372fa67fd4601d524eed8acc0526",
+  "catalogVersion": 5,
+  "localeCount": 26,
+  "v5Reconciliation": {
+    "catalogVersion": 5,
+    "englishMessages": 1305,
+    "inventoryRows": 1305,
+    "sourceMapEntries": 1305,
+    "catalogOnlyStableKeysAddedToInventoryAndMap": 315,
+    "previouslyUnmappedInventoryKeysAddedToSourceMap": 1,
+    "newTranslateRows": 312,
+    "newKeepEnglishRows": 3,
+    "englishMetadataValuesReconciled": 7,
+    "whisperKeepEnglishValuesRestoredAcrossLocales": 75,
+    "ggmlCpuBaselineLocaleEntriesAddedOrVerified": 25,
+    "stableKeyIdsRegenerated": 0,
+    "sourceContextsWithoutRecoveredAppReference": 50,
+    "unverifiedSourceContextKeys": [
+      "msg.average_speed.1d21",
+      "msg.benchmark_choose_hardware_action.1d20",
+      "msg.benchmark_continue_default_action.1d20",
+      "msg.benchmark_cpu_first.1d20",
+      "msg.benchmark_diagnostic_label.1d20",
+      "msg.benchmark_download_results_action.1d20",
+      "msg.benchmark_gpu_first.1d20",
+      "msg.benchmark_hardware_selector_title.1d20",
+      "msg.benchmark_limit_60_seconds.1d20",
+      "msg.benchmark_many_selected_warning.1d20",
+      "msg.benchmark_optimize_action.1d20",
+      "msg.benchmark_popup_eyebrow.1d20",
+      "msg.benchmark_popup_intro_line_one.1d20",
+      "msg.benchmark_popup_intro_line_two.1d20",
+      "msg.benchmark_popup_title.1d20",
+      "msg.benchmark_ready_status.1d20",
+      "msg.benchmark_recommended_first.1d20",
+      "msg.benchmark_recommended_setting_label.1d20",
+      "msg.benchmark_results_data_label.1d20",
+      "msg.benchmark_results_title.1d20",
+      "msg.benchmark_run_action.1d20",
+      "msg.benchmark_saved_preference_unchanged.1d20",
+      "msg.benchmark_test_order.1d20",
+      "msg.benchmark_two_required_error.1d20",
+      "msg.choose_a_model.1d24",
+      "msg.choose_specific_downloaded_rdt_connect_model.49157c13",
+      "msg.compare_mlx_gpu_and_cpu_fixture.1d22",
+      "msg.display_behaviour.1d24",
+      "msg.hardware_changes_next_server_start.1d22",
+      "msg.hardware_usage.1d21",
+      "msg.inference_hardware_auto_description.1d22",
+      "msg.inference_hardware_benchmark_aria.1d22",
+      "msg.lifetime_aggregate_privacy.1d21",
+      "msg.lifetime_initial_hours.1d21",
+      "msg.lifetime_initial_minutes.1d21",
+      "msg.lifetime_statistics.1d21",
+      "msg.model_inference_time.1d21",
+      "msg.model_usage.1d21",
+      "msg.on_this_device.1d24",
+      "msg.reading_saved_hardware_preference.1d22",
+      "msg.run_transcription_benchmark.1d22",
+      "msg.save_model_storage_locations.1d20",
+      "msg.save_selected_download_destination_and_all_model_access_folders.1d20",
+      "msg.statistics_not_refreshed.1d21",
+      "msg.switch_to_automatic.1d22",
+      "msg.total_audio.1d21",
+      "msg.total_transcriptions.1d21",
+      "msg.total_upload.1d21",
+      "msg.visual_setup_guide_example_alt.1d22",
+      "settings.interface.size"
+    ],
+    "macOSEnglishCopyRewritten": false
+  }
 }

@@ -1,0 +1,9 @@
+# Direct Python distributions included by the Linux PyInstaller package.
+# The collector resolves and licenses the installed transitive dependency closure.
+fastapi
+httpx
+numpy
+python-multipart
+qrcode
+uvicorn
+backports.tarfile

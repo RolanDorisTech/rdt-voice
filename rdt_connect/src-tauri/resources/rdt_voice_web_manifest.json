@@ -161,7 +161,7 @@
     "assets/rdt-voice-EasySetup.png": "a59a87891200f09efd0c3cd7d68532f2eef3a893eca9c478792dd7f7d6ee2d21",
     "assets/rdt-voice-ui.png": "dbdf9559025e69e45c0e57311914ed37e36ceb8f965a16fe2a58ae1409d2d461",
     "assets/rdt_logo_BIG_yellow_halo_trans_bg.png": "02a6425f42de6d24a51bf174a434ae541542db370ccaf68dcd687d22d1badd26",
-    "index.html": "e8552a86eb9a1910ca1136f0d68a085939f89bda9da9253f87519d9f5515b214",
+    "index.html": "28c050dd53ab5fe00adbe5b684a8e9185893316314d9d4464b8b11afed002059",
     "locales/ar.json": "068c160f01484463e2fe6a1628927530b47a4395a855ab5a059dd5d0a7d3f90b",
     "locales/ar.patterns.json": "a83b237b2820cee945b9821bc063323a1039b603f4d73683222efc0f9a106304",
     "locales/cs.json": "18df3376b3b8c1274bbf03bef9da07dac58745f98a613a2b43c34bf1335e9566",
@@ -231,7 +231,7 @@
   "transformed_files": {
     "index.html": {
       "source_sha256": "f06f5625bfa4b56a9c8b71d54b21c48d6a476091bbb21f7ff920a2e90f17dbc3",
-      "staged_sha256": "e8552a86eb9a1910ca1136f0d68a085939f89bda9da9253f87519d9f5515b214",
+      "staged_sha256": "28c050dd53ab5fe00adbe5b684a8e9185893316314d9d4464b8b11afed002059",
       "transform": "rdt-connect-offline-easywhisper-v2"
     },
     "worker.js": {

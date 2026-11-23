@@ -741,22 +741,113 @@ const transportHttpInput = $("transport-http") as HTMLInputElement;
 const keepInMenuBarInput = $("keep-in-menu-bar") as HTMLInputElement;
 
 function syncKeepInMenuBarPlatformCopy(): void {
-  if (!isWindowsRuntime()) return;
   const copy = keepInMenuBarInput.closest(".menu-bar-option-copy");
   const heading = copy?.querySelector("strong");
   const description = copy?.querySelector("small");
-  if (heading) heading.textContent = "Show in notification center";
-  if (description) {
-    description.textContent =
-      "When on, closing the window keeps RDT Connect in the notification center. When off, closing quits the app and stops its managed server.";
+  const locale = getActiveLocale();
+
+  if (isWindowsRuntime()) {
+    const headingText = translateKey("msg.show_in_notification_area.1d47", {}, locale);
+    const descriptionText = translateKey(
+      "msg.keep_running_in_notification_area_on_close.1d47", {}, locale
+    );
+    if (heading && heading.textContent !== headingText) heading.textContent = headingText;
+    if (description && description.textContent !== descriptionText) {
+      description.textContent = descriptionText;
+    }
+  } else if (isLinuxRuntime()) {
+    const headingText = translateKey("msg.show_in_system_tray.1d47", {}, locale);
+    const descriptionText = translateKey(
+      "msg.keep_running_in_system_tray_on_close.1d47", {}, locale
+    );
+    if (heading && heading.textContent !== headingText) heading.textContent = headingText;
+    if (description && description.textContent !== descriptionText) {
+      description.textContent = descriptionText;
+    }
   }
 }
 syncKeepInMenuBarPlatformCopy();
+
+const platformCopyNode = keepInMenuBarInput.closest(".menu-bar-option-copy");
+if (platformCopyNode && typeof MutationObserver !== "undefined") {
+  const platformCopyObserver = new MutationObserver(() => {
+    syncKeepInMenuBarPlatformCopy();
+  });
+  platformCopyObserver.observe(platformCopyNode, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+}
+
+
+function platformLocalTrustStoreTooltip(): string {
+  const locale = getActiveLocale();
+  if (isWindowsRuntime()) {
+    return translateKey(
+      "msg.add_the_rdt_connect_local_root_ca_to_the_windows_current_user_certificate_trust_store_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later.15d3811e",
+      {}, locale
+    );
+  }
+  if (isLinuxRuntime()) {
+    return translateKey(
+      "msg.add_the_rdt_connect_local_root_ca_to_this_computer_s_system_trust_store_your_system_will_ask_for_administrator_authorization_the_ca_is_restricted_to_localhost_127_0_0_1_and_1_and_rdt_connect_records_its_exact_fingerprint_so_it_can_remove_only_this_entry_later_firefox_and_chrome_chromium_may_keep_separate_certificate_stores_and_are_not_changed.50cb7d5d",
+      {}, locale
+    );
+  }
+  return "Add the selected root CA to this Mac's login Keychain.";
+}
+
+function syncPlatformSecurityCopy(): void {
+  const macOnlyNote = document.querySelector<HTMLElement>(
+    '[data-l10n-key="msg.rdt_connect_creates_a_local_certificate_auth.24273ba1"]'
+  );
+  macOnlyNote?.classList.toggle("hidden", isWindowsOrLinuxRuntime());
+
+  const trustButton = document.querySelector<HTMLButtonElement>("#trust-tls-button");
+  if (trustButton) trustButton.title = platformLocalTrustStoreTooltip();
+}
+syncPlatformSecurityCopy();
+
+window.addEventListener("rdt-connect-language-changed", () => {
+  syncPlatformSecurityCopy();
+});
+
+function hideAppleModelFallbackChoicesOnWindowsLinux(): void {
+  if (!isWindowsOrLinuxRuntime()) return;
+
+  const modelSelect = document.querySelector<HTMLSelectElement>("#model-select");
+  if (modelSelect) {
+    let removedSelectedOption = false;
+    for (const option of Array.from(modelSelect.options)) {
+      if (option.value.toLowerCase().startsWith("mlx-community/")) {
+        removedSelectedOption = removedSelectedOption || option.selected;
+        option.remove();
+      }
+    }
+    if (removedSelectedOption) modelSelect.selectedIndex = -1;
+  }
+
+  const modelIdDetail = document.querySelector<HTMLElement>("#model-id-detail");
+  if (
+    modelIdDetail &&
+    /^mlx-community\//i.test(modelIdDetail.textContent?.trim() ?? "")
+  ) {
+    modelIdDetail.textContent = "";
+  }
+}
+hideAppleModelFallbackChoicesOnWindowsLinux();
 const settingsLockHint = document.querySelector<HTMLElement>("#settings-lock-hint");
 const localAddress = $("local-address");
 const preferredPortInput = $("preferred-port") as HTMLInputElement;
 const localPortTools = $("local-port-tools");
 const inferenceBenchmarkCard = $("inference-benchmark-card");
+const inferenceDeviceCard = inferenceBenchmarkCard.querySelector<HTMLElement>(".inference-device-card");
+const mlxBenchmarkDescription = inferenceBenchmarkCard.querySelector<HTMLElement>(".dev-benchmark-controls > p:first-child");
+if (isWindowsOrLinuxRuntime()) {
+  inferenceDeviceCard?.classList.add("hidden");
+  mlxBenchmarkDescription?.classList.add("hidden");
+}
 const openNativeBenchmarkButton = $("open-native-benchmark-button") as HTMLButtonElement;
 const trayTestPhraseStatus = document.querySelector<HTMLElement>("#tray-test-phrase-status");
 localPortTools.classList.toggle("hidden", !developerOptionsEnabled);
@@ -902,10 +993,9 @@ function failPlatformModelCatalog() {
   modelSelect.replaceChildren();
   modelSelect.disabled = true;
   const label = modelSelect.closest(".local-model-label")?.querySelector("label");
-  if (label) label.textContent = "Model catalog unavailable:";
-  modelIdDetail.textContent = "Unavailable";
-  modelHelp.textContent =
-    "The native model catalog could not be loaded. Restart or repair RDT Connect; incompatible models will not be offered on this platform.";
+  if (label) label.textContent = translateKey("msg.model_catalog_unavailable.1d47");
+  modelIdDetail.textContent = translateKey("msg.model_catalog_status_unavailable.1d47");
+  modelHelp.textContent = translateKey("msg.model_catalog_repair_guidance.1d47");
 }
 
 
@@ -2949,9 +3039,9 @@ function updateSettingsLockHelp() {
     [chooseTlsKeyButton, "Choose the matching private key file."],
     [chooseTlsCaButton, "Choose the root CA used to trust this certificate."],
     [linkTlsButton, "Link and validate the selected certificate and matching key."],
-    [trustTlsButton, "Add the selected root CA to this Mac's login Keychain."],
+    [trustTlsButton, platformLocalTrustStoreTooltip()],
     [removeTlsTrustButton, "Remove only HTTPS trust entries previously added by RDT Connect."],
-    [deleteRdtModelsButton, "Delete only supported RDT Connect MLX Whisper cache entries; other repositories remain untouched."],
+    [deleteRdtModelsButton, "Delete only RDT Connect model cache entries; other repositories remain untouched."],
   ];
   for (const [element, title] of titledControls) element.title = stopServerSettingTitle(title);
   for (const element of Array.from(modelStorageLocationsEl.querySelectorAll<HTMLButtonElement>("button"))) {
@@ -5710,6 +5800,7 @@ benchmarkInviteOverlay.innerHTML = `
     <section id="benchmark-hardware-selector" class="benchmark-hardware-selector hidden" aria-labelledby="benchmark-hardware-selector-title">
       <h3 id="benchmark-hardware-selector-title">${benchmarkMessage("msg.benchmark_selector_title.1d22")}</h3>
       <p class="benchmark-hardware-description"><span>${benchmarkMessage("msg.benchmark_selector_detail.1d22")}</span><span>${benchmarkMessage("msg.benchmark_preference_unchanged.1d22")}</span></p>
+      <div id="benchmark-manual-candidates" class="benchmark-manual-candidates" hidden></div>
       <label class="benchmark-device-choice">
         <input type="checkbox" data-benchmark-device="gpu" checked>
         <span><strong>${benchmarkMessage("msg.benchmark_apple_gpu.1d22")}</strong><small>${benchmarkMessage("msg.benchmark_mlx_metal_gpu.1d22")} · mlx-metal-gpu</small></span>
@@ -5805,6 +5896,7 @@ const benchmarkInviteCloseButton = benchmarkInviteOverlay.querySelector<HTMLButt
 const benchmarkProgressPanel = benchmarkInviteOverlay.querySelector<HTMLElement>("#benchmark-digital-progress")!;
 const benchmarkHardwareSelector = benchmarkInviteOverlay.querySelector<HTMLElement>("#benchmark-hardware-selector")!;
 const manualHardwareDeviceInputs = Array.from(benchmarkHardwareSelector.querySelectorAll<HTMLInputElement>("input[data-benchmark-device]"));
+const manualHardwareCandidatesHost = benchmarkHardwareSelector.querySelector<HTMLElement>("#benchmark-manual-candidates")!;
 const manualHardwareOrderSelect = benchmarkHardwareSelector.querySelector<HTMLSelectElement>("#benchmark-hardware-order")!;
 const manualHardwareRunButton = benchmarkHardwareSelector.querySelector<HTMLButtonElement>("#benchmark-hardware-run")!;
 const manualHardwareCancelButton = benchmarkHardwareSelector.querySelector<HTMLButtonElement>("#benchmark-hardware-cancel")!;
@@ -5816,8 +5908,19 @@ const manualHardwareAudioSelect = benchmarkHardwareSelector.querySelector<HTMLSe
 type ManualHardwareDevice = "gpu" | "cpu";
 type ManualHardwareOrder = "recommended" | ManualHardwareDevice;
 type ManualBenchmarkFixture = "12s" | "21s";
+type ManualHardwareCandidate = {
+  candidate_id: string;
+  provider: string;
+  device: string;
+  eligible: boolean;
+  reason?: string | null;
+  identity_kind?: string;
+  identity_value?: string;
+};
+let discoveredManualHardwareCandidates: ManualHardwareCandidate[] = [];
 let pendingManualHardwareSelection: {
   devices: ManualHardwareDevice[];
+  candidateIds: string[];
   order: ManualHardwareOrder;
   fixture: ManualBenchmarkFixture;
   timeLimitEnabled: boolean;
@@ -5936,23 +6039,90 @@ function selectedManualHardwareDevices(): ManualHardwareDevice[] {
     .filter((device): device is ManualHardwareDevice => device === "gpu" || device === "cpu");
 }
 
+function selectedManualHardwareCandidateIds(): string[] {
+  return Array.from(
+    manualHardwareCandidatesHost.querySelectorAll<HTMLInputElement>(
+      "input[data-manual-candidate-id]:checked:not(:disabled)",
+    ),
+  )
+    .map((input) => input.dataset.manualCandidateId || "")
+    .filter(Boolean);
+}
+
 function updateManualHardwareSelector(): void {
-  const count = selectedManualHardwareDevices().length;
+  const count = isWindowsOrLinuxRuntime()
+    ? selectedManualHardwareCandidateIds().length
+    : selectedManualHardwareDevices().length;
   manualHardwareRunButton.disabled = count < 1;
   manualHardwareSelectionWarning.classList.toggle("hidden", count <= 5);
   manualHardwareSelectionError.classList.toggle("hidden", count >= 1 || !manualHardwareSelectionAttempted);
 }
 
-function openManualHardwareSelector(): void {
+async function openManualHardwareSelector(): Promise<void> {
   renderDeveloperHardwarePreviewPanels();
   pendingManualHardwareSelection = null;
   manualHardwareSelectionAttempted = false;
   manualHardwareDeviceInputs.forEach((input) => { input.checked = true; });
   manualHardwareOrderSelect.value = "recommended";
-  updateManualHardwareSelector();
+  manualHardwareCandidatesHost.replaceChildren();
 
-  // Manual runs always show the hardware selector before starting, including
-  // when exactly two native candidates are available.
+  const staticLabels = Array.from(
+    benchmarkHardwareSelector.querySelectorAll<HTMLElement>(".benchmark-device-choice"),
+  );
+  const orderLabel = manualHardwareOrderSelect.closest("label");
+
+  if (isWindowsOrLinuxRuntime()) {
+    showHardwareOptimizationMessage("Discovering packaged Windows/Linux hardware…", "pending");
+    const inventory = await invoke<{
+      schema: number;
+      candidates: ManualHardwareCandidate[];
+      physical_choice_count: number;
+      show_selector: boolean;
+    }>("discover_manual_hardware_candidates");
+    if (inventory.schema !== 1 || !Array.isArray(inventory.candidates)) {
+      throw new Error("The packaged backend returned an invalid hardware inventory.");
+    }
+    discoveredManualHardwareCandidates = inventory.candidates.filter(
+      (item) => typeof item?.candidate_id === "string" && item.candidate_id.length > 0,
+    );
+    if (!discoveredManualHardwareCandidates.some((item) => item.eligible !== false)) {
+      throw new Error("No packaged Windows/Linux hardware candidate is currently eligible for manual benchmarking.");
+    }
+
+    staticLabels.forEach((label) => { label.hidden = true; });
+    if (orderLabel) orderLabel.hidden = true;
+    manualHardwareCandidatesHost.hidden = false;
+
+    for (const candidate of discoveredManualHardwareCandidates) {
+      const row = document.createElement("label");
+      row.className = "benchmark-device-choice";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.dataset.manualCandidateId = candidate.candidate_id;
+      checkbox.checked = candidate.eligible !== false;
+      checkbox.disabled = candidate.eligible === false;
+
+      const copy = document.createElement("span");
+      const heading = document.createElement("strong");
+      const provider = String(candidate.provider || "hardware").toUpperCase();
+      heading.textContent = candidate.device?.trim() || `${provider} device`;
+      const detail = document.createElement("small");
+      detail.textContent = candidate.eligible === false
+        ? `${provider} · ${candidate.reason || "Not eligible"}`
+        : `${provider} · ${candidate.identity_kind || "device"}: ${candidate.identity_value || "verified identity"}`;
+      copy.append(heading, detail);
+      row.append(checkbox, copy);
+      manualHardwareCandidatesHost.appendChild(row);
+      checkbox.addEventListener("change", updateManualHardwareSelector);
+    }
+  } else {
+    discoveredManualHardwareCandidates = [];
+    manualHardwareCandidatesHost.hidden = true;
+    staticLabels.forEach((label) => { label.hidden = false; });
+    if (orderLabel) orderLabel.hidden = false;
+  }
+
+  updateManualHardwareSelector();
   benchmarkProgressPanel.classList.add("hidden");
   benchmarkInviteStatus.classList.add("hidden");
   benchmarkInviteResult.classList.add("hidden");
@@ -5967,8 +6137,10 @@ function openManualHardwareSelector(): void {
 function startSelectedManualHardwareBenchmark(): void {
   manualHardwareSelectionAttempted = true;
   updateManualHardwareSelector();
-  const devices = selectedManualHardwareDevices();
-  if (devices.length < 1) return;
+  const windowsLinux = isWindowsOrLinuxRuntime();
+  const devices = windowsLinux ? [] : selectedManualHardwareDevices();
+  const candidateIds = windowsLinux ? selectedManualHardwareCandidateIds() : [];
+  if (windowsLinux ? candidateIds.length < 1 : devices.length < 1) return;
 
   const fixture = manualHardwareAudioSelect.value;
   if (fixture !== "12s" && fixture !== "21s") {
@@ -5976,6 +6148,7 @@ function startSelectedManualHardwareBenchmark(): void {
   }
   pendingManualHardwareSelection = {
     devices,
+    candidateIds,
     order: manualHardwareOrderSelect.value as ManualHardwareOrder,
     fixture,
     timeLimitEnabled: manualHardwareTimingLimitCheckbox.checked,
@@ -6975,11 +7148,315 @@ async function runHardwareOptimizationFlow(
   }
 }
 
+
+async function runWindowsLinuxManualHardwareBenchmarkReserved(): Promise<HardwareOptimizationChoice | "skipped"> {
+  const selection = pendingManualHardwareSelection;
+  if (!selection || selection.candidateIds.length < 1
+      || new Set(selection.candidateIds).size !== selection.candidateIds.length) {
+    throw new Error(benchmarkMessage("msg.benchmark_choose_available_hardware.1d20"));
+  }
+  if (busy || serverOperation !== null || modelDownloadStatus.active || modelStorageBusy) {
+    showNotice(benchmarkMessage("msg.benchmark_busy_notice.1.21"), "warning");
+    return "skipped";
+  }
+
+  const resolvedModel = await resolveBenchmarkModel();
+  if (!resolvedModel) return "skipped";
+  const selectedModel = resolvedModel.model;
+  modelStorageStatus = resolvedModel.cache;
+  renderModelStorageSummary(resolvedModel.cache);
+  renderModelDownloadUI();
+
+  const selectedCandidates = selection.candidateIds.map((id) =>
+    discoveredManualHardwareCandidates.find((candidate) => candidate.candidate_id === id),
+  );
+  if (selectedCandidates.some((candidate) => !candidate || candidate.eligible === false)) {
+    throw new Error(benchmarkMessage("msg.benchmark_manual_inventory_changed.1d47"));
+  }
+
+  benchmarkInviteOverlay.classList.remove("hidden");
+  benchmarkHardwareSelector.classList.add("hidden");
+  benchmarkInvitePanel.classList.remove("is-selecting-hardware");
+  benchmarkProgressPanel.classList.remove("hidden");
+  benchmarkInviteStatus.classList.remove("hidden");
+  benchmarkInviteResult.classList.add("hidden");
+  benchmarkInviteErrorDetails.classList.add("hidden");
+  benchmarkInviteErrorDetails.open = false;
+  benchmarkInviteApplyButton.hidden = true;
+  benchmarkInviteApplyButton.disabled = true;
+  benchmarkInviteCustomButton.hidden = true;
+  benchmarkInviteExportButton.hidden = true;
+  benchmarkInviteCloseButton.hidden = true;
+  benchmarkInviteIntroFirstLine.textContent = benchmarkMessage("msg.benchmark_intro_finding.1d22");
+  clearNativeBenchmarkResult();
+
+  benchmarkRunInProgress = true;
+  hardwareOptimizationSource = "manual";
+  let startingGuard = false;
+  let progressUnlisten: (() => void) | null = null;
+  let resultChoice: HardwareOptimizationChoice = "default";
+  const runId = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    await invoke("set_native_benchmark_starting", { enabled: true });
+    startingGuard = true;
+
+    progressUnlisten = await listenNative<Record<string, unknown>>(
+      "rdt-manual-hardware-progress",
+      ({ payload }) => {
+        const phase = String(payload.phase ?? "");
+        const candidateId = String(payload.candidate_id ?? "");
+        const candidate = discoveredManualHardwareCandidates.find(
+          (item) => item.candidate_id === candidateId,
+        );
+        const candidateIndex = Number(payload.candidate_index);
+        const candidateCount = Number(payload.candidate_count);
+
+        if (
+          !Number.isInteger(candidateIndex) ||
+          candidateIndex < 1 ||
+          !Number.isInteger(candidateCount) ||
+          candidateCount < candidateIndex
+        ) {
+          if (phase === "benchmark-incomplete") {
+            showHardwareOptimizationMessage(
+              benchmarkMessage("msg.benchmark_manual_incomplete.1d47"),
+              "warning",
+            );
+          }
+          return;
+        }
+
+        const device = String(
+          candidate?.device || String(payload.provider ?? "Hardware").toUpperCase(),
+        );
+        const position = {
+          index: String(candidateIndex),
+          count: String(candidateCount),
+          device,
+        };
+
+        if (phase === "candidate-start") {
+          showHardwareOptimizationMessage(
+            benchmarkMessage("msg.benchmark_manual_candidate_running.1d47", position),
+            "pending",
+          );
+        } else if (phase === "candidate-qualified") {
+          const median = Number(payload.median_inference_ms);
+          if (Number.isFinite(median) && median > 0) {
+            showHardwareOptimizationMessage(
+              benchmarkMessage("msg.benchmark_manual_candidate_qualified.1d47", {
+                ...position,
+                median: median.toFixed(1),
+              }),
+              "good",
+            );
+          }
+        } else if (phase === "candidate-disqualified") {
+          showHardwareOptimizationMessage(
+            benchmarkMessage("msg.benchmark_manual_candidate_disqualified.1d47", position),
+            "warning",
+          );
+        } else if (phase === "benchmark-incomplete") {
+          showHardwareOptimizationMessage(
+            benchmarkMessage("msg.benchmark_manual_incomplete.1d47"),
+            "warning",
+          );
+        }
+      },
+    ).catch(() => null);
+
+    showHardwareOptimizationMessage(
+      benchmarkMessage("msg.benchmark_intro_finding.1d22"),
+      "pending",
+    );
+
+    const report = await invoke<Record<string, any>>("run_manual_hardware_benchmark", {
+      model: selectedModel,
+      runId,
+      candidateIds: selection.candidateIds,
+      order: selection.order,
+      fixture: selection.fixture,
+      timeLimitEnabled: selection.timeLimitEnabled,
+    });
+
+    if (!report || report.schema !== 1 || report.mode !== "manual" || report.run_id !== runId) {
+      throw new Error(benchmarkMessage("msg.benchmark_manual_invalid_report.1d47"));
+    }
+
+    // The Tauri command restores the exact server that was running before the
+    // benchmark. Refresh UI state only after that native lifecycle completes.
+    backend = await invoke<BackendStatus>("get_backend_status");
+    renderBackendStatus();
+    if (backend.running) {
+      await refreshConnectionStatus();
+      await refreshRemoteStatus();
+    }
+
+    await invoke("set_native_benchmark_starting", { enabled: false });
+    startingGuard = false;
+
+    const results = Array.isArray(report.candidate_results) ? report.candidate_results : [];
+    const selectedId = typeof report.selected_candidate_id === "string"
+      ? report.selected_candidate_id : "";
+    const selectedCandidate = discoveredManualHardwareCandidates.find(
+      (candidate) => candidate.candidate_id === selectedId,
+    );
+    const selectedLabel = selectedCandidate?.device
+      || selectedCandidate?.provider?.toUpperCase()
+      || selectedId
+      || "No qualified candidate";
+
+    const winnerHeading = benchmarkInviteResult.querySelector<HTMLElement>(
+      ".benchmark-result-winner span",
+    );
+    if (winnerHeading) {
+      winnerHeading.textContent = report.selection_kind === "partial-provisional"
+        ? "Provisional candidate"
+        : "Selected candidate";
+    }
+    const winner = benchmarkInviteResult.querySelector<HTMLElement>("#benchmark-result-winner");
+    if (winner) winner.textContent = selectedLabel;
+
+    const complete = report.completed === true
+      && report.status !== "failed"
+      && report.selection_kind !== "partial-provisional";
+    const guidance = benchmarkInviteResult.querySelector<HTMLElement>("#benchmark-result-guidance");
+    if (guidance) {
+      guidance.textContent = report.selection_kind === "partial-provisional"
+        ? "This is the fastest individually qualified candidate from a partial run, not a measured overall winner."
+        : complete
+          ? "The selected candidate passed the manual benchmark qualification."
+          : "No complete comparative winner was established. Review the individual candidate results.";
+    }
+
+    benchmarkResultCandidates.replaceChildren();
+    for (const result of results) {
+      if (!result || typeof result !== "object") continue;
+      const item = result as Record<string, any>;
+      const candidateId = String(item.candidate_id || "");
+      const candidate = discoveredManualHardwareCandidates.find(
+        (entry) => entry.candidate_id === candidateId,
+      );
+      const card = document.createElement("article");
+      card.className = `benchmark-result-candidate${candidateId === selectedId ? " is-recommended" : ""}`;
+
+      const heading = document.createElement("div");
+      heading.className = "benchmark-result-candidate-heading";
+      const name = document.createElement("strong");
+      name.textContent = candidate?.device || candidate?.provider?.toUpperCase() || candidateId || "Hardware candidate";
+      const status = document.createElement("span");
+      status.textContent = String(item.status || "unknown").replace(/[-_]+/g, " ");
+      heading.append(name, status);
+
+      const metrics = document.createElement("div");
+      metrics.className = "benchmark-result-metrics";
+      const metric = document.createElement("div");
+      metric.className = "benchmark-result-metric";
+      const value = document.createElement("strong");
+      const medianMs = Number(item.median_inference_ms);
+      value.textContent = Number.isFinite(medianMs) && medianMs > 0
+        ? `${medianMs.toFixed(1)} ms median`
+        : status.textContent;
+      metric.append(value);
+      metrics.appendChild(metric);
+      card.append(heading, metrics);
+      benchmarkResultCandidates.appendChild(card);
+    }
+
+    benchmarkInviteTechnicalResult.textContent = JSON.stringify(report, null, 2);
+    latestHardwareOptimizationResult = {
+      ...report,
+      createdAtUnixMs: Date.now(),
+      comparisonComplete: false,
+    };
+    benchmarkInviteResult.classList.remove("hidden");
+    benchmarkInviteResult.classList.add("is-complete");
+    benchmarkInviteApplyButton.hidden = true;
+    benchmarkInviteApplyButton.disabled = true;
+    benchmarkInviteCustomButton.hidden = true;
+    benchmarkInviteExportButton.hidden = false;
+    benchmarkInviteExportButton.disabled = false;
+    benchmarkInviteCloseButton.hidden = false;
+    benchmarkInviteCloseButton.disabled = false;
+    benchmarkInviteCloseButton.textContent = benchmarkMessage("msg.benchmark_button_close.1d20");
+    benchmarkInviteCloseButton.classList.remove("primary");
+    benchmarkInviteCloseButton.classList.add("secondary");
+    benchmarkResultFinalStatus.textContent = complete
+      ? benchmarkMessage("msg.benchmark_final_complete.1d20")
+      : benchmarkMessage("msg.benchmark_final_provisional.1d20");
+    showHardwareOptimizationMessage(
+      complete
+        ? "The Windows/Linux manual comparison completed."
+        : "The Windows/Linux manual comparison produced partial or unqualified results.",
+      complete ? "good" : "warning",
+    );
+
+    await transitionBenchmarkProgressToResults();
+    resolveHardwareOptimizationChoice = null;
+    resultChoice = await new Promise<HardwareOptimizationChoice>((resolve) => {
+      resolveHardwareOptimizationChoice = resolve;
+    });
+    resolveHardwareOptimizationChoice = null;
+  } catch (error) {
+    if (startingGuard) {
+      await invoke("set_native_benchmark_starting", { enabled: false }).catch(() => undefined);
+      startingGuard = false;
+    }
+    backend = await invoke<BackendStatus>("get_backend_status").catch(() => backend);
+    renderBackendStatus();
+    benchmarkInviteErrorText.textContent = formatHardwareDeviceText(String(error)).slice(0, 1600);
+    benchmarkInviteErrorDetails.classList.remove("hidden");
+    benchmarkInviteErrorDetails.open = true;
+    benchmarkInviteResult.classList.add("hidden");
+    benchmarkInviteApplyButton.hidden = true;
+    benchmarkInviteCustomButton.hidden = true;
+    benchmarkInviteExportButton.hidden = true;
+    benchmarkInviteCloseButton.hidden = false;
+    benchmarkInviteCloseButton.disabled = false;
+    benchmarkInviteCloseButton.textContent = benchmarkMessage("msg.benchmark_button_close.1d20");
+    showHardwareOptimizationMessage(
+      "The manual comparison did not complete. The backend reported whether the original server was restored.",
+      "warning",
+    );
+    await transitionBenchmarkProgressToResults();
+    resultChoice = await new Promise<HardwareOptimizationChoice>((resolve) => {
+      resolveHardwareOptimizationChoice = resolve;
+    });
+    resolveHardwareOptimizationChoice = null;
+  } finally {
+    if (startingGuard) {
+      try {
+        await invoke("set_native_benchmark_starting", { enabled: false });
+      } catch (releaseError) {
+        console.error("Could not release manual benchmark reservation:", releaseError);
+      } finally {
+        startingGuard = false;
+      }
+    }
+    progressUnlisten?.();
+    pendingManualHardwareSelection = null;
+    benchmarkRunInProgress = false;
+    resolveHardwareOptimizationChoice = null;
+    renderBackendStatus();
+    renderInferenceHardwareStatus();
+    benchmarkInvitePanel.classList.remove("has-optimizer-result");
+    updateSavedBenchmarkAction();
+  }
+
+  return resultChoice;
+}
+
 async function runHardwareOptimizationFlowReserved(
   source: "first-run" | "manual" | "preview",
   qaFirstRunSimulation = false,
 ): Promise<HardwareOptimizationChoice | "skipped"> {
   if (benchmarkRunInProgress) return "skipped";
+  if (source === "manual" && isWindowsOrLinuxRuntime()) {
+    return runWindowsLinuxManualHardwareBenchmarkReserved();
+  }
   benchmarkInviteIntroFirstLine.textContent = benchmarkMessage("msg.benchmark_intro_finding.1d22");
   if (source === "preview" && !developerOptionsEnabled) return "skipped";
   // Only the mandatory first-run benchmark has a shared 180-second budget.
@@ -7835,6 +8312,8 @@ nativeBenchmarkStarted = true;
       await invoke("set_native_benchmark_starting", { enabled: false }).catch((error) => {
         lifecycleUnsafe = true;
         showNotice(benchmarkMessage("msg.benchmark_lifecycle_reservation_unreleased.1d20", { detail: formatHardwareDeviceText(String(error)) }), "error");
+      }).finally(() => {
+        startingGuard = false;
       });
     }
     await restoreOriginalBackendIfNeeded();
@@ -7880,7 +8359,9 @@ nativeBenchmarkStarted = true;
 
 // The first Start click runs the comparison only after the selected model and trusted HTTPS are ready.
 window.addEventListener("rdt-connect-open-benchmark-invite", () => {
-  openManualHardwareSelector();
+  void openManualHardwareSelector().catch((error) => {
+    showNotice(`Could not open the hardware selector: ${formatHardwareDeviceText(String(error))}`, "warning");
+  });
 });
 document.getElementById("open-native-benchmark-button")?.addEventListener("click", () => {
   window.dispatchEvent(new Event("rdt-connect-open-benchmark-invite"));

@@ -21,7 +21,7 @@
               <summary class="version"><span id="header-version-label">v0.2.0-dev.12</span></summary>
               <div class="version-popover">
                 <strong>Current build</strong>
-                <span id="header-build-id">1D46</span>
+                <span id="header-build-id">1D47</span>
                 <small>Check for signed RDT Connect development updates.</small>
                 <button id="header-check-updates-button" class="button update-check-button" type="button" aria-controls="header-update-message">Check for updates</button>
                 <small id="header-update-message" class="header-update-message" aria-live="polite"></small>
@@ -305,9 +305,9 @@ title="" aria-label="Show current RAM usage; click to show peak" aria-pressed="f
         <article class="card remote-page-shell">
         <div class="remote-page-intro">
           <h2>Easy Remote Access</h2>
-          <p class="muted remote-page-subtitle">Record on your phone. Transcribe on your Mac.</p>
-          <div class="remote-flow-illustration" role="img" aria-label="Audio is recorded on your phone, travels over a private connection, and is transcribed on your Mac.">
-            <div class="remote-flow-device remote-flow-mac">
+          <p class="muted remote-page-subtitle">Record on your phone. Transcribe on this computer.</p>
+          <div class="remote-flow-illustration" role="img" aria-label="Audio is recorded on your phone, travels over a private connection, and is transcribed on this computer.">
+            <div class="remote-flow-device remote-flow-desktop">
               <svg viewBox="0 0 124 94" aria-hidden="true" focusable="false">
                 <rect x="13" y="5" width="98" height="65" rx="5" fill="#101820" stroke="#91a6b4" stroke-width="2.2"/>
                 <rect x="19" y="11" width="86" height="53" rx="2.5" fill="#172630" stroke="#314653" stroke-width="1"/>
@@ -318,7 +318,7 @@ title="" aria-label="Show current RAM usage; click to show peak" aria-pressed="f
                 <path d="M5 75 H119 L108 85 H16 Z" fill="#667985" stroke="#91a6b4" stroke-width="1.6" stroke-linejoin="round"/>
                 <path d="M50 76 H74 L78 81 H46 Z" fill="#263944"/>
               </svg>
-              <span><i class="remote-flow-indicator remote-flow-transcribe-indicator" aria-hidden="true"></i>Transcribe on Mac</span>
+              <span><i class="remote-flow-indicator remote-flow-transcribe-indicator" aria-hidden="true"></i>Transcribe on this computer</span>
             </div>
             <svg class="remote-flow-connector" viewBox="0 0 250 72" aria-hidden="true" focusable="false" preserveAspectRatio="none">
               <path class="remote-flow-dotted-path" d="M3 56 C58 4 191 4 242 56" fill="none" stroke="#55bfe8" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 8"/>
@@ -346,7 +346,7 @@ title="" aria-label="Show current RAM usage; click to show peak" aria-pressed="f
           <section class="column remote-step-column"><article class="card remote-step-card remote-step-one">
             <div class="card-heading remote-step-heading"><div class="remote-step-title"><span class="remote-step-number">1</span><h2>Connect another device</h2></div><span class="eyebrow">Private HTTPS</span></div>
             <p class="remote-vpn-note" data-l10n-rich="remoteAccess.vpnRequirement">Remote access requires <strong data-l10n-slot="vpnServiceType" data-l10n-key="remoteAccess.vpnServiceType">Tailscale or another VPN/private network</strong> that lets your phone securely reach this device.</p>
-            <details class="tailscale-help"><summary>How private access works</summary><p>Tailscale provides the private encrypted route; the QR code only requests browser access.</p><ol class="tailscale-steps"><li><strong>Connect both devices.</strong> Install Tailscale on this Mac and your phone, then sign in to the same account.</li><li><strong>Start and set up.</strong> Start the local server and choose Set up remote access.</li><li><strong>Pair and approve.</strong> Generate the short-lived QR, scan it with your phone, then approve the request in step 2.</li></ol><p class="muted field-help" data-l10n-rich="remoteAccess.installTailscale">Install Tailscale for macOS from <a data-l10n-slot="officialGuide" href="https://tailscale.com/docs/install/mac" target="_blank" rel="noopener noreferrer">the official guide</a>.</p></details>
+            <details class="tailscale-help"><summary>How private access works</summary><p>Tailscale provides the private encrypted route; the QR code only requests browser access.</p><ol class="tailscale-steps"><li><strong>Connect both devices.</strong> Install Tailscale on this computer and your phone, then sign in to the same account.</li><li><strong>Start and set up.</strong> Start the local server and choose Set up remote access.</li><li><strong>Pair and approve.</strong> Generate the short-lived QR, scan it with your phone, then approve the request in step 2.</li></ol><p class="muted field-help" data-l10n-rich="remoteAccess.installTailscale">Install Tailscale for your computer from <a data-l10n-slot="officialGuide" href="https://tailscale.com/docs/install" target="_blank" rel="noopener noreferrer">the official guide</a>.</p></details>
             <div class="button-row remote-access-actions">
               <button id="setup-remote" class="button primary" disabled>Set up remote access</button>
             </div>
@@ -429,7 +429,7 @@ title="" aria-label="Show current RAM usage; click to show peak" aria-pressed="f
               </select>
             </div>
 
-            <label class="menu-bar-option recommended-option"><input id="keep-in-menu-bar" type="checkbox" checked /><span class="gold-checkbox-visual" aria-hidden="true"></span><span class="menu-bar-option-copy"><strong>Show in menu bar</strong><small>When on, closing the window keeps RDT Connect in the menu bar. When off, closing quits the app and stops its managed server.</small></span></label>
+            <label class="menu-bar-option recommended-option"><input id="keep-in-menu-bar" type="checkbox" checked /><span class="gold-checkbox-visual" aria-hidden="true"></span><span class="menu-bar-option-copy"><strong data-l10n-key="msg.show_in_menu_bar.d24a581a">Show in menu bar</strong><small data-l10n-key="msg.when_on_closing_the_window_keeps_rdt_connect.573910b7">When on, closing the window keeps RDT Connect in the menu bar. When off, closing quits the app and stops its managed server.</small></span></label>
               <article id="offline-only-mode-setting" class="card settings-general-card settings-offline-only-card" aria-label="Offline only mode">
   <label class="visual-setup-guide-toggle" for="offline-only-mode-toggle">
                   <span class="visual-setup-guide-toggle-copy"><strong data-l10n-key="msg.offline_only_mode.c8de590d">Offline only mode</strong><small class="visual-setup-guide-description" data-l10n-key="msg.offline_only_mode_description.polish">Uses an offline version of RDT Voice.</small></span>
@@ -542,9 +542,9 @@ title="" aria-label="Show current RAM usage; click to show peak" aria-pressed="f
               <div class="about-actions-row"><button id="about-youtube-button" class="button secondary" type="button" title="Open the Rolan & Doris Tech YouTube channel in your default browser">Support us on YouTube ↗</button></div></div>
             <details class="legal-details">
               <summary>Licences and third-party acknowledgements</summary>
-              <p class="muted">RDT Voice, RDT Connect, third-party libraries, and model files may have different terms. The current RDT Voice repository identifies its source license as PolyForm Noncommercial 1.0.0; the historical MIT text does not by itself establish the license for a current release. Always check the exact version and model card you use.</p>
+              <p class="muted" data-l10n-key="msg.rdt_voice_rdt_connect_third_party_libraries.607f9167">RDT Voice, RDT Connect, third-party libraries, and model files may have different terms. The current RDT Voice repository identifies its source license as PolyForm Noncommercial 1.0.0; the historical MIT text does not by itself establish the license for a current release. Always check the exact version and model card you use.</p>
               <div class="legal-links"><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" id="legal-rdt-voice-license-link">RDT Voice license</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/COMMERCIAL_LICENSE.md" target="_blank" rel="noopener noreferrer" id="legal-commercial-license-link">Commercial licensing</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/LICENSE_HISTORY.md" target="_blank" rel="noopener noreferrer" id="legal-license-history-link">License history</a><a href="https://github.com/RolanDorisTech/rdt-voice/blob/main/README.md#acknowledgements-and-third-party-licenses" target="_blank" rel="noopener noreferrer" id="legal-third-party-acknowledgements-link">Third-party acknowledgements</a></div>
-              <p class="muted field-help">Model weights and runtime dependencies retain their own licences and notices. RDT Connect's own release licence must be read from the licence file included with that release.</p>
+              <p class="muted field-help" data-l10n-key="msg.model_weights_and_runtime_dependencies_retai.d56ae58f">Model weights and runtime dependencies retain their own licences and notices. RDT Connect's own release licence must be read from the licence file included with that release.</p>
             </details>
             <p class="about-copyright">© 2026 Rolan &amp; Doris Tech</p>
           </article>

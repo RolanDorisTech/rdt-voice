@@ -20,8 +20,8 @@ class FeedTests(unittest.TestCase):
             ("0.2.0-dev.11.1D04", "darwin-aarch64"),
             ("0.2.0-dev.11.2A05", "windows-aarch64"),
             ("0.2.0-dev.11.3A01", "windows-x86_64"),
-            ("0.2.0-dev.11.4U01", "linux-aarch64"),
-            ("0.2.0-dev.11.5D01", "linux-x86_64"),
+            ("0.2.0-dev.11.4L001", "linux-aarch64"),
+            ("0.2.0-dev.11.5L001", "linux-x86_64"),
         ]
         for version, target in cases:
             with self.subTest(target=target):
@@ -48,6 +48,8 @@ class FeedTests(unittest.TestCase):
             ("0.2.0.2A01", "windows-aarch64"),
             ("0.2.0-dev.11.2A5", "windows-aarch64"),
             ("0.2.0-dev.11.2A05-extra", "windows-aarch64"),
+            ("0.2.0-dev.11.4U01", "linux-aarch64"),
+            ("0.2.0-dev.11.5D01", "linux-x86_64"),
         ]:
             with self.subTest(version=version, target=target):
                 with self.assertRaises(ValueError):

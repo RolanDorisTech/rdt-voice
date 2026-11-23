@@ -1,0 +1,83 @@
+name: Cross-platform contract validation
+
+on:
+  workflow_call:
+  push:
+    paths:
+      - ".github/scripts/validate-platform-contracts.sh"
+      - ".github/workflows/platform-contracts.yml"
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/dependabot.yml"
+      - "backend/**"
+      - "rdt_connect/**"
+  pull_request:
+    paths:
+      - ".github/scripts/validate-platform-contracts.sh"
+      - ".github/workflows/platform-contracts.yml"
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/dependabot.yml"
+      - "backend/**"
+      - "rdt_connect/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-contracts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Python, desktop and packaging contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out qualified source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/linux/requirements-linux.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "26.9.0"
+
+      - name: Install native test utility
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
+      - name: Install pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="actionlint_1.7.12_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v1.7.12/$archive"
+          curl --fail --location --retry 3 --retry-all-errors "$url" --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$RUNNER_TEMP/$archive" | sha256sum --check --status
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          sudo install -m 0755 "$RUNNER_TEMP/actionlint" /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: Install pinned GitHub Actions lock verifier
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh extension install github/gh-actions-lock --pin v0.5.1
+          gh actions-lock --help >/dev/null
+
+      - name: Run saved cross-platform validation
+        env:
+          PYTHON312: python3.12
+          GH_TOKEN: ${{ github.token }}
+          RDT_REQUIRE_ACTIONLINT: "1"
+          RDT_REQUIRE_ACTIONS_LOCK: "1"
+        run: .github/scripts/validate-platform-contracts.sh

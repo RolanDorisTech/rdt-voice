@@ -1,1083 +1,596 @@
-name: RDT Connect Windows Public Release
+name: Promote RDT Connect Windows and Linux qualification artifacts
+
+run-name: Promote qualification run ${{ inputs.qualification_run_id }}
 
 on:
   workflow_dispatch:
     inputs:
+      qualification_run_id:
+        description: Successful four-target qualification workflow run ID
+        required: true
+        type: string
+      qualification_run_attempt:
+        description: Exact successful run attempt
+        required: true
+        default: "1"
+        type: string
+      expected_base_version:
+        description: Base version without platform marker
+        required: true
+        type: string
       publish_release:
-        description: "Publish both architecture-specific releases after successful builds"
+        description: Publish all four releases after every draft is verified
         required: true
         default: false
         type: boolean
 
 permissions:
+  actions: read
   contents: read
 
+concurrency:
+  group: rdt-connect-release-promotion-${{ inputs.expected_base_version }}
+  cancel-in-progress: false
+
 jobs:
-  arm64-updater-contract:
-    name: Fast Windows updater artifact contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
+  promote:
+    name: Verify and promote exact qualified artifacts (no rebuild)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+      QUALIFICATION_RUN_ATTEMPT: ${{ inputs.qualification_run_attempt }}
+      EXPECTED_BASE_VERSION: ${{ inputs.expected_base_version }}
+      QUALIFICATION_WORKFLOW_NAME: Windows and Linux four-target native qualification
+      QUALIFICATION_WORKFLOW_PATH: .github/workflows/windows-linux-native-qualification.yml
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - name: Validate Tauri updater artifact contract
+      - name: Preflight release mutation credential
         shell: bash
-        run: |
-          python3 - <<'PYCONTRACT'
-          import json
-          from pathlib import Path
-
-          config = json.loads(Path("rdt_connect/src-tauri/tauri.windows.conf.json").read_text())
-          workflow = Path(".github/workflows/windows-arm64-installer.yml").read_text()
-          assert config.get("bundle", {}).get("createUpdaterArtifacts") is True, "Tauri updater artifacts must be enabled"
-          assert "*-setup.exe" in workflow, "Workflow must verify the actual NSIS setup executable"
-          assert '"$($installer.FullName).sig"' in workflow, "Workflow must verify the matching installer signature"
-          assert "$signature.sha256" in workflow, "Distribution must include the signature checksum"
-          print("PASS: Tauri v2 NSIS updater artifact contract")
-          PYCONTRACT
-
-  arm64-signing-preflight:
-    needs: arm64-updater-contract
-    runs-on: windows-11-arm
-    timeout-minutes: 15
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7.0.1
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 22
-      - name: Install dependencies for signing probe
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm ci
-      - name: Preflight updater signing secrets
-        working-directory: rdt_connect
-        shell: pwsh
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TAURI_SIGNING_PRIVATE_KEY_SHA256: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_SHA256 }}
+          RELEASE_TOKEN: ${{ secrets.RDT_RELEASE_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            throw 'Updater signing preflight failed: private-key secret is empty or unavailable.'
-          }
-          $keyText = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
-          $sha = [System.Security.Cryptography.SHA256]::Create()
-          try {
-            $keyBytes = [System.Text.Encoding]::UTF8.GetBytes($keyText)
-            $actualFingerprint = [Convert]::ToHexString($sha.ComputeHash($keyBytes))
-          } finally {
-            $sha.Dispose()
-          }
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_SHA256) -or
-              $actualFingerprint -ine $env:TAURI_SIGNING_PRIVATE_KEY_SHA256.Trim()) {
-            throw 'Updater signing preflight failed: supplied private key does not match the approved fingerprint.'
-          }
-          Remove-Variable keyText,keyBytes,actualFingerprint -ErrorAction SilentlyContinue
-          $probe = Join-Path $env:RUNNER_TEMP 'rdt-updater-signing-preflight.txt'
-          $signature = "$probe.sig"
-          try {
-            Set-Content -LiteralPath $probe -Value 'RDT updater signing preflight' -NoNewline -Encoding ascii
-            npm run tauri -- signer sign $probe
-            if ($LASTEXITCODE -ne 0) { throw 'Tauri could not sign the preflight probe with the configured secrets.' }
-            if (!(Test-Path -LiteralPath $signature) -or (Get-Item -LiteralPath $signature).Length -eq 0) {
-              throw 'Signing preflight produced no non-empty signature.'
-            }
-            Write-Host 'Updater signing preflight: PASS'
-          } finally {
-            Remove-Item -LiteralPath $probe,$signature -Force -ErrorAction SilentlyContinue
-          }
-
-  arm64-package:
-    needs: arm64-signing-preflight
-    runs-on: windows-11-arm
-    timeout-minutes: 120
-
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 22
-
-      - name: Prepare Windows ARM64 FFmpeg
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-arm64-lgpl.zip'
-          $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg-arm64-extracted'
-          $destination = Join-Path $env:RUNNER_TEMP 'rdt-ffmpeg-arm64'
-          # Pin an immutable release asset and verify its SHA-256 before extraction.
-          # Source: BtbN/FFmpeg-Builds release autobuild-2026-10-19-13-06,
-          # checksums.sha256; never consume the mutable /download/latest/ alias.
-          $uri = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-19-13-06/ffmpeg-N-127696-g8b3525e718-winarm64-lgpl.zip'
-          $expectedSha256 = 'd4fd29fa9128fc1ba623e23b2ea1f13f283c646eb108c8583854371b2ba3d9d4'
-
-          Invoke-WebRequest -Uri $uri -OutFile $archive
-          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-            throw "Pinned FFmpeg archive SHA-256 mismatch: expected $expectedSha256; actual $actualSha256."
-          }
-          Write-Host "FFMPEG_ARCHIVE_SHA256_VERIFIED=$actualSha256"
-
-          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
-          $ffmpeg = Get-ChildItem $extract -Filter ffmpeg.exe -File -Recurse | Select-Object -First 1
-          $ffprobe = Get-ChildItem $extract -Filter ffprobe.exe -File -Recurse | Select-Object -First 1
-          $license = Get-ChildItem $extract -File -Recurse |
-            Where-Object { $_.Name -in @('LICENSE.txt', 'LICENSE') } |
-            Select-Object -First 1
-
-          if (-not $ffmpeg -or -not $ffprobe -or -not $license) {
-            throw 'FFmpeg executables or license notice missing from downloaded archive.'
-          }
-
-          New-Item -ItemType Directory -Force $destination | Out-Null
-          Copy-Item $ffmpeg.FullName (Join-Path $destination 'ffmpeg.exe')
-          Copy-Item $ffprobe.FullName (Join-Path $destination 'ffprobe.exe')
-          Copy-Item $license.FullName (Join-Path $destination 'LICENSE.txt')
-
-          $ffmpegVersion = & (Join-Path $destination 'ffmpeg.exe') -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Prepared ARM64 ffmpeg.exe failed its version check with exit code $LASTEXITCODE."
-          }
-          $ffmpegVersion | Select-Object -First 1
-
-          $ffprobeVersion = & (Join-Path $destination 'ffprobe.exe') -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Prepared ARM64 ffprobe.exe failed its version check with exit code $LASTEXITCODE."
-          }
-          $ffprobeVersion | Select-Object -First 1
-          "RDT_FFMPEG_DIR=$destination" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Set up native Rust ARM64 target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-pc-windows-msvc
-
-      - name: Install pinned Windows ARM64 Vulkan SDK
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = '1.4.363.0'
-          $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk-arm64.exe'
-          $sdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK-$version"
-          $download = "https://sdk.lunarg.com/sdk/download/$version/warm/vulkan_sdk.exe"
-          $checksumUri = "https://sdk.lunarg.com/sdk/sha/$version/warm/vulkan_sdk.exe.json"
-
-          $checksum = Invoke-RestMethod -Uri $checksumUri
-          $expectedFile = "vulkansdk-windows-ARM64-$version.exe"
-          if ($checksum.version -ne $version) {
-            throw "LunarG checksum version mismatch: expected $version; got '$($checksum.version)'."
-          }
-          if ($checksum.platform -ne 'warm') {
-            throw "LunarG checksum platform mismatch: expected warm; got '$($checksum.platform)'."
-          }
-          if ($checksum.file -ne $expectedFile) {
-            throw "LunarG checksum filename mismatch: expected '$expectedFile'; got '$($checksum.file)'."
-          }
-          $expected = ([string]$checksum.sha).ToLowerInvariant()
-          if ($expected -notmatch '^[0-9a-f]{64}$') {
-            throw "LunarG returned an invalid SHA-256 for Vulkan SDK $version."
-          }
-
-          Invoke-WebRequest -Uri $download -OutFile $installer
-          $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) {
-            throw "Vulkan SDK SHA-256 mismatch. Expected $expected; got $actual."
-          }
-          Write-Host "VULKAN_SDK_VERSION=$version"
-          Write-Host "VULKAN_SDK_SHA256=$actual"
-
-          & $installer --root $sdkRoot --accept-licenses --default-answer --confirm-command install
-          if ($LASTEXITCODE -ne 0) {
-            throw "Vulkan SDK $version ARM64 installation failed with exit code $LASTEXITCODE."
-          }
-
-          $glslc = Join-Path $sdkRoot 'Bin/glslc.exe'
-          if (-not (Test-Path -LiteralPath $glslc -PathType Leaf)) {
-            throw "Vulkan SDK installed without expected shader compiler: $glslc"
-          }
-
-          $env:VULKAN_SDK = $sdkRoot
-          "VULKAN_SDK=$sdkRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-          & $glslc --version
-          if ($LASTEXITCODE -ne 0) { throw 'Vulkan shader compiler verification failed.' }
-
-      - name: Set up pinned native Python 3.13.16 (ARM64)
-        id: setup-python
-        uses: actions/setup-python@v7.1.0
-        with:
-          python-version: '3.13.16'
-          architecture: 'arm64'
-
-      - name: Prepare native Windows backend and web resources
-        env:
-          RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
-          if ($arch -ne 'Arm64') {
-            throw "Expected native ARM64 runner; got $arch."
-          }
-
-          $python = $env:RDT_PYTHON
-          if (-not $python -or -not (Test-Path $python)) {
-            throw 'Pinned native ARM64 Python 3.13.16 executable not found.'
-          }
-
-          $info = (& $python -c 'import platform,sys; print("%d.%d.%d|%s" % (*sys.version_info[:3], platform.machine()))').Trim()
-          Write-Host "Python verification: $info"
-          if ($info -notmatch '^3\.13\.16\|(?i:ARM64|aarch64)$') {
-            throw "Expected native ARM64 Python 3.13.16; got $info."
-          }
-
-          & .\rdt_connect\scripts\prepare-windows-bundle.ps1 `
-            -TargetArch ARM64 `
-            -Python $python `
-            -FfmpegDir $env:RDT_FFMPEG_DIR `
-            -EnableVulkan `
-            -RequireGpuWorker
-
-      - name: Upload Windows ARM64 native worker diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: windows-arm64-native-worker-diagnostics
-          path: ${{ runner.temp }}/rdt-ARM64-worker-*.log
-          if-no-files-found: warn
-          retention-days: 3
-
-      - name: Install frontend dependencies
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm ci
-      - name: Stamp isolated Windows build version (2A07 namespace)
-        working-directory: rdt_connect
-        shell: pwsh
-        run: |
-          node scripts/stamp-platform-build.cjs windows 2A07
-          if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
-          node scripts/test-platform-build-stamping.cjs
-          if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }
-
-      - name: Test build versioning
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm run test:versioning
-
-      - name: Build frontend
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm run build
-
-      - name: Build Windows ARM64 NSIS installer
-        working-directory: rdt_connect
-        shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          npm run tauri -- build --target aarch64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json
-          if ($LASTEXITCODE -ne 0) { throw 'Tauri Windows ARM64 installer build failed.' }
-
-      - name: Verify installer and generate checksum
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis'
-          $installers = @(Get-ChildItem $bundle -Filter '*-setup.exe' -File -ErrorAction SilentlyContinue)
-
-          if ($installers.Count -lt 1) {
-            throw "No NSIS setup installer found in $bundle"
-          }
-
-          foreach ($installer in $installers) {
-            $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
-            "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
-            Write-Host "Installer: $($installer.Name)"
-            Write-Host "SHA-256: $hash"
-          }
-
-      - name: Verify signed Windows updater artifacts
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis'
-          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
-          if ($installers.Count -lt 1) {
-            throw "No NSIS setup installer found in $bundle"
-          }
-          foreach ($installer in $installers) {
-            $signature = "$($installer.FullName).sig"
-            if (-not (Test-Path -LiteralPath $signature -PathType Leaf)) {
-              throw "Updater signature missing: $signature"
-            }
-            foreach ($file in @($installer.FullName, $signature)) {
-              $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-              "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256" -Encoding ascii
-              Write-Host "Verified updater artifact: $(Split-Path $file -Leaf)"
-            }
-          }
-
-      - name: Package Windows pre-install guide
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $guide = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/windows-package/guide'
-          $stage = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-Installation-Guide'
-          $zip = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-Installation-Guide.zip'
-          $required = @(
-            'windows_installation_guide.html',
-            'rdt_connect_guide_icon.png',
-            'rdt_connect_guide.ico'
-          )
-
-          foreach ($name in $required) {
-            $file = Join-Path $guide $name
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-              throw "Required installation guide asset is missing: $file"
-            }
-          }
-
-          if (Test-Path -LiteralPath $stage) {
-            Remove-Item -LiteralPath $stage -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $stage | Out-Null
-          foreach ($name in $required) {
-            Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
-          }
-
-          if (Test-Path -LiteralPath $zip) {
-            Remove-Item -LiteralPath $zip -Force
-          }
-          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
-          Write-Host "Guide ZIP: $zip"
-          Write-Host "SHA-256: $hash"
-
-      - name: Package combined Windows ARM64 distribution
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis'
-          $guide = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/windows-package/guide'
-          $stage = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-ARM64-DISTRIBUTION'
-          $zip = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-ARM64-DISTRIBUTION.zip'
-
-          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
-          if ($installers.Count -ne 1) {
-            throw "Expected exactly one Windows setup installer; found $($installers.Count)."
-          }
-          $installer = $installers[0]
-          $installerHash = "$($installer.FullName).sha256"
-          if (-not (Test-Path -LiteralPath $installerHash -PathType Leaf)) {
-            throw "Installer checksum is missing: $installerHash"
-          }
-
-          $required = @(
-            'windows_installation_guide.html',
-            'rdt_connect_guide_icon.png',
-            'rdt_connect_guide.ico'
-          )
-          foreach ($name in $required) {
-            if (-not (Test-Path -LiteralPath (Join-Path $guide $name) -PathType Leaf)) {
-              throw "Required guide asset is missing: $name"
-            }
-          }
-
-          if (Test-Path -LiteralPath $stage) {
-            Remove-Item -LiteralPath $stage -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $stage | Out-Null
-          Copy-Item -LiteralPath $installer.FullName -Destination $stage
-          Copy-Item -LiteralPath $installerHash -Destination $stage
-
-          $updaterInstallers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
-          if ($updaterInstallers.Count -lt 1) {
-            throw "No NSIS installer available to package from $bundle"
-          }
-          foreach ($installer in $updaterInstallers) {
-            $signature = "$($installer.FullName).sig"
-            foreach ($file in @($installer.FullName, $signature, "$($installer.FullName).sha256", "$signature.sha256")) {
-              if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-                throw "Required signed updater distribution file is missing: $file"
-              }
-              Copy-Item -LiteralPath $file -Destination $stage
-            }
-          }
-
-          foreach ($name in $required) {
-            Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
-          }
-
-          if (Test-Path -LiteralPath $zip) {
-            Remove-Item -LiteralPath $zip -Force
-          }
-          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-          $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$zipHash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
-          Write-Host "Distribution ZIP: $zip"
-          Write-Host "SHA-256: $zipHash"
-
-      - name: Upload combined Windows ARM64 distribution
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-ARM64-DISTRIBUTION
-          path: |
-            ${{ runner.temp }}/RDT-Connect-Windows-ARM64-DISTRIBUTION.zip
-            ${{ runner.temp }}/RDT-Connect-Windows-ARM64-DISTRIBUTION.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload Windows pre-install guide artifact
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-ARM64-INSTALLATION-GUIDE
-          path: |
-            ${{ runner.temp }}/RDT-Connect-Windows-Installation-Guide.zip
-            ${{ runner.temp }}/RDT-Connect-Windows-Installation-Guide.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload test installer artifact
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-ARM64-PUBLIC-RELEASE-INSTALLER
-          path: |
-            rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
-            rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sha256
-            rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig
-            rdt_connect/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-  x64-updater-contract:
-    name: Fast Windows updater artifact contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-      - name: Validate Tauri updater artifact contract
-        shell: bash
-        run: |
-          python3 - <<'PYCONTRACT'
-          import json
-          from pathlib import Path
-
-          config = json.loads(Path("rdt_connect/src-tauri/tauri.windows.conf.json").read_text())
-          workflow = Path(".github/workflows/windows-x64-installer.yml").read_text()
-          assert config.get("bundle", {}).get("createUpdaterArtifacts") is True, "Tauri updater artifacts must be enabled"
-          assert "*-setup.exe" in workflow, "Workflow must verify the actual NSIS setup executable"
-          assert '"$($installer.FullName).sig"' in workflow, "Workflow must verify the matching installer signature"
-          assert "$signature.sha256" in workflow, "Distribution must include the signature checksum"
-          print("PASS: Tauri v2 NSIS updater artifact contract")
-          PYCONTRACT
-
-  x64-signing-preflight:
-    needs: x64-updater-contract
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7.0.1
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 22
-      - name: Install dependencies for signing probe
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm ci
-      - name: Preflight updater signing secrets
-        working-directory: rdt_connect
-        shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TAURI_SIGNING_PRIVATE_KEY_SHA256: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_SHA256 }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            throw 'Updater signing preflight failed: private-key secret is empty or unavailable.'
-          }
-          $keyText = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
-          $sha = [System.Security.Cryptography.SHA256]::Create()
-          try {
-            $keyBytes = [System.Text.Encoding]::UTF8.GetBytes($keyText)
-            $actualFingerprint = [Convert]::ToHexString($sha.ComputeHash($keyBytes))
-          } finally {
-            $sha.Dispose()
-          }
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_SHA256) -or
-              $actualFingerprint -ine $env:TAURI_SIGNING_PRIVATE_KEY_SHA256.Trim()) {
-            throw 'Updater signing preflight failed: supplied private key does not match the approved fingerprint.'
-          }
-          Remove-Variable keyText,keyBytes,actualFingerprint -ErrorAction SilentlyContinue
-          $probe = Join-Path $env:RUNNER_TEMP 'rdt-updater-signing-preflight.txt'
-          $signature = "$probe.sig"
-          try {
-            Set-Content -LiteralPath $probe -Value 'RDT updater signing preflight' -NoNewline -Encoding ascii
-            npm run tauri -- signer sign $probe
-            if ($LASTEXITCODE -ne 0) { throw 'Tauri could not sign the preflight probe with the configured secrets.' }
-            if (!(Test-Path -LiteralPath $signature) -or (Get-Item -LiteralPath $signature).Length -eq 0) {
-              throw 'Signing preflight produced no non-empty signature.'
-            }
-            Write-Host 'Updater signing preflight: PASS'
-          } finally {
-            Remove-Item -LiteralPath $probe,$signature -Force -ErrorAction SilentlyContinue
-          }
-
-  x64-package:
-    needs: x64-signing-preflight
-    runs-on: windows-latest
-    timeout-minutes: 120
-
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 22
-
-      - name: Prepare Windows x64 FFmpeg
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-x64-lgpl.zip'
-          $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg-x64-extracted'
-          $destination = Join-Path $env:RUNNER_TEMP 'rdt-ffmpeg-x64'
-          # Pin an immutable release asset and verify its SHA-256 before extraction.
-          # Source: BtbN/FFmpeg-Builds release autobuild-2026-10-19-13-06,
-          # checksums.sha256; never consume the mutable /download/latest/ alias.
-          $uri = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-19-13-06/ffmpeg-N-127696-g8b3525e718-win64-lgpl.zip'
-          $expectedSha256 = 'f6cfd42be37761089215ec4015146d7f0f679183fa966ac1a8cdf95b62e446dd'
-
-          Invoke-WebRequest -Uri $uri -OutFile $archive
-          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-            throw "Pinned FFmpeg archive SHA-256 mismatch: expected $expectedSha256; actual $actualSha256."
-          }
-          Write-Host "FFMPEG_ARCHIVE_SHA256_VERIFIED=$actualSha256"
-
-          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
-          $ffmpeg = Get-ChildItem $extract -Filter ffmpeg.exe -File -Recurse | Select-Object -First 1
-          $ffprobe = Get-ChildItem $extract -Filter ffprobe.exe -File -Recurse | Select-Object -First 1
-          $license = Get-ChildItem $extract -File -Recurse |
-            Where-Object { $_.Name -in @('LICENSE.txt', 'LICENSE') } |
-            Select-Object -First 1
-
-          if (-not $ffmpeg -or -not $ffprobe -or -not $license) {
-            throw 'FFmpeg executables or license notice missing from downloaded archive.'
-          }
-
-          New-Item -ItemType Directory -Force $destination | Out-Null
-          Copy-Item $ffmpeg.FullName (Join-Path $destination 'ffmpeg.exe')
-          Copy-Item $ffprobe.FullName (Join-Path $destination 'ffprobe.exe')
-          Copy-Item $license.FullName (Join-Path $destination 'LICENSE.txt')
-
-          $ffmpegVersion = & (Join-Path $destination 'ffmpeg.exe') -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Prepared x64 ffmpeg.exe failed its version check with exit code $LASTEXITCODE."
-          }
-          $ffmpegVersion | Select-Object -First 1
-
-          $ffprobeVersion = & (Join-Path $destination 'ffprobe.exe') -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Prepared x64 ffprobe.exe failed its version check with exit code $LASTEXITCODE."
-          }
-          $ffprobeVersion | Select-Object -First 1
-          "RDT_FFMPEG_DIR=$destination" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Set up native Rust x64 target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Install pinned Windows x64 Vulkan SDK
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = '1.4.363.0'
-          $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk-x64.exe'
-          $sdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK-$version"
-          $download = "https://sdk.lunarg.com/sdk/download/$version/windows/vulkan_sdk.exe"
-          $checksumUri = "https://sdk.lunarg.com/sdk/sha/$version/windows/vulkan_sdk.exe.json"
-
-          $checksum = Invoke-RestMethod -Uri $checksumUri
-          $expectedFile = "vulkansdk-windows-X64-$version.exe"
-          if ($checksum.version -ne $version) {
-            throw "LunarG checksum version mismatch: expected $version; got '$($checksum.version)'."
-          }
-          if ($checksum.platform -ne 'windows') {
-            throw "LunarG checksum platform mismatch: expected windows; got '$($checksum.platform)'."
-          }
-          if ($checksum.file -ne $expectedFile) {
-            throw "LunarG checksum filename mismatch: expected '$expectedFile'; got '$($checksum.file)'."
-          }
-          $expected = ([string]$checksum.sha).ToLowerInvariant()
-          $pinnedSha256 = '94a82d378f7a5e3e54c9db7d2fb7016af136e14ac0a18dbf0f2f67a36352d141'
-          if ($expected -ne $pinnedSha256) {
-            throw "LunarG Vulkan SDK checksum differs from the approved x64 pin. Expected $pinnedSha256; got $expected."
-          }
-          if ($expected -notmatch '^[0-9a-f]{64}$') {
-            throw "LunarG returned an invalid SHA-256 for Vulkan SDK $version."
-          }
-
-          Invoke-WebRequest -Uri $download -OutFile $installer
-          $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) {
-            throw "Vulkan SDK SHA-256 mismatch. Expected $expected; got $actual."
-          }
-          Write-Host "VULKAN_SDK_VERSION=$version"
-          Write-Host "VULKAN_SDK_SHA256=$actual"
-
-          & $installer --root $sdkRoot --accept-licenses --default-answer --confirm-command install
-          if ($LASTEXITCODE -ne 0) {
-            throw "Vulkan SDK $version x64 installation failed with exit code $LASTEXITCODE."
-          }
-
-          $glslc = Join-Path $sdkRoot 'Bin/glslc.exe'
-          if (-not (Test-Path -LiteralPath $glslc -PathType Leaf)) {
-            throw "Vulkan SDK installed without expected shader compiler: $glslc"
-          }
-
-          $env:VULKAN_SDK = $sdkRoot
-          "VULKAN_SDK=$sdkRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-          & $glslc --version
-          if ($LASTEXITCODE -ne 0) { throw 'Vulkan shader compiler verification failed.' }
-
-      - name: Set up pinned native Python 3.13.16 (x64)
-        id: setup-python
-        uses: actions/setup-python@v7.1.0
-        with:
-          python-version: '3.13.16'
-          architecture: 'x64'
-
-      - name: Prepare native Windows backend and web resources
-        env:
-          RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
-          if ($arch -ne 'X64') {
-            throw "Expected native x64 runner; got $arch."
-          }
-
-          $python = $env:RDT_PYTHON
-          if (-not $python -or -not (Test-Path $python)) {
-            throw 'Pinned native x64 Python 3.13.16 executable not found.'
-          }
-
-          $info = (& $python -c 'import platform,sys; print("%d.%d.%d|%s" % (*sys.version_info[:3], platform.machine()))').Trim()
-          Write-Host "Python verification: $info"
-          if ($info -notmatch '^3\.13\.16\|(?i:amd64|x86_64|x64)$') {
-            throw "Expected native x64 Python 3.13.16 (AMD64/x86_64); got $info."
-          }
-
-          & .\rdt_connect\scripts\prepare-windows-bundle.ps1 `
-            -TargetArch x64 `
-            -Python $python `
-            -FfmpegDir $env:RDT_FFMPEG_DIR `
-            -EnableVulkan `
-            -RequireGpuWorker
-
-      - name: Upload Windows x64 native worker diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: windows-x64-native-worker-diagnostics
-          path: ${{ runner.temp }}/rdt-x64-worker-*.log
-          if-no-files-found: warn
-          retention-days: 3
-
-      - name: Install frontend dependencies
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm ci
-      - name: Stamp isolated Windows build version (3A03 namespace)
-        working-directory: rdt_connect
-        shell: pwsh
-        run: |
-          node scripts/stamp-platform-build.cjs windows 3A03
-          if ($LASTEXITCODE -ne 0) { throw 'Windows build marker/version stamping failed.' }
-          node scripts/test-platform-build-stamping.cjs
-          if ($LASTEXITCODE -ne 0) { throw 'Platform build marker stamping tests failed.' }
-
-      - name: Test build versioning
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm run test:versioning
-
-      - name: Build frontend
-        working-directory: rdt_connect
-        shell: pwsh
-        run: npm run build
-
-      - name: Build Windows x64 NSIS installer
-        working-directory: rdt_connect
-        shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          npm run tauri -- build --target x86_64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json
-          if ($LASTEXITCODE -ne 0) { throw 'Tauri Windows x64 installer build failed.' }
-
-      - name: Verify installer and generate checksum
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
-          $installers = @(Get-ChildItem $bundle -Filter '*-setup.exe' -File -ErrorAction SilentlyContinue)
-
-          if ($installers.Count -lt 1) {
-            throw "No NSIS setup installer found in $bundle"
-          }
-
-          foreach ($installer in $installers) {
-            $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
-            "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
-            Write-Host "Installer: $($installer.Name)"
-            Write-Host "SHA-256: $hash"
-          }
-
-      - name: Verify signed Windows updater artifacts
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
-          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
-          if ($installers.Count -lt 1) {
-            throw "No NSIS setup installer found in $bundle"
-          }
-          foreach ($installer in $installers) {
-            $signature = "$($installer.FullName).sig"
-            if (-not (Test-Path -LiteralPath $signature -PathType Leaf)) {
-              throw "Updater signature missing: $signature"
-            }
-            foreach ($file in @($installer.FullName, $signature)) {
-              $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-              "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256" -Encoding ascii
-              Write-Host "Verified updater artifact: $(Split-Path $file -Leaf)"
-            }
-          }
-
-      - name: Package Windows pre-install guide
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $guide = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/windows-package/guide'
-          $stage = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-Installation-Guide'
-          $zip = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-Installation-Guide.zip'
-          $required = @(
-            'windows_installation_guide.html',
-            'rdt_connect_guide_icon.png',
-            'rdt_connect_guide.ico'
-          )
-
-          foreach ($name in $required) {
-            $file = Join-Path $guide $name
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-              throw "Required installation guide asset is missing: $file"
-            }
-          }
-
-          if (Test-Path -LiteralPath $stage) {
-            Remove-Item -LiteralPath $stage -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $stage | Out-Null
-          foreach ($name in $required) {
-            Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
-          }
-
-          if (Test-Path -LiteralPath $zip) {
-            Remove-Item -LiteralPath $zip -Force
-          }
-          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
-          Write-Host "Guide ZIP: $zip"
-          Write-Host "SHA-256: $hash"
-
-      - name: Package combined Windows x64 distribution
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
-          $guide = Join-Path $env:GITHUB_WORKSPACE 'rdt_connect/windows-package/guide'
-          $stage = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-x64-DISTRIBUTION'
-          $zip = Join-Path $env:RUNNER_TEMP 'RDT-Connect-Windows-x64-DISTRIBUTION.zip'
-
-          $installers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
-          if ($installers.Count -ne 1) {
-            throw "Expected exactly one Windows setup installer; found $($installers.Count)."
-          }
-          $installer = $installers[0]
-          $installerHash = "$($installer.FullName).sha256"
-          if (-not (Test-Path -LiteralPath $installerHash -PathType Leaf)) {
-            throw "Installer checksum is missing: $installerHash"
-          }
-
-          $required = @(
-            'windows_installation_guide.html',
-            'rdt_connect_guide_icon.png',
-            'rdt_connect_guide.ico'
-          )
-          foreach ($name in $required) {
-            if (-not (Test-Path -LiteralPath (Join-Path $guide $name) -PathType Leaf)) {
-              throw "Required guide asset is missing: $name"
-            }
-          }
-
-          if (Test-Path -LiteralPath $stage) {
-            Remove-Item -LiteralPath $stage -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $stage | Out-Null
-          Copy-Item -LiteralPath $installer.FullName -Destination $stage
-          Copy-Item -LiteralPath $installerHash -Destination $stage
-
-          $updaterInstallers = @(Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' -File)
-          if ($updaterInstallers.Count -lt 1) {
-            throw "No NSIS installer available to package from $bundle"
-          }
-          foreach ($installer in $updaterInstallers) {
-            $signature = "$($installer.FullName).sig"
-            foreach ($file in @($installer.FullName, $signature, "$($installer.FullName).sha256", "$signature.sha256")) {
-              if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-                throw "Required signed updater distribution file is missing: $file"
-              }
-              Copy-Item -LiteralPath $file -Destination $stage
-            }
-          }
-
-          foreach ($name in $required) {
-            Copy-Item -LiteralPath (Join-Path $guide $name) -Destination $stage
-          }
-
-          if (Test-Path -LiteralPath $zip) {
-            Remove-Item -LiteralPath $zip -Force
-          }
-          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-          $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$zipHash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
-          Write-Host "Distribution ZIP: $zip"
-          Write-Host "SHA-256: $zipHash"
-
-      - name: Upload combined Windows x64 distribution
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-x64-DISTRIBUTION
-          path: |
-            ${{ runner.temp }}/RDT-Connect-Windows-x64-DISTRIBUTION.zip
-            ${{ runner.temp }}/RDT-Connect-Windows-x64-DISTRIBUTION.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload Windows pre-install guide artifact
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-x64-INSTALLATION-GUIDE
-          path: |
-            ${{ runner.temp }}/RDT-Connect-Windows-Installation-Guide.zip
-            ${{ runner.temp }}/RDT-Connect-Windows-Installation-Guide.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload test installer artifact
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-x64-PUBLIC-RELEASE-INSTALLER
-          path: |
-            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
-            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sha256
-            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig
-            rdt_connect/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-  publish:
-    name: Prepare and optionally publish both Windows releases
-    needs: [arm64-package, x64-package]
-    if: ${{ inputs.publish_release }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@v7.0.1
-
-      - name: Download ARM64 distribution
-        uses: actions/download-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-ARM64-DISTRIBUTION
-          path: ${{ runner.temp }}/release-assets/arm64-distribution
-
-      - name: Download x64 distribution
-        uses: actions/download-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-x64-DISTRIBUTION
-          path: ${{ runner.temp }}/release-assets/x64-distribution
-
-      - name: Download Windows installation guide package
-        uses: actions/download-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-ARM64-INSTALLATION-GUIDE
-          path: ${{ runner.temp }}/release-assets/guide
-
-      - name: Download ARM64 signed installer files
-        uses: actions/download-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-ARM64-PUBLIC-RELEASE-INSTALLER
-          path: ${{ runner.temp }}/release-assets/arm64-installer
-
-      - name: Download x64 signed installer files
-        uses: actions/download-artifact@v7.0.2
-        with:
-          name: RDT-Connect-Windows-x64-PUBLIC-RELEASE-INSTALLER
-          path: ${{ runner.temp }}/release-assets/x64-installer
-
-      - name: Prepare standalone installation guide
+          set -euo pipefail
+          [[ -n "$RELEASE_TOKEN" ]] || {
+            echo "STOP: configure repository secret RDT_RELEASE_TOKEN before promotion." >&2
+            exit 1
+          }
+          echo "PASS: release mutation credential is configured."
+      - name: Validate exact successful qualification run and all 12 artifacts
+        id: source
         shell: bash
         run: |
           set -euo pipefail
-          cp rdt_connect/windows-package/guide/windows_installation_guide.html \
-            "$RUNNER_TEMP/release-assets/windows-installation-guide.html"
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$QUALIFICATION_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]
 
-      - name: Validate all release assets and unused tags
+          mkdir -p "$RUNNER_TEMP/rdt-promotion"
+          run_json="$RUNNER_TEMP/rdt-promotion/run.json"
+          artifacts_json="$RUNNER_TEMP/rdt-promotion/artifacts.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$run_json"
+
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg name "$QUALIFICATION_WORKFLOW_NAME" \
+            --arg path "$QUALIFICATION_WORKFLOW_PATH" \
+            --argjson attempt "$QUALIFICATION_RUN_ATTEMPT" '
+              .repository.full_name == $repo and
+              .head_repository.full_name == $repo and
+              .name == $name and
+              .path == $path and
+              .event == "workflow_dispatch" and
+              .status == "completed" and
+              .conclusion == "success" and
+              .run_attempt == $attempt and
+              (.head_sha | type == "string" and test("^[0-9a-f]{40}$"))
+            ' "$run_json" >/dev/null || {
+              echo "STOP: run is not the exact successful four-target qualification workflow." >&2
+              exit 1
+            }
+
+          source_sha="$(jq -r '.head_sha' "$run_json")"
+          source_branch="$(jq -r '.head_branch' "$run_json")"
+          source_ref="refs/heads/$source_branch"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID/artifacts?per_page=100" > "$artifacts_json"
+
+          require_artifact() {
+            local name="$1"
+            local rows
+            rows="$(jq --arg name "$name" '[.artifacts[] | select(.name == $name)]' "$artifacts_json")"
+            [[ "$(jq 'length' <<<"$rows")" == "1" ]] || {
+              echo "STOP: expected exactly one artifact: $name" >&2
+              exit 1
+            }
+            jq -e --argjson run_id "$QUALIFICATION_RUN_ID" --arg sha "$source_sha" '
+              .[0].expired == false and
+              .[0].size_in_bytes > 0 and
+              .[0].workflow_run.id == $run_id and
+              .[0].workflow_run.head_sha == $sha
+            ' <<<"$rows" >/dev/null || {
+              echo "STOP: artifact is expired, empty, or from another run/commit: $name" >&2
+              exit 1
+            }
+            echo "PASS: $name"
+          }
+
+          names=(
+            "RDT-Connect-Windows-x64-DISTRIBUTION-$QUALIFICATION_RUN_ATTEMPT"
+            "RDT-Connect-Windows-x64-INSTALLATION-GUIDE-$QUALIFICATION_RUN_ATTEMPT"
+            "RDT-Connect-Windows-x64-TEST-INSTALLER-$QUALIFICATION_RUN_ATTEMPT"
+            "rdt-windows-x64-installed-qualification-$QUALIFICATION_RUN_ATTEMPT"
+            "rdt-connect-windows-x64-release-manifest-$QUALIFICATION_RUN_ID-$QUALIFICATION_RUN_ATTEMPT"
+            "RDT-Connect-Windows-ARM64-DISTRIBUTION-$QUALIFICATION_RUN_ATTEMPT"
+            "RDT-Connect-Windows-ARM64-INSTALLATION-GUIDE-$QUALIFICATION_RUN_ATTEMPT"
+            "RDT-Connect-Windows-ARM64-TEST-INSTALLER-$QUALIFICATION_RUN_ATTEMPT"
+            "rdt-windows-arm64-installed-qualification-$QUALIFICATION_RUN_ATTEMPT"
+            "rdt-connect-windows-arm64-release-manifest-$QUALIFICATION_RUN_ID-$QUALIFICATION_RUN_ATTEMPT"
+            "rdt-connect-linux-x64-qualification-$QUALIFICATION_RUN_ID-$QUALIFICATION_RUN_ATTEMPT"
+            "rdt-connect-linux-ARM64-qualification-$QUALIFICATION_RUN_ID-$QUALIFICATION_RUN_ATTEMPT"
+          )
+          for name in "${names[@]}"; do require_artifact "$name"; done
+
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "ref=$source_ref" >> "$GITHUB_OUTPUT"
+          echo "PASS: exact run, attempt, source commit and 12 artifacts validated."
+
+      - name: Check out exact qualified source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Install Minisign verifier
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
+          sudo apt-get update
+          sudo apt-get install -y minisign
+          minisign -v
 
-          root = Path(__import__("os").environ["RUNNER_TEMP"]) / "release-assets"
-          for arch, stem in [
-              ("arm64", "RDT-Connect-Windows-ARM64-DISTRIBUTION"),
-              ("x64", "RDT-Connect-Windows-x64-DISTRIBUTION"),
-          ]:
-              dist = root / f"{arch}-distribution"
-              zips = list(dist.glob("*.zip"))
-              if len(zips) != 1 or zips[0].name != f"{stem}.zip":
-                  raise SystemExit(f"FAIL: unexpected {arch} distribution ZIPs: {zips}")
-              if not (dist / f"{stem}.zip.sha256").is_file():
-                  raise SystemExit(f"FAIL: missing {arch} distribution checksum")
+      - name: Download exact artifacts from the qualification run
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/rdt-promotion"
+          attempt="$QUALIFICATION_RUN_ATTEMPT"
+          run="$QUALIFICATION_RUN_ID"
 
-              installer_dir = root / f"{arch}-installer"
-              installers = list(installer_dir.glob("*-setup.exe"))
-              if len(installers) != 1:
-                  raise SystemExit(f"FAIL: expected one {arch} installer; found {len(installers)}")
-              installer = installers[0]
-              for required in [
-                  installer,
-                  Path(str(installer) + ".sha256"),
-                  Path(str(installer) + ".sig"),
-                  Path(str(installer) + ".sig.sha256"),
-              ]:
-                  if not required.is_file() or required.stat().st_size == 0:
-                      raise SystemExit(f"FAIL: missing or empty signed installer asset: {required}")
+          download_one() {
+            local name="$1"
+            local destination="$2"
+            mkdir -p "$destination"
+            gh run download "$run" --repo "$GITHUB_REPOSITORY" \
+              --name "$name" --dir "$destination"
+          }
 
-          guide = root / "guide"
-          for name in [
-              "RDT-Connect-Windows-Installation-Guide.zip",
-              "RDT-Connect-Windows-Installation-Guide.zip.sha256",
-          ]:
-              if not (guide / name).is_file():
-                  raise SystemExit(f"FAIL: missing guide asset: {name}")
+          download_one "RDT-Connect-Windows-x64-DISTRIBUTION-$attempt" "$root/windows-x64/assets"
+          download_one "RDT-Connect-Windows-x64-INSTALLATION-GUIDE-$attempt" "$root/windows-x64/assets"
+          download_one "RDT-Connect-Windows-x64-TEST-INSTALLER-$attempt" "$root/windows-x64/assets"
+          download_one "rdt-windows-x64-installed-qualification-$attempt" "$root/windows-x64/evidence"
+          download_one "rdt-connect-windows-x64-release-manifest-$run-$attempt" "$root/windows-x64/manifest"
 
-          html = root / "windows-installation-guide.html"
-          if not html.is_file() or html.stat().st_size == 0:
-              raise SystemExit("FAIL: standalone installation guide is missing")
-          print("PASS: both installers, signatures, checksums, distributions, and guide are present")
-          PY
+          download_one "RDT-Connect-Windows-ARM64-DISTRIBUTION-$attempt" "$root/windows-arm64/assets"
+          download_one "RDT-Connect-Windows-ARM64-INSTALLATION-GUIDE-$attempt" "$root/windows-arm64/assets"
+          download_one "RDT-Connect-Windows-ARM64-TEST-INSTALLER-$attempt" "$root/windows-arm64/assets"
+          download_one "rdt-windows-arm64-installed-qualification-$attempt" "$root/windows-arm64/evidence"
+          download_one "rdt-connect-windows-arm64-release-manifest-$run-$attempt" "$root/windows-arm64/manifest"
 
-          for tag in \
-            connect-v0.2.0-dev.11-2a07 \
-            connect-v0.2.0-dev.11-3a03
-          do
-            if git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
-              echo "STOP: release tag already exists: $tag"
+          download_one "rdt-connect-linux-x64-qualification-$run-$attempt" "$root/linux-x64"
+          download_one "rdt-connect-linux-ARM64-qualification-$run-$attempt" "$root/linux-ARM64"
+          normalize_linux_artifact() {
+            local base="$1" found
+            local -a packages=() manifests=()
+
+            while IFS= read -r -d '' found; do
+              packages+=("$found")
+            done < <(find "$base" -type d -name package -print0)
+
+            [[ "${#packages[@]}" -eq 1 ]] || {
+              echo "STOP: expected exactly one Linux package directory under $base." >&2
+              return 1
+            }
+
+            if [[ "${packages[0]}" != "$base/package" ]]; then
+              [[ ! -e "$base/package" ]] || {
+                echo "STOP: Linux package destination already exists: $base/package" >&2
+                return 1
+              }
+              mv "${packages[0]}" "$base/package"
+            fi
+
+            while IFS= read -r -d '' found; do
+              manifests+=("$found")
+            done < <(find "$base" -type f -name release-manifest.json -print0)
+
+            [[ "${#manifests[@]}" -eq 1 ]] || {
+              echo "STOP: expected exactly one Linux release manifest under $base." >&2
+              return 1
+            }
+
+            if [[ "${manifests[0]}" != "$base/release-manifest.json" ]]; then
+              [[ ! -e "$base/release-manifest.json" ]] || {
+                echo "STOP: Linux manifest destination already exists: $base/release-manifest.json" >&2
+                return 1
+              }
+              mv "${manifests[0]}" "$base/release-manifest.json"
+            fi
+
+            echo "PASS: normalized Linux package and manifest under $base."
+          }
+
+          normalize_linux_artifact "$root/linux-x64"
+          normalize_linux_artifact "$root/linux-ARM64"
+
+          echo "PASS: downloaded all 12 exact-run artifacts."
+
+      - name: Verify all manifests, hashes, evidence and Tauri signatures
+        id: verify
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_REF: ${{ steps.source.outputs.ref }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/rdt-promotion"
+          tags="$root/tags.txt"
+          : > "$tags"
+
+          manifest_in() {
+            local dir="$1"
+            local -a found=()
+            mapfile -t found < <(find "$dir" -type f -name release-manifest.json -print)
+            [[ "${#found[@]}" -eq 1 ]] || {
+              echo "STOP: expected one manifest under $dir" >&2
+              exit 1
+            }
+            printf '%s\n' "${found[0]}"
+          }
+
+          verify_one() {
+            local platform="$1" arch="$2" marker="$3" manifest="$4"
+            shift 4
+            jq -e --arg base "$EXPECTED_BASE_VERSION" \
+              '.target.base_version == $base' "$manifest" >/dev/null || {
+              echo "STOP: unexpected base version in $manifest" >&2
+              exit 1
+            }
+            local result tag
+            result="$(python3 rdt_connect/scripts/verify_release_artifact_manifest.py \
+              --manifest "$manifest" "$@" \
+              --platform "$platform" --architecture "$arch" --marker "$marker" \
+              --repository "$GITHUB_REPOSITORY" \
+              --source-sha "$SOURCE_SHA" --source-ref "$SOURCE_REF" \
+              --run-id "$QUALIFICATION_RUN_ID" \
+              --run-attempt "$QUALIFICATION_RUN_ATTEMPT" \
+              --workflow-name "Windows and Linux four-target native qualification" \
+              --tauri-config rdt_connect/src-tauri/tauri.conf.json)"
+            printf '%s\n' "$result"
+            tag="$(awk -F= '$1 == "RELEASE_TAG" {print $2}' <<<"$result")"
+            [[ -n "$tag" ]] || { echo "STOP: verifier supplied no release tag." >&2; exit 1; }
+            echo "$tag" >> "$tags"
+          }
+
+          verify_one windows x64 3A01 \
+            "$(manifest_in "$root/windows-x64/manifest")" \
+            --asset-root "$root/windows-x64/assets" \
+            --evidence-root "$root/windows-x64/evidence"
+
+          verify_one windows ARM64 2A05 \
+            "$(manifest_in "$root/windows-arm64/manifest")" \
+            --asset-root "$root/windows-arm64/assets" \
+            --evidence-root "$root/windows-arm64/evidence"
+
+          x64_package="$(find "$root/linux-x64" -type d -name package -print -quit)"
+          arm_package="$(find "$root/linux-ARM64" -type d -name package -print -quit)"
+          [[ -n "$x64_package" && -n "$arm_package" ]] || {
+            echo "STOP: Linux package directory missing." >&2
+            exit 1
+          }
+
+          verify_one linux x64 5L001 \
+            "$(manifest_in "$root/linux-x64")" \
+            --asset-root "$x64_package" --evidence-root "$root/linux-x64"
+
+          verify_one linux ARM64 4L001 \
+            "$(manifest_in "$root/linux-ARM64")" \
+            --asset-root "$arm_package" --evidence-root "$root/linux-ARM64"
+
+          [[ "$(wc -l < "$tags" | tr -d ' ')" == "4" ]] || {
+            echo "STOP: four distinct platform tags are required." >&2
+            exit 1
+          }
+          [[ "$(sort -u "$tags" | wc -l | tr -d ' ')" == "4" ]] || {
+            echo "STOP: platform release tags are not unique." >&2
+            exit 1
+          }
+
+          {
+            echo "windows_x64_tag=$(sed -n '1p' "$tags")"
+            echo "windows_arm64_tag=$(sed -n '2p' "$tags")"
+            echo "linux_x64_tag=$(sed -n '3p' "$tags")"
+            echo "linux_arm64_tag=$(sed -n '4p' "$tags")"
+          } >> "$GITHUB_OUTPUT"
+          echo "PASS: all four manifests, exact-run evidence, checksums and signatures verified."
+
+      - name: Create four complete draft releases without rebuilding
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          RELEASE_TOKEN: ${{ secrets.RDT_RELEASE_TOKEN }}
+          X64_TAG: ${{ steps.verify.outputs.windows_x64_tag }}
+          ARM64_TAG: ${{ steps.verify.outputs.windows_arm64_tag }}
+          LINUX_X64_TAG: ${{ steps.verify.outputs.linux_x64_tag }}
+          LINUX_ARM64_TAG: ${{ steps.verify.outputs.linux_arm64_tag }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/rdt-promotion"
+          shopt -s nullglob
+          created_tags=()
+          [[ -n "$RELEASE_TOKEN" ]] || {
+            echo "STOP: repository secret RDT_RELEASE_TOKEN is required for this workflow-changing source commit." >&2
+            exit 1
+          }
+          promotion_marker="RDT-PROMOTION:${QUALIFICATION_RUN_ID}:${QUALIFICATION_RUN_ATTEMPT}:${SOURCE_SHA}"
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          tag_commit_sha() {
+            local tag="$1" ref_json object_type object_sha tag_json
+            ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")" || return 1
+            object_type="$(jq -r '.object.type' <<<"$ref_json")"
+            object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+            if [[ "$object_type" == "tag" ]]; then
+              tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")" || return 1
+              jq -e '.object.type == "commit"' <<<"$tag_json" >/dev/null || return 1
+              object_sha="$(jq -r '.object.sha' <<<"$tag_json")"
+              object_type="commit"
+            fi
+            [[ "$object_type" == "commit" && "$object_sha" == "$SOURCE_SHA" ]]
+          }
+
+          cleanup_created_drafts() {
+            local status=$?
+            trap - ERR
+            echo "WARNING: draft creation incomplete; deleting drafts created by this promotion attempt." >&2
+            for created_tag in "${created_tags[@]}"; do
+              cleanup_release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$created_tag" 2>/dev/null)" || {
+                echo "WARNING: could not inspect $created_tag; leaving it untouched." >&2
+                continue
+              }
+              jq -e --arg tag "$created_tag" --arg marker "$promotion_marker" '
+                .tag_name == $tag and
+                .draft == true and
+                .prerelease == true and
+                ((.body // "") | type == "string" and contains($marker))
+              ' <<<"$cleanup_release" >/dev/null || {
+                echo "WARNING: $created_tag does not match this promotion's draft identity; refusing deletion." >&2
+                continue
+              }
+              if ! tag_commit_sha "$created_tag"; then
+                echo "WARNING: $created_tag does not resolve to the qualified source commit; refusing deletion." >&2
+                continue
+              fi
+              GH_TOKEN="$RELEASE_TOKEN" gh release delete "$created_tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag ||
+                echo "WARNING: failed to clean up draft $created_tag; manual owner review required." >&2
+            done
+            exit "$status"
+          }
+          trap cleanup_created_drafts ERR
+
+          check_tag() {
+            local tag="$1"
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "STOP: release already exists: $tag" >&2
               exit 1
             fi
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+              echo "STOP: Git tag already exists without a release: $tag" >&2
+              exit 1
+            fi
+          }
+          for tag in "$X64_TAG" "$ARM64_TAG" "$LINUX_X64_TAG" "$LINUX_ARM64_TAG"; do
+            check_tag "$tag"
           done
 
-      - name: Create ARM64 draft release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          root="$RUNNER_TEMP/release-assets"
-          tag="connect-v0.2.0-dev.11-2a07"
-          gh release create "$tag" \
-            "$root/arm64-installer/"* \
-            "$root/arm64-distribution/"* \
-            "$root/guide/"* \
-            "$root/windows-installation-guide.html" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "RDT Connect Dev 11 — Windows ARM64 Build 2A07" \
-            --notes "Windows ARM64 public release, Build 2A07.
-
-          Includes the signed NSIS installer, updater signature and checksums, combined distribution package, and Windows installation guide." \
+          x64_manifest="$(find "$root/windows-x64/manifest" -name release-manifest.json -print -quit)"
+          x64_assets=("$root/windows-x64/assets/"*)
+          [[ "${#x64_assets[@]}" -eq 8 && -n "$x64_manifest" ]]
+          created_tags+=("$X64_TAG")
+          GH_TOKEN="$RELEASE_TOKEN" gh release create "$X64_TAG" "${x64_assets[@]}" "$x64_manifest" \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "RDT Connect $EXPECTED_BASE_VERSION — Windows x64 Build 3A01" \
+            --notes "Promotion marker: $promotion_marker. No-rebuild promotion from qualification run $QUALIFICATION_RUN_ID attempt $QUALIFICATION_RUN_ATTEMPT, source $SOURCE_SHA. Signed installer, checksums, distribution, guide and manifest included." \
             --prerelease --draft
 
-      - name: Create x64 draft release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          root="$RUNNER_TEMP/release-assets"
-          tag="connect-v0.2.0-dev.11-3a03"
-          gh release create "$tag" \
-            "$root/x64-installer/"* \
-            "$root/x64-distribution/"* \
-            "$root/guide/"* \
-            "$root/windows-installation-guide.html" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "RDT Connect Dev 11 — Windows x64 Build 3A03" \
-            --notes "Windows x64 public release, Build 3A03.
-
-          Includes the signed NSIS installer, updater signature and checksums, combined distribution package, and Windows installation guide." \
+          arm_manifest="$(find "$root/windows-arm64/manifest" -name release-manifest.json -print -quit)"
+          arm_assets=("$root/windows-arm64/assets/"*)
+          [[ "${#arm_assets[@]}" -eq 8 && -n "$arm_manifest" ]]
+          created_tags+=("$ARM64_TAG")
+          GH_TOKEN="$RELEASE_TOKEN" gh release create "$ARM64_TAG" "${arm_assets[@]}" "$arm_manifest" \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "RDT Connect $EXPECTED_BASE_VERSION — Windows ARM64 Build 2A05" \
+            --notes "Promotion marker: $promotion_marker. No-rebuild promotion from qualification run $QUALIFICATION_RUN_ID attempt $QUALIFICATION_RUN_ATTEMPT, source $SOURCE_SHA. Signed installer, checksums, distribution, guide and manifest included." \
             --prerelease --draft
 
-      - name: Publish both prepared releases
+          x64_manifest="$(find "$root/linux-x64" -maxdepth 1 -name release-manifest.json -print -quit)"
+          x64_assets=("$root/linux-x64/package/"*)
+          [[ "${#x64_assets[@]}" -eq 5 && -n "$x64_manifest" ]]
+          created_tags+=("$LINUX_X64_TAG")
+          GH_TOKEN="$RELEASE_TOKEN" gh release create "$LINUX_X64_TAG" "${x64_assets[@]}" "$x64_manifest" \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "RDT Connect $EXPECTED_BASE_VERSION — Linux x64 Build 5L001" \
+            --notes "Promotion marker: $promotion_marker. No-rebuild promotion from qualification run $QUALIFICATION_RUN_ID attempt $QUALIFICATION_RUN_ATTEMPT. Includes the real .deb and signed AppImage updater payload with checksums." \
+            --prerelease --draft
+
+          arm_manifest="$(find "$root/linux-ARM64" -maxdepth 1 -name release-manifest.json -print -quit)"
+          arm_assets=("$root/linux-ARM64/package/"*)
+          [[ "${#arm_assets[@]}" -eq 5 && -n "$arm_manifest" ]]
+          created_tags+=("$LINUX_ARM64_TAG")
+          GH_TOKEN="$RELEASE_TOKEN" gh release create "$LINUX_ARM64_TAG" "${arm_assets[@]}" "$arm_manifest" \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "RDT Connect $EXPECTED_BASE_VERSION — Linux ARM64 Build 4L001" \
+            --notes "Promotion marker: $promotion_marker. No-rebuild promotion from qualification run $QUALIFICATION_RUN_ID attempt $QUALIFICATION_RUN_ATTEMPT. Includes the real .deb and signed AppImage updater payload with checksums." \
+            --prerelease --draft
+          trap - ERR
+
+          echo "PASS: four draft releases created from exact qualified artifacts."
+
+      - name: Verify all four drafts before publishing any
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          X64_TAG: ${{ steps.verify.outputs.windows_x64_tag }}
+          ARM64_TAG: ${{ steps.verify.outputs.windows_arm64_tag }}
+          LINUX_X64_TAG: ${{ steps.verify.outputs.linux_x64_tag }}
+          LINUX_ARM64_TAG: ${{ steps.verify.outputs.linux_arm64_tag }}
         run: |
           set -euo pipefail
+          root="$RUNNER_TEMP/rdt-promotion"
 
-          arm_id="$(gh release view connect-v0.2.0-dev.11-2a07 \
-            --repo "$GITHUB_REPOSITORY" --json databaseId --jq .databaseId)"
-          x64_id="$(gh release view connect-v0.2.0-dev.11-3a03 \
-            --repo "$GITHUB_REPOSITORY" --json databaseId --jq .databaseId)"
+          promotion_marker="RDT-PROMOTION:${QUALIFICATION_RUN_ID}:${QUALIFICATION_RUN_ATTEMPT}:${SOURCE_SHA}"
 
-          test -n "$arm_id"
-          test -n "$x64_id"
+          tag_commit_sha() {
+            local tag="$1" ref_json object_type object_sha tag_json
+            ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")"
+            object_type="$(jq -r '.object.type' <<<"$ref_json")"
+            object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+            if [[ "$object_type" == "tag" ]]; then
+              tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")"
+              object_type="$(jq -r '.object.type' <<<"$tag_json")"
+              object_sha="$(jq -r '.object.sha' <<<"$tag_json")"
+            fi
+            [[ "$object_type" == "commit" && "$object_sha" == "$SOURCE_SHA" ]] || {
+              echo "STOP: release tag does not resolve to qualified source SHA: $tag" >&2
+              return 1
+            }
+          }
 
-          # Both releases and all their assets must exist as drafts before either is made public.
-          gh api --method PATCH \
-            "repos/$GITHUB_REPOSITORY/releases/$arm_id" -F draft=false
-          gh api --method PATCH \
-            "repos/$GITHUB_REPOSITORY/releases/$x64_id" -F draft=false
+          verify_release_identity() {
+            local tag="$1" release_json
+            release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"
+            jq -e --arg tag "$tag" --arg marker "$promotion_marker" '
+              .tag_name == $tag and
+              .prerelease == true and
+              ((.body // "") | type == "string" and contains($marker))
+            ' <<<"$release_json" >/dev/null || {
+              echo "STOP: release marker or prerelease identity mismatch: $tag" >&2
+              return 1
+            }
+            tag_commit_sha "$tag"
+          }
 
-          echo "PASS: both architecture-specific releases published"
+          verify_draft() {
+            local tag="$1" directory="$2" expected_count="$3"
+            local expected="$root/expected-assets.txt"
+            local actual="$root/actual-assets.txt"
+            verify_release_identity "$tag"
+            release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"
+            jq -e '.draft == true and .prerelease == true and (.assets | length > 0)' <<<"$release_json" >/dev/null || {
+              echo "STOP: release is not an unpublished draft: $tag" >&2
+              return 1
+            }
+            find "$directory" -maxdepth 1 -type f -printf '%f\n' | sort > "$expected"
+            printf '%s\n' release-manifest.json >> "$expected"
+            sort -o "$expected" "$expected"
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets \
+              --jq '.assets[].name' | sort > "$actual"
+            [[ "$(wc -l < "$actual" | tr -d ' ')" == "$expected_count" ]] || {
+              echo "STOP: wrong draft asset count for $tag" >&2
+              exit 1
+            }
+            diff -u "$expected" "$actual"
+            echo "PASS: complete draft $tag"
+          }
+
+          verify_draft "$X64_TAG" "$root/windows-x64/assets" 9
+          verify_draft "$ARM64_TAG" "$root/windows-arm64/assets" 9
+          verify_draft "$LINUX_X64_TAG" "$root/linux-x64/package" 6
+          verify_draft "$LINUX_ARM64_TAG" "$root/linux-ARM64/package" 6
+          echo "PASS: all four draft asset inventories match."
+
+      - name: Publish all four releases only when explicitly requested
+        if: ${{ inputs.publish_release }}
+        shell: bash
+        env:
+          RELEASE_TOKEN: ${{ secrets.RDT_RELEASE_TOKEN }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          X64_TAG: ${{ steps.verify.outputs.windows_x64_tag }}
+          ARM64_TAG: ${{ steps.verify.outputs.windows_arm64_tag }}
+          LINUX_X64_TAG: ${{ steps.verify.outputs.linux_x64_tag }}
+          LINUX_ARM64_TAG: ${{ steps.verify.outputs.linux_arm64_tag }}
+        run: |
+          set -euo pipefail
+          tags=("$X64_TAG" "$ARM64_TAG" "$LINUX_X64_TAG" "$LINUX_ARM64_TAG")
+          promotion_marker="RDT-PROMOTION:${QUALIFICATION_RUN_ID}:${QUALIFICATION_RUN_ATTEMPT}:${SOURCE_SHA}"
+
+          tag_commit_sha() {
+            local tag="$1" ref_json object_type object_sha tag_json
+            ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")"
+            object_type="$(jq -r '.object.type' <<<"$ref_json")"
+            object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+            if [[ "$object_type" == "tag" ]]; then
+              tag_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")"
+              object_type="$(jq -r '.object.type' <<<"$tag_json")"
+              object_sha="$(jq -r '.object.sha' <<<"$tag_json")"
+            fi
+            [[ "$object_type" == "commit" && "$object_sha" == "$SOURCE_SHA" ]] || {
+              echo "STOP: release tag does not resolve to qualified source SHA: $tag" >&2
+              return 1
+            }
+          }
+
+          verify_release_identity() {
+            local tag="$1" release_json
+            release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"
+            jq -e --arg tag "$tag" --arg marker "$promotion_marker" '
+              .tag_name == $tag and
+              .prerelease == true and
+              ((.body // "") | type == "string" and contains($marker))
+            ' <<<"$release_json" >/dev/null || {
+              echo "STOP: release marker or prerelease identity mismatch: $tag" >&2
+              return 1
+            }
+            tag_commit_sha "$tag"
+          }
+
+          rollback_to_drafts() {
+            local status=$?
+            trap - ERR
+            echo "WARNING: publication incomplete; attempting to restore all four releases to draft state." >&2
+            for rollback_tag in "${tags[@]}"; do
+              if ! verify_release_identity "$rollback_tag"; then
+                echo "WARNING: refusing rollback without release ownership and source proof: $rollback_tag" >&2
+                continue
+              fi
+              rollback_release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$rollback_tag")" || continue
+              jq -e '.draft == true' <<<"$rollback_release" >/dev/null && continue
+              rollback_id="$(jq -r '.id' <<<"$rollback_release")"
+              GH_TOKEN="$RELEASE_TOKEN" gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$rollback_id" -F draft=true >/dev/null ||
+                echo "WARNING: could not restore $rollback_tag to draft; manual owner review required." >&2
+            done
+            exit "$status"
+          }
+          trap rollback_to_drafts ERR
+          for tag in "${tags[@]}"; do
+            verify_release_identity "$tag"
+            release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"
+            jq -e '.draft == true and .prerelease == true and (.assets | length > 0)' <<<"$release" >/dev/null || {
+              echo "STOP: release is not a complete unpublished draft: $tag" >&2
+              exit 1
+            }
+          done
+          for tag in "${tags[@]}"; do
+            id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.id')"
+            GH_TOKEN="$RELEASE_TOKEN" gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -F draft=false >/dev/null
+            echo "Published $tag"
+          done
+          trap - ERR
+          echo "PASS: all four verified platform releases published."
+
+      - name: Leave verified drafts unpublished
+        if: ${{ !inputs.publish_release }}
+        shell: bash
+        run: |
+          echo "Four verified platform releases remain drafts."
+          echo "Updater-feed publication was not triggered."

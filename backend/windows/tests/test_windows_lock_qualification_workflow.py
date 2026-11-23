@@ -69,6 +69,7 @@ class WindowsPythonLockQualificationWorkflowTests(unittest.TestCase):
         self.assertIn("pip check", self.text)
         self.assertIn("INSTALLED_GRAPH_MATCHES_LOCK=PASS", self.text)
         self.assertIn("wheel-inventory.sha256", self.text)
+        self.assertIn(r")\.whl$", self.text)
 
     def test_no_installer_or_release_artifact_is_generated(self):
         self.assertIn("RDT-Windows-Python-Lock-Candidate-", self.text)

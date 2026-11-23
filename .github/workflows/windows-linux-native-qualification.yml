@@ -1,0 +1,98 @@
+name: Windows and Linux four-target native qualification
+run-name: Native Windows/Linux qualification — ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+
+jobs:
+  platform-contracts:
+    name: Cross-platform contract validation
+    uses: ./.github/workflows/platform-contracts.yml
+
+  linux-native:
+    needs: platform-contracts
+    name: Linux x64 and ARM64 native qualification
+    uses: ./.github/workflows/linux-native-qualification.yml
+    secrets: inherit
+
+  windows-x64:
+    needs: platform-contracts
+    name: Windows x64 native installer qualification
+    uses: ./.github/workflows/windows-x64-installer.yml
+    secrets: inherit
+
+  windows-arm64:
+    needs: platform-contracts
+    name: Windows ARM64 native installer qualification
+    uses: ./.github/workflows/windows-arm64-installer.yml
+    secrets: inherit
+
+  required-targets:
+    name: Require every native platform workflow to pass
+    if: ${{ always() }}
+    needs:
+      - platform-contracts
+      - linux-native
+      - windows-x64
+      - windows-arm64
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    timeout-minutes: 120
+    steps:
+      - name: Report native platform results and fail closed
+        env:
+          LINUX_RESULT: ${{ needs.linux-native.result }}
+          WINDOWS_X64_RESULT: ${{ needs.windows-x64.result }}
+          CONTRACTS_RESULT: ${{ needs.platform-contracts.result }}
+          WINDOWS_ARM64_RESULT: ${{ needs.windows-arm64.result }}
+        run: |
+          printf 'Linux x64 + ARM64: %s\n' "$LINUX_RESULT"
+          printf 'Windows x64: %s\n' "$WINDOWS_X64_RESULT"
+          printf 'Windows ARM64: %s\n' "$WINDOWS_ARM64_RESULT"
+          printf 'Platform contracts: %s\n' "$CONTRACTS_RESULT"
+          test "$CONTRACTS_RESULT" = success
+          test "$LINUX_RESULT" = success
+          test "$WINDOWS_X64_RESULT" = success
+          test "$WINDOWS_ARM64_RESULT" = success
+
+      - name: Verify all required qualification artifacts exist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact_names="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name')"
+          require_group() {
+            local platform="$1"
+            shift
+            for expected in "$@"; do
+              if ! grep -Fqx -- "$expected" <<<"$artifact_names"; then
+                echo "STOP: $platform qualification artifact is missing: $expected" >&2
+                exit 1
+              fi
+            done
+            echo "PASS: $platform qualification artifacts present"
+          }
+          require_group 'Windows x64' \
+            "rdt-connect-windows-x64-release-manifest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "RDT-Connect-Windows-x64-DISTRIBUTION-${GITHUB_RUN_ATTEMPT}" \
+            "RDT-Connect-Windows-x64-INSTALLATION-GUIDE-${GITHUB_RUN_ATTEMPT}" \
+            "RDT-Connect-Windows-x64-TEST-INSTALLER-${GITHUB_RUN_ATTEMPT}" \
+            "rdt-windows-x64-installed-qualification-${GITHUB_RUN_ATTEMPT}"
+          require_group 'Windows ARM64' \
+            "rdt-connect-windows-arm64-release-manifest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "RDT-Connect-Windows-ARM64-DISTRIBUTION-${GITHUB_RUN_ATTEMPT}" \
+            "RDT-Connect-Windows-ARM64-INSTALLATION-GUIDE-${GITHUB_RUN_ATTEMPT}" \
+            "RDT-Connect-Windows-ARM64-TEST-INSTALLER-${GITHUB_RUN_ATTEMPT}" \
+            "rdt-windows-arm64-installed-qualification-${GITHUB_RUN_ATTEMPT}"
+          require_group 'Linux x64' \
+            "rdt-connect-linux-x64-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          require_group 'Linux ARM64' \
+            "rdt-connect-linux-ARM64-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo 'PASS: all four target artifact groups are present in this workflow run'

@@ -1,0 +1,623 @@
+name: RDT Connect Linux Native Qualification (manual)
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  # Run qualification when the isolated Dev 11 branch is updated. This only
+  # builds/tests and uploads evidence; it does not publish or create releases.
+  push:
+    branches:
+      - connect-linux-track2-dev11
+      - windows-linux-dev11-parity-20261028
+
+permissions:
+  contents: read
+
+
+jobs:
+  updater-contract:
+    name: Fast Linux updater artifact contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - name: Validate Tauri updater configuration
+        shell: bash
+        run: |
+          python3 - <<'PYCONTRACT'
+          import json
+          from pathlib import Path
+
+          base = json.loads(Path("rdt_connect/src-tauri/tauri.conf.json").read_text())
+          config = json.loads(Path("rdt_connect/src-tauri/tauri.linux.conf.json").read_text())
+          bundle = config.get("bundle", {})
+          depends = bundle.get("linux", {}).get("deb", {}).get("depends", [])
+          updater = base.get("plugins", {}).get("updater", {})
+          assert bundle.get("createUpdaterArtifacts") is True, "Linux updater artifacts must be enabled"
+          assert "appimage" in bundle.get("targets", []), "Linux AppImage target is missing"
+          assert "deb" in bundle.get("targets", []), "Linux Debian target is missing"
+          assert "libvulkan1" in depends, "Debian package must declare libvulkan1"
+          assert "libayatana-appindicator3-1" in depends, "Debian package must declare AppIndicator runtime"
+          assert isinstance(updater.get("pubkey"), str) and updater["pubkey"].strip(), "Updater public key is missing"
+          workflow = Path(".github/workflows/linux-native-qualification.yml").read_text()
+          assert "--bundles deb,appimage" in workflow, "Linux CI must build both targets"
+          assert ".AppImage.sig" in workflow, "Linux updater signature must be verified"
+          assert "rdt_whisper_worker_dotprod" in workflow, "Linux ARM64 dotprod must be qualified"
+          print("PASS: Linux AppImage updater, Debian dependency and worker contract")
+          PYCONTRACT
+
+  signing-preflight:
+    needs: updater-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "22"
+      - name: Install locked dependencies for signing probe
+        working-directory: rdt_connect
+        run: npm ci
+      - name: Verify approved updater signing key and sign probe
+        working-directory: rdt_connect
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_SHA256: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_SHA256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+            echo "STOP: updater private-key secret is empty or unavailable." >&2
+            exit 1
+          fi
+          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY_SHA256:-}" ]]; then
+            echo "STOP: approved updater private-key fingerprint secret is missing." >&2
+            exit 1
+          fi
+          actual="$(python3 -c 'import hashlib, os; print(hashlib.sha256(os.environ["TAURI_SIGNING_PRIVATE_KEY"].strip().encode()).hexdigest())')"
+          expected="${TAURI_SIGNING_PRIVATE_KEY_SHA256//[[:space:]]/}"
+          if [[ "${actual,,}" != "${expected,,}" ]]; then
+            echo "STOP: updater private key does not match the approved SHA-256 fingerprint." >&2
+            exit 1
+          fi
+          probe="$RUNNER_TEMP/rdt-updater-signing-preflight.txt"
+          trap 'rm -f "$probe" "$probe.sig"' EXIT
+          printf '%s' 'RDT updater signing preflight' > "$probe"
+          npm run tauri -- signer sign "$probe"
+          test -s "$probe.sig" || {
+            echo "STOP: Tauri produced no non-empty signing probe." >&2
+            exit 1
+          }
+          echo "PASS: updater signing preflight"
+
+  linux-native-qualification:
+    needs: signing-preflight
+    name: Build and qualify Linux ${{ matrix.arch }} (no publish)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            marker: 5L001
+          - arch: ARM64
+            runner: ubuntu-24.04-arm
+            marker: 4L001
+    env:
+      BUILD_MARKER: ${{ matrix.marker }}
+      BUILD_ARCH: ${{ matrix.arch }}
+      CARGO_TERM_COLOR: always
+      CI: "true"
+      PYTHONUNBUFFERED: "1"
+      MODEL_UI_ID: mlx-community/whisper-large-v3-turbo
+      MODEL_LINUX_ID: large-v3-turbo
+      WHISPER_CPP_PIN: d1be6fde11ac6e0407606b4e42fe72d34add8037
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Stamp isolated Linux build version
+        run: |
+          set -euo pipefail
+          node rdt_connect/scripts/stamp-platform-build.cjs linux "$BUILD_MARKER"
+          echo "Architecture=$BUILD_ARCH marker=$BUILD_MARKER"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Verify shared lifetime statistics and packaging contract
+        run: python backend/whisper_cpp/tests/test_lifetime_statistics.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@1.100.0
+
+      - name: Install native Linux build and audio dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake git pkg-config curl wget file binutils \
+            libssl-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            libwebkit2gtk-4.1-dev ffmpeg espeak-ng build-essential nasm gnupg xz-utils curl patchelf dpkg-dev squashfs-tools
+          mkdir -p "$RUNNER_TEMP/rdt-linux-qualification"
+          {
+            uname -a
+            lsb_release -a 2>&1 || true
+            rustc --version
+            cargo --version
+            node --version
+            npm --version
+            python3 --version
+            ffmpeg -version | head -n 2
+            cmake --version | head -n 1
+            printf 'git commit: '
+            git rev-parse HEAD
+            printf 'git status:\n'
+            git status --short
+          } | tee "$RUNNER_TEMP/rdt-linux-qualification/environment.txt"
+
+      - name: Create isolated qualification Python environment
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/rdt-python"
+          "$RUNNER_TEMP/rdt-python/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/rdt-python/bin/python" -m pip install \
+            -r backend/linux/requirements-linux.txt
+          "$RUNNER_TEMP/rdt-python/bin/python" -m pip check
+          "$RUNNER_TEMP/rdt-python/bin/python" -c \
+            'import fastapi, starlette, uvicorn, multipart, qrcode, numpy, httpx, backports.tarfile, PyInstaller; print("qualification Python imports OK")'
+
+      - name: Run Linux server regression suite
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rdt-linux-qualification"
+          PYTHONTRACEMALLOC=3 "$RUNNER_TEMP/rdt-python/bin/python" \
+            -W always::ResourceWarning backend/linux/tests/test_linux_transcription_regressions.py -v \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/linux-server-tests.log"
+          PYTHONPATH=backend/whisper_cpp "$RUNNER_TEMP/rdt-python/bin/python" \
+            backend/whisper_cpp/tests/test_model_registry.py -v \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/model-registry-tests.log"
+          "$RUNNER_TEMP/rdt-python/bin/python" backend/linux/tests/test_python_qualification.py -v \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/python-qualification-tests.log"
+          "$RUNNER_TEMP/rdt-python/bin/python" -m unittest discover \
+            -s backend/whisper_cpp/tests -p 'test_*.py' -v \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/whisper-hardware-tests.log"
+          "$RUNNER_TEMP/rdt-python/bin/python" -m py_compile \
+            backend/linux/server.py backend/whisper_cpp/engine.py \
+            backend/whisper_cpp/model_registry.py \
+            backend/whisper_cpp/qualification_support.py \
+            backend/whisper_cpp/scripts/native_cpu_smoke.py \
+            .github/scripts/qualify-packaged-linux-backend.py
+          bash -n backend/linux/run-server.sh
+          bash -n backend/whisper_cpp/scripts/build-linux-worker.sh
+          bash -n rdt_connect/scripts/prepare-linux-bundle.sh
+          git diff --check
+
+      - name: Prepare embedded frontend resources for Rust tests
+        run: |
+          set -euo pipefail
+          RESOURCE_ROOT="rdt_connect/src-tauri/resources"
+          WEB="$RESOURCE_ROOT/rdt_voice_web"
+          NOTICES="$RESOURCE_ROOT/third_party_notices"
+
+          for path in "$WEB" "$NOTICES" "$RESOURCE_ROOT/rdt_voice_backend"; do
+            if [[ -e "$path" ]]; then
+              echo "STOP: Refusing to overwrite existing resource: $path" >&2
+              exit 1
+            fi
+          done
+
+          mkdir -p "$WEB" "$NOTICES/opencc-js"
+          cp index.html worker.js pcm-worklet.js models.manifest.json "$WEB/"
+          cp -R locales assets "$WEB/"
+          cp -R licenses/third-party/opencc-js/. "$NOTICES/opencc-js/"
+
+          cat > "$NOTICES/BUILD-NOTICES.md" <<'EOF'
+          # RDT Connect Linux qualification resources
+
+          The embedded RDT Voice frontend is sourced from the repository root.
+          OpenCC-JS license materials are included in opencc-js/.
+          The Linux backend is assembled separately by this qualification workflow.
+          EOF
+
+          for file in index.html worker.js pcm-worklet.js models.manifest.json; do
+            test -s "$WEB/$file"
+          done
+          test -d "$WEB/locales"
+          test -d "$WEB/assets"
+          test -d "$NOTICES/opencc-js"
+          test -s "$NOTICES/BUILD-NOTICES.md"
+
+          echo "PASS: Embedded frontend and license resources prepared."
+
+      - name: Run shared Rust Linux TLS tests
+        run: |
+          set -euo pipefail
+          RESOURCE_ROOT="rdt_connect/src-tauri/resources"
+          TEMP_BACKEND="$RESOURCE_ROOT/rdt_voice_backend"
+
+          if [[ -e "$TEMP_BACKEND" ]]; then
+            echo "STOP: Backend resource path already exists: $TEMP_BACKEND" >&2
+            exit 1
+          fi
+
+          # Tauri validates configured resource paths during cargo test.
+          # This temporary placeholder is removed on success or failure.
+          trap 'rm -rf -- "$TEMP_BACKEND"' EXIT
+          mkdir -p "$TEMP_BACKEND"
+          printf '%s\n' \
+            "Temporary Rust-test placeholder; never package this directory." \
+            > "$TEMP_BACKEND/.qualification-placeholder"
+
+          cargo test --locked --manifest-path rdt_connect/src-tauri/Cargo.toml \
+            linux_tls::tests --no-fail-fast \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/linux-tls-tests.log"
+
+      - name: Fetch and validate pinned whisper.cpp source
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/whisper.cpp"
+          git clone --filter=blob:none https://github.com/ggerganov/whisper.cpp.git "$SRC"
+          git -C "$SRC" checkout --detach "$WHISPER_CPP_PIN"
+          git -C "$SRC" submodule update --init --recursive
+          ACTUAL="$(git -C "$SRC" rev-parse HEAD)"
+          test "$ACTUAL" = "$WHISPER_CPP_PIN"
+          test -z "$(git -C "$SRC" status --porcelain --untracked-files=all)"
+          GGML_OBJECT_TYPE="$(git -C "$SRC" cat-file -t HEAD:ggml)"
+          case "$GGML_OBJECT_TYPE" in
+            tree)
+              printf 'ggml_layout=tracked-tree\n'
+              ;;
+            commit)
+              GGML_HEAD="$(git -C "$SRC/ggml" rev-parse HEAD)"
+              GGML_PIN="$(git -C "$SRC" rev-parse HEAD:ggml)"
+              test "$GGML_HEAD" = "$GGML_PIN"
+              printf 'ggml_layout=git-submodule\n'
+              printf 'ggml_submodule_head=%s\n' "$GGML_HEAD"
+              printf 'ggml_gitlink_pin=%s\n' "$GGML_PIN"
+              ;;
+            *)
+              echo "STOP: unsupported GGML source topology: $GGML_OBJECT_TYPE" >&2
+              exit 1
+              ;;
+          esac
+          {
+            printf 'whisper_cpp_commit=%s\n' "$ACTUAL"
+            printf 'ggml_object_type=%s\n' "$GGML_OBJECT_TYPE"
+            git -C "$SRC" log -1 --format='%H%n%s'
+            git -C "$SRC" submodule status --recursive
+          } | tee "$RUNNER_TEMP/rdt-linux-qualification/whisper-source-pin.txt"
+          RDT_BUILD_JOBS=2 bash backend/whisper_cpp/scripts/build-linux-worker.sh cpu "$SRC" \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-build.log"
+          WORKER=backend/whisper_cpp/bin/rdt_whisper_worker
+          test -x "$WORKER"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            BUILD_DIR=backend/whisper_cpp/.build-linux-cpu
+            CACHE="$BUILD_DIR/CMakeCache.txt"
+            COMPILE_COMMANDS="$BUILD_DIR/compile_commands.json"
+            test -s "$CACHE"
+            test -s "$COMPILE_COMMANDS"
+            for feature in SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C AVX512 AVX512_VBMI AVX512_VNNI AVX512_BF16 AMX_TILE AMX_INT8 AMX_BF16; do
+              grep -Fxq "GGML_${feature}:BOOL=OFF" "$CACHE" || {
+                echo "STOP: generic x64 worker has GGML_${feature} enabled or unset." >&2
+                exit 1
+              }
+            done
+            if grep -Eq -- '-m(sse3|ssse3|sse4\.1|sse4\.2|avx[^[:space:],"]*|f16c|fma[^[:space:],"]*|bmi[^[:space:],"]*|popcnt|lzcnt|aes|pclmul|sha[^[:space:],"]*|vaes|vpclmulqdq|gfni|amx[^[:space:],"]*)' "$COMPILE_COMMANDS"; then
+              echo "STOP: generic x64 worker compile commands enable an optional x86 ISA flag." >&2
+              exit 1
+            fi
+            if grep -Eq -- '(^|[[:space:],"])-(march|mcpu)=' "$COMPILE_COMMANDS"; then
+            echo "STOP: generic x64 worker explicitly sets -march/-mcpu; expected compiler-default x86-64-v1 baseline." >&2
+            exit 1
+          fi
+          echo "PASS: generic x64 worker is configured for x86-64-v1; optional x86 ISA flags are absent."
+          fi
+          ldd "$WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-ldd.txt"
+          if ldd "$WORKER" 2>&1 | grep -q 'not found'; then
+            echo "STOP: native worker has unresolved shared-library dependencies." >&2
+            exit 1
+          fi
+          sha256sum "$WORKER" | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-sha256.txt"
+          cp "$WORKER" "$RUNNER_TEMP/rdt-linux-qualification/rdt_whisper_worker"
+
+      - name: Verify and cache the approved Large-v3-Turbo GGML artifact
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rdt-models"
+          RDT_GGML_MODEL_DIR="$RUNNER_TEMP/rdt-models" \
+          WHISPER_MODEL_ID="$MODEL_UI_ID" \
+            "$RUNNER_TEMP/rdt-python/bin/python" backend/linux/server.py \
+              --download-model "$MODEL_UI_ID" \
+              2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/model-download-verification.log"
+          MODEL="$RUNNER_TEMP/rdt-models/ggml-large-v3-turbo-q5_0.bin"
+          test -f "$MODEL"
+          test -f "$MODEL.rdt-verified.json"
+          sha256sum "$MODEL" | tee "$RUNNER_TEMP/rdt-linux-qualification/verified-model-sha256.txt"
+          cp "$MODEL.rdt-verified.json" "$RUNNER_TEMP/rdt-linux-qualification/model-verification-sidecar.json"
+          "$RUNNER_TEMP/rdt-python/bin/python" - "$MODEL" <<'PY'
+          import pathlib, sys
+          p=pathlib.Path(sys.argv[1])
+          print(f"verified_model_file={p.name}")
+          print(f"verified_model_size_bytes={p.stat().st_size}")
+          PY
+
+      - name: Generate deterministic English speech fixture
+        run: |
+          set -euo pipefail
+          espeak-ng -v en-us -s 145 -w "$RUNNER_TEMP/rdt-linux-raw.wav" \
+            "The quick brown fox jumps over the lazy dog. This is a real transcription test for RDT Connect."
+          ffmpeg -hide_banner -loglevel error -y -i "$RUNNER_TEMP/rdt-linux-raw.wav" \
+            -ac 1 -ar 16000 -c:a pcm_s16le "$RUNNER_TEMP/rdt-linux-qualification.wav"
+          file "$RUNNER_TEMP/rdt-linux-qualification.wav" | tee "$RUNNER_TEMP/rdt-linux-qualification/fixture-file.txt"
+          sha256sum "$RUNNER_TEMP/rdt-linux-qualification.wav" | tee "$RUNNER_TEMP/rdt-linux-qualification/fixture-sha256.txt"
+
+      - name: Install CUDA 13.5 toolkit (no NVIDIA driver)
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="$(dpkg --print-architecture)"
+          case "$arch" in
+            amd64) repo_arch="x86_64" ;;
+            arm64) repo_arch="sbsa" ;;
+            *) echo "Unsupported CUDA runner architecture: $arch" >&2; exit 1 ;;
+          esac
+          repo="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/$repo_arch"
+          curl --fail --location --retry 5 --retry-all-errors "$repo/cuda-keyring_1.1-1_all.deb" -o "$RUNNER_TEMP/cuda-keyring.deb"
+          sudo dpkg -i "$RUNNER_TEMP/cuda-keyring.deb"
+          sudo apt-get update
+          sudo apt-get install -y cuda-toolkit-13-5
+          test -x /usr/local/cuda-13.5/bin/nvcc
+          echo "/usr/local/cuda-13.5/bin" >> "$GITHUB_PATH"
+          echo "CUDAToolkit_ROOT=/usr/local/cuda-13.5" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-13.5/lib64:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          /usr/local/cuda-13.5/bin/nvcc --version
+      - name: Build packaged CPU and Vulkan worker variants for first-start benchmark
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev glslc
+          WHISPER_CPP_SOURCE="$RUNNER_TEMP/whisper.cpp" \
+          RDT_LINUX_WORKER_BUILD_DIR="$RUNNER_TEMP/rdt-linux-workers" \
+          RDT_BUILD_PYTHON="$RUNNER_TEMP/rdt-python/bin/python" \
+          RDT_ENABLE_VULKAN=ON RDT_ENABLE_CUDA=ON RDT_REQUIRE_CUDA=ON RDT_REQUIRE_VULKAN=ON \
+            bash rdt_connect/scripts/prepare-linux-worker.sh \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/native-worker-variants-build.log"
+          grep -Fq '=== Repeat Vulkan CMake configure to verify patch idempotence ===' "$RUNNER_TEMP/rdt-linux-qualification/native-worker-variants-build.log" || {
+            echo "STOP: Vulkan repeat-configure validation did not run." >&2
+            exit 1
+          }
+
+      - name: Build one-folder Linux backend bundle
+        run: |
+          set -euo pipefail
+          WHISPER_CPP_SOURCE="$RUNNER_TEMP/whisper.cpp" \
+          RDT_PYTHON="$RUNNER_TEMP/rdt-python/bin/python" \
+          RDT_LINUX_WORKER_VARIANTS_DIR="$RUNNER_TEMP/rdt-linux-workers/variants" \
+          RDT_REQUIRE_CUDA=ON RDT_REQUIRE_VULKAN=ON \
+            bash rdt_connect/scripts/prepare-linux-bundle.sh \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/backend-bundle-build.log"
+          test -x rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_voice_backend
+          test -x rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker
+          test -x rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker_vulkan
+          test -s rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_benchmark_fixture.wav
+          sha256sum \
+            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_voice_backend \
+            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker \
+            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_whisper_worker_vulkan \
+            rdt_connect/src-tauri/resources/rdt_voice_backend/rdt_benchmark_fixture.wav \
+            | tee "$RUNNER_TEMP/rdt-linux-qualification/bundled-executable-sha256.txt"
+
+      - name: Install locked frontend dependencies
+        working-directory: rdt_connect
+        run: |
+          set -euo pipefail
+          if [[ -f package-lock.json ]]; then
+            npm ci
+          elif [[ -f pnpm-lock.yaml ]]; then
+            corepack enable
+            corepack pnpm install --frozen-lockfile
+          elif [[ -f yarn.lock ]]; then
+            corepack enable
+            PM="$(node -p "require('./package.json').packageManager || ''")"
+            if [[ "$PM" == yarn@1* ]]; then
+              corepack yarn install --frozen-lockfile
+            else
+              corepack yarn install --immutable
+            fi
+          else
+            echo "STOP: no npm/pnpm/yarn lockfile; reproducible frontend install is unavailable." >&2
+            exit 1
+          fi
+          test -x node_modules/.bin/tauri || {
+            echo "STOP: local Tauri CLI was not installed from the project lockfile." >&2
+            exit 1
+          }
+
+      - name: Build Linux Debian and signed AppImage artifacts (no publish)
+        env:
+          VITE_RDT_LAZY_LOCALES: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -d rdt_connect/src-tauri/resources/third_party_notices
+          test -f rdt_connect/src-tauri/resources/rdt_voice_web/index.html
+          test -f rdt_connect/src-tauri/resources/rdt_voice_web/worker.js
+          TRAY_LIBRARY_PATH="$(ldconfig -p | awk '$1 == "libayatana-appindicator3.so.1" { print $NF; exit }')"
+          test -f "$TRAY_LIBRARY_PATH"
+          export TRAY_LIBRARY_PATH
+          (cd rdt_connect && npx --no-install tauri build --config src-tauri/tauri.linux.conf.json --bundles deb,appimage --verbose) \
+            2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/tauri-linux-build.log"
+          DEB="$(find rdt_connect/src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -type f -print -quit)"
+          test -n "$DEB"
+          APPIMAGE_DIR="rdt_connect/src-tauri/target/release/bundle/appimage"
+          APPIMAGE="$(find "$APPIMAGE_DIR" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$APPIMAGE"
+          test -s "$APPIMAGE.sig"
+          APPIMAGE_OFFSET="$("$APPIMAGE" --appimage-offset)"
+          test -n "$APPIMAGE_OFFSET"
+          unsquashfs -ll -offset "$APPIMAGE_OFFSET" "$APPIMAGE" > "$RUNNER_TEMP/rdt-linux-qualification/appimage-files.txt"
+          if ! grep -Eq 'libayatana-appindicator3\.so\.1|libappindicator3\.so\.1' "$RUNNER_TEMP/rdt-linux-qualification/appimage-files.txt"; then
+            echo "AppImage tray library is missing"
+            exit 1
+          fi
+          printf '%s\n' "$APPIMAGE" > "$RUNNER_TEMP/rdt-linux-qualification/appimage-path.txt"
+          sha256sum "$APPIMAGE" | tee "$APPIMAGE.sha256"
+          sha256sum "$APPIMAGE.sig" | tee "$APPIMAGE.sig.sha256"
+          sha256sum "$APPIMAGE" "$APPIMAGE.sig" | tee "$RUNNER_TEMP/rdt-linux-qualification/appimage-updater-sha256.txt"
+          dpkg-deb --info "$DEB" | tee "$RUNNER_TEMP/rdt-linux-qualification/deb-info.txt"
+          dpkg-deb -f "$DEB" Depends | tee "$RUNNER_TEMP/rdt-linux-qualification/deb-depends.txt"
+          grep -Eq '(^|[,[:space:]])libvulkan1([,[:space:]()]|$)' "$RUNNER_TEMP/rdt-linux-qualification/deb-depends.txt"
+          grep -Eq '(^|[,[:space:]])libayatana-appindicator3-1([,[:space:]\()]|$)' "$RUNNER_TEMP/rdt-linux-qualification/deb-depends.txt"
+          mkdir -p "$RUNNER_TEMP/rdt-linux-deb-root"
+          dpkg-deb -x "$DEB" "$RUNNER_TEMP/rdt-linux-deb-root"
+          printf '%s\n' "$DEB" > "$RUNNER_TEMP/rdt-linux-qualification/deb-path.txt"
+          find "$RUNNER_TEMP/rdt-linux-deb-root" -type f \
+            \( -path '*/rdt_voice_backend/rdt_voice_backend' \
+               -o -path '*/rdt_voice_backend/rdt_whisper_worker' \
+               -o -path '*/rdt_voice_backend/rdt_whisper_worker_vulkan' \
+               -o -path '*/rdt_voice_backend/rdt_whisper_worker_dotprod' \
+               -o -path '*/rdt_voice_backend/rdt_benchmark_fixture.wav' \
+               -o -path '*/rdt_voice_web/index.html' \
+               -o -path '*/rdt_voice_web/worker.js' \) \
+            -print | sort | tee "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_backend/rdt_voice_backend$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_backend/rdt_whisper_worker$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_backend/rdt_whisper_worker_vulkan$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_backend/rdt_benchmark_fixture.wav$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          grep -q '/rdt_voice_web/index.html$' "$RUNNER_TEMP/rdt-linux-qualification/packaged-resource-paths.txt"
+          BACKEND_EXE="$(find "$RUNNER_TEMP/rdt-linux-deb-root" -type f -path '*/rdt_voice_backend/rdt_voice_backend' -print -quit)"
+          test -n "$BACKEND_EXE"
+          BACKEND_DIR="$(dirname "$BACKEND_EXE")"
+          find "$BACKEND_DIR" -maxdepth 1 -type f -name 'rdt_whisper_worker*' -printf '%f\n' \
+            | LC_ALL=C sort > "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
+          printf '%s\n' rdt_whisper_worker > "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+          case "$(uname -m)" in
+            aarch64|arm64)
+              printf '%s\n' rdt_whisper_worker_dotprod >> "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+              ;;
+          esac
+          printf '%s\n' rdt_whisper_worker_vulkan >> "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt"
+          diff -u \
+            "$RUNNER_TEMP/rdt-linux-qualification/expected-packaged-worker-inventory.txt" \
+            "$RUNNER_TEMP/rdt-linux-qualification/packaged-worker-inventory.txt"
+          mkdir -p "$RUNNER_TEMP/rdt-linux-qualification/package"
+          cp "$DEB" "$APPIMAGE" "$APPIMAGE.sig" "$APPIMAGE.sha256" "$APPIMAGE.sig.sha256" "$RUNNER_TEMP/rdt-linux-qualification/package/"
+
+      - name: Verify localized model names in compiled frontend
+        shell: bash
+        run: python3 rdt_connect/scripts/test_model_localization_build.py
+
+      - name: Install Debian package in a clean native container and run real inference
+        run: |
+          set -euo pipefail
+          docker version
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --volume "$RUNNER_TEMP/rdt-models:/models:ro" \
+            --volume "$RUNNER_TEMP/rdt-linux-qualification.wav:/fixture.wav:ro" \
+            --volume "$RUNNER_TEMP/rdt-linux-qualification:/evidence" \
+            --env MODEL_UI_ID="$MODEL_UI_ID" \
+            ubuntu:24.04 bash -euo pipefail -c '
+              apt-get update
+              DEB="$(find /workspace/rdt_connect/src-tauri/target/release/bundle/deb -maxdepth 1 -type f -name "*.deb" -print -quit)"
+              test -n "$DEB"
+              PACKAGE="$(dpkg-deb -f "$DEB" Package)"
+              DEPENDS="$(dpkg-deb -f "$DEB" Depends)"
+              printf "%s\n" "$DEPENDS" | tee /evidence/clean-container-deb-depends.txt
+              grep -Eq "(^|[,[:space:]])libvulkan1([,[:space:]()]|$)" <<<"$DEPENDS"
+              grep -Eq "(^|[,[:space:]])libayatana-appindicator3-1([,[:space:]\()]|$)" <<<"$DEPENDS"
+              apt-get install -y --no-install-recommends python3 python3-httpx procps binutils ca-certificates "$DEB"
+              dpkg --status "$PACKAGE" | grep -Fx "Status: install ok installed"
+              dpkg-query -W -f="\${Version}\\n" libvulkan1 | tee /evidence/clean-container-libvulkan-version.txt
+              dpkg-query -W -f="\${Version}\n" libayatana-appindicator3-1 | tee /evidence/clean-container-libayatana-appindicator-version.txt
+              FILES="$(dpkg-query -L "$PACKAGE")"
+              BACKEND="$(printf "%s\n" "$FILES" | grep -E "/rdt_voice_backend/rdt_voice_backend$" | head -n 1)"
+              FRONTEND="$(printf "%s\n" "$FILES" | grep -E "/rdt_voice_web/index.html$" | head -n 1)"
+              test -n "$BACKEND" && test -x "$BACKEND"
+              test -n "$FRONTEND" && test -f "$FRONTEND"
+              BACKEND_DIR="$(dirname "$BACKEND")"
+              if command -v ffmpeg >/dev/null 2>&1 || command -v ffprobe >/dev/null 2>&1; then
+                echo "STOP: system FFmpeg/FFprobe is installed in the clean container." >&2
+                exit 1
+              fi
+              python3 /workspace/.github/scripts/verify-packaged-linux-ffmpeg.py --backend-dir "$BACKEND_DIR"
+              WORKER="$BACKEND_DIR/rdt_whisper_worker"
+              VULKAN_WORKER="$BACKEND_DIR/rdt_whisper_worker_vulkan"
+              FIXTURE="$BACKEND_DIR/rdt_benchmark_fixture.wav"
+              test -x "$WORKER" && test -x "$VULKAN_WORKER" && test -s "$FIXTURE"
+              find "$BACKEND_DIR" -maxdepth 1 -type f -name "rdt_whisper_worker*" -printf "%f\n" | LC_ALL=C sort > /evidence/installed-worker-inventory.txt
+              printf "%s\n" rdt_whisper_worker > /evidence/expected-installed-worker-inventory.txt
+              if [ "$(uname -m)" = "aarch64" ]; then
+                test -x "$BACKEND_DIR/rdt_whisper_worker_dotprod"
+                printf "%s\n" rdt_whisper_worker_dotprod >> /evidence/expected-installed-worker-inventory.txt
+              fi
+              printf "%s\n" rdt_whisper_worker_vulkan >> /evidence/expected-installed-worker-inventory.txt
+              diff -u /evidence/expected-installed-worker-inventory.txt /evidence/installed-worker-inventory.txt
+              for binary in "$BACKEND" "$BACKEND_DIR"/rdt_whisper_worker*; do
+                test -x "$binary"
+                LDD_OUT="$(ldd "$binary" 2>&1)" || {
+                  printf "%s\n" "$LDD_OUT"
+                  exit 1
+                }
+                printf "%s\n%s\n" "=== $binary ===" "$LDD_OUT"
+                if grep -q "not found" <<<"$LDD_OUT"; then
+                  echo "STOP: installed package has an unresolved shared-library dependency: $binary" >&2
+                  exit 1
+                fi
+              done
+              python3 /workspace/.github/scripts/qualify-packaged-linux-backend.py \
+                --backend "$BACKEND" \
+                --worker "$WORKER" \
+                --frontend-dir "$(dirname "$FRONTEND")" \
+                --model-dir /models \
+                --fixture /fixture.wav \
+                --output-json /evidence/clean-container-installed-inference.json \
+                --model-id "$MODEL_UI_ID" \
+                --timeout-seconds 900
+            ' 2>&1 | tee "$RUNNER_TEMP/rdt-linux-qualification/clean-container-installed-inference.log"
+
+      - name: Create Linux release identity manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_name="rdt-connect-linux-${BUILD_ARCH}-qualification-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          args=(
+            rdt_connect/scripts/release_artifact_manifest.py
+            --platform linux --architecture "$BUILD_ARCH" --marker "$BUILD_MARKER"
+            --tauri-config rdt_connect/src-tauri/tauri.conf.json
+            --repository "$GITHUB_REPOSITORY" --source-sha "$GITHUB_SHA"
+            --source-ref "$GITHUB_REF" --run-id "$GITHUB_RUN_ID"
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --workflow-name "$GITHUB_WORKFLOW"
+            --output "$RUNNER_TEMP/rdt-linux-qualification/release-manifest.json"
+            --artifact-name "$artifact_name"
+            --qualification-artifact-name "$artifact_name"
+            --evidence "$RUNNER_TEMP/rdt-linux-qualification"
+          )
+          while IFS= read -r -d '' asset; do args+=(--asset "$asset"); done < <(find "$RUNNER_TEMP/rdt-linux-qualification/package" -maxdepth 1 -type f -print0 | sort -z)
+          python3 "${args[@]}"
+      - name: Upload qualification evidence and Linux package (never model weights)
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          retention-days: 30
+          name: rdt-connect-linux-${{ matrix.arch }}-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/rdt-linux-qualification/**

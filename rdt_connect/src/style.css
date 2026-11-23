@@ -1637,7 +1637,7 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
   color:#dce6ed; font-size:10.5px; font-weight:850; line-height:1.35; white-space:nowrap;
 }
 .remote-flow-device > svg { display:block; width:82px; height:74px; overflow:visible; }
-.remote-flow-mac > svg { width:100px; }
+.remote-flow-desktop > svg { width:100px; }
 .remote-flow-device > span { display:inline-flex; align-items:center; justify-content:center; gap:6px; }
 .remote-flow-indicator { display:inline-block; width:7px; height:7px; flex:0 0 7px; border-radius:50%; }
 .remote-flow-record-indicator,.remote-flow-record-dot { fill:#fb7185; background:#fb7185; }
@@ -1663,7 +1663,7 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
   .remote-flow-illustration { gap:6px; padding:0; }
   .remote-flow-device { min-width:98px; font-size:9.5px; }
   .remote-flow-device > svg { width:68px; height:64px; }
-  .remote-flow-mac > svg { width:82px; }
+  .remote-flow-desktop > svg { width:82px; }
   .remote-flow-connector { min-width:52px; width:calc(100% - 220px); height:48px; }
   .remote-vpn-note { font-size:10.5px; }
 }
@@ -1763,7 +1763,7 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
 .remote-flow-device { flex-basis:110px !important; min-width:88px !important; font-size:10px !important; }
 .remote-flow-device > svg { width:70px !important; height:54px !important; }
 .remote-flow-phone > svg { width:42px !important; height:54px !important; }
-.remote-flow-mac > svg { width:76px !important; height:56px !important; }
+.remote-flow-desktop > svg { width:76px !important; height:56px !important; }
 .remote-flow-connector { flex:1 1 140px !important; width:clamp(72px,14vw,185px) !important; min-width:60px !important; max-width:185px !important; height:38px !important; }
 .remote-flow-device > span { font-size:10px; }
 @media(max-width:880px) {
@@ -1776,7 +1776,7 @@ body.visual-setup-guide-https #local-https-quick-setup-button {
   .remote-flow-device { min-width:78px !important; flex-basis:82px !important; }
   .remote-flow-device > svg { width:52px !important; height:48px !important; }
   .remote-flow-phone > svg { width:37px !important; height:48px !important; }
-  .remote-flow-mac > svg { width:64px !important; height:49px !important; }
+  .remote-flow-desktop > svg { width:64px !important; height:49px !important; }
   .remote-flow-connector { min-width:44px !important; width:calc(100% - 180px) !important; height:32px !important; }
 }
 @media(prefers-reduced-motion:reduce) {

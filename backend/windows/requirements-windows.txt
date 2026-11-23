@@ -1,0 +1,10 @@
+# Human-reviewed direct dependency pins used only as inputs to architecture-specific lock generation.
+# NEVER install this file in release packaging. Generate and native-qualify separate
+# requirements-windows-x64.txt and requirements-windows-arm64.txt hash locks first.
+fastapi==0.115.14
+numpy==2.3.5
+Pillow==11.3.0
+python-multipart==0.0.20
+qrcode==8.2
+uvicorn==0.34.3
+pyinstaller==6.22.3

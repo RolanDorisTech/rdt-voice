@@ -35,15 +35,16 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: rdt-connect-updater-feed
-  cancel-in-progress: false
+  group: rdt-connect-updater-feed-${{ inputs.target }}
+  queue: max
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -80,14 +81,12 @@ jobs:
           asset = os.environ.get("ASSET_NAME", "")
           if not asset or asset in {".", ".."} or "/" in asset or "\\" in asset:
               raise SystemExit("FAIL: asset_name must be a filename, not a path")
-          if target.startswith("linux-"):
-              raise SystemExit("FAIL: Linux updater publication is blocked until signed Tauri updater artifacts and verification sidecars are published.")
           try:
               gen.parse_version(version, target)
           except (ValueError, TypeError) as exc:
               raise SystemExit(f"FAIL: invalid version/build marker: {exc}")
           marker = version.rsplit(".", 1)[1]
-          expected = "connect-v" + version.rsplit(".", 1)[0] + "-" + marker.lower()
+          expected = "rdt-connect-v" + version.rsplit(".", 1)[0] + "-" + marker.lower()
           if tag != expected:
               raise SystemExit(f"FAIL: expected release tag {expected}")
           feed = feeds[target]
@@ -113,8 +112,7 @@ jobs:
               [[ "$ASSET" == *.exe ]] || { echo "FAIL: Windows updater asset must be an .exe"; exit 1; }
               ;;
             linux-aarch64|linux-x86_64)
-              echo "FAIL: Linux updater publication is blocked until signed Tauri updater artifacts and verification sidecars are published."
-              exit 1
+              [[ "$ASSET" == *.AppImage ]] || { echo "FAIL: Linux updater asset must be a signed .AppImage"; exit 1; }
               ;;
             *)
               echo "FAIL: unsupported target"; exit 1
@@ -123,7 +121,7 @@ jobs:
 
           mkdir -p "$RUNNER_TEMP/release"
           patterns=(--pattern "$ASSET" --pattern "$ASSET.sig")
-          if [[ "$TARGET" == windows-* ]]; then
+          if [[ "$TARGET" == windows-* || "$TARGET" == linux-* ]]; then
             patterns+=(--pattern "$ASSET.sha256" --pattern "$ASSET.sig.sha256")
           fi
           gh release download "$RELEASE_TAG" \
@@ -150,7 +148,7 @@ jobs:
           except Exception as exc:
               raise SystemExit(f"FAIL: signature is not valid base64: {exc}")
 
-          if target.startswith("windows-"):
+          if target.startswith("windows-") or target.startswith("linux-"):
               for sidecar_name, checked in (
                   (name + ".sha256", artifact),
                   (name + ".sig.sha256", signature_file),
@@ -258,7 +256,7 @@ jobs:
           PY
 
       - name: Open pull request for selected feed
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8.1.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           add-paths: ${{ steps.release.outputs.feed }}

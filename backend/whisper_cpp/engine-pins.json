@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "engine": "whisper.cpp",
+  "version": "v1.9.5",
+  "source_repository": "https://github.com/ggml-org/whisper.cpp",
+  "source_commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+  "source_commit_evidence": "The v1.9.5 version-bump commit patch header exposes this full SHA; the native workflow verifies the detached checkout against it.",
+  "build": {
+    "backend": "CPU",
+    "cuda": false,
+    "vulkan": false,
+    "opencl": false,
+    "metal": false,
+    "architecture": "native runner architecture"
+  },
+  "dependencies": "Pinned through gitlinks/submodule revisions of the source commit. Native workflow records git submodule status --recursive and fails if any initialized gitlink does not match the pinned parent entry.",
+  "qualification_status": "source pin recorded; Windows/Linux native builds and inference require native CI evidence"
+}

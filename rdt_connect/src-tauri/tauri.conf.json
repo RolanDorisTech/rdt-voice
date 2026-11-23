@@ -1,14 +1,5 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "RDT Connect",
-  "version": "0.2.0-dev.12.1D47",
-  "identifier": "com.rolandoristech.rdtconnect",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
-  },
   "app": {
     "withGlobalTauri": false,
     "windows": [
@@ -26,6 +17,12 @@
     "security": {
       "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
     }
+  },
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
@@ -59,6 +56,7 @@
     },
     "createUpdaterArtifacts": true
   },
+  "identifier": "com.rolandoristech.rdtconnect",
   "plugins": {
     "updater": {
       "requireSignedVersion": true,
@@ -75,5 +73,7 @@
         ]
       }
     }
-  }
+  },
+  "productName": "RDT Connect",
+  "version": "0.2.0-dev.12.1D47"
 }

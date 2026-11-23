@@ -97,14 +97,18 @@ class AboutMenuUpdateContractTests(unittest.TestCase):
         self.assertIn('await invoke("open_youtube_channel")', main)
         self.assertIn('aboutYoutubeButton.addEventListener("click"', main)
 
-    def test_update_window_auto_dismisses_only_passive_results(self):
-        update = (ROOT / "src/update-window.ts").read_text(encoding="utf-8")
-        self.assertIn('getCurrentWindow().close()', update)
-        self.assertIn('state.key === "updater.upToDate"', update)
-        self.assertIn('state.key === "updater.checkFailed"', update)
-        self.assertIn('currentAction === null', update)
-        self.assertIn('currentAction === "reopen"', update)
-
+def test_update_window_keeps_passive_results_visible_and_retryable(self):
+    update = (ROOT / "src" / "update-window.ts").read_text(encoding="utf-8")
+    self.assertIn('state.key === "updater.upToDate"', update)
+    self.assertIn('state.key === "updater.checkFailed"', update)
+    self.assertIn("currentAction = state.action ?? null;", update)
+    self.assertIn(
+        'checkButton.hidden = currentAction === "install" || currentAction === "installing" || currentAction === "reopen";',
+        update,
+    )
+    self.assertIn('checkButton.addEventListener("click"', update)
+    self.assertIn('void emit("rdt-connect-update-check-request", {})', update)
+    self.assertNotIn("getCurrentWindow().close()", update)
     def test_reopen_action_and_update_reliability_remain(self):
         main = (ROOT / "src/main.ts").read_text(encoding="utf-8")
         self.assertIn('await update.install({ restartAfterInstall: false })', main)

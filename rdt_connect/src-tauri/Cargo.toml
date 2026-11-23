@@ -43,3 +43,6 @@ winreg = "0.56.0"
 # Prevent macOS 27 from rejecting stripped procedural-macro libraries.
 [profile.release.build-override]
 strip = false
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"

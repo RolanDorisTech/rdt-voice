@@ -76,7 +76,17 @@ jobs:
           if (-not (Test-Path -LiteralPath $direct -PathType Leaf)) {
             throw "Direct dependency input missing: $direct"
           }
-          $directHash = (Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant()
+          $directBytes = [System.IO.File]::ReadAllBytes($direct)
+          $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+          $directText = $strictUtf8.GetString($directBytes)
+          $canonicalText = $directText.Replace("`r`n", "`n").Replace("`r", "`n")
+          $canonicalBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $directHash = [Convert]::ToHexString($sha256.ComputeHash($canonicalBytes)).ToLowerInvariant()
+          } finally {
+            $sha256.Dispose()
+          }
           $expectedRequirementsHash = $env:EXPECTED_REQUIREMENTS_SHA256.ToLowerInvariant()
           if ($directHash -ne $expectedRequirementsHash) {
             throw "Direct-requirements SHA-256 mismatch: expected $($env:EXPECTED_REQUIREMENTS_SHA256), actual $directHash."
@@ -97,7 +107,7 @@ jobs:
           Write-Host 'SCOPE=DEPENDENCY_LOCK_QUALIFICATION_ONLY_NO_INSTALLER_BUILD'
 
       - name: Set up exact native CPython
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.13.16'
           architecture: ${{ matrix.python-architecture }}
@@ -132,6 +142,7 @@ jobs:
 
       - name: Generate hash-pinned lock candidate
         shell: pwsh
+        working-directory: ${{ github.workspace }}
         env:
           TARGET_ARCH: ${{ matrix.arch }}
           LOCK_FILE: ${{ matrix.lock-file }}
@@ -141,21 +152,20 @@ jobs:
           $direct = Join-Path $repo 'backend/windows/requirements-windows.txt'
           $work = Join-Path $env:RUNNER_TEMP ("rdt-lockgen-" + $env:TARGET_ARCH.ToLowerInvariant())
           $toolVenv = Join-Path $work 'tools'
-          $inputFile = Join-Path $work 'requirements-windows.in'
+          $inputFile = 'backend/windows/requirements-windows.txt'
           $wheelhouse = Join-Path $work 'wheelhouse'
           $candidateDir = Join-Path $repo (Join-Path 'lock-candidates' $env:TARGET_ARCH.ToLowerInvariant())
           $candidateLock = Join-Path $candidateDir $env:LOCK_FILE
           $report = Join-Path $candidateDir 'qualification-report.txt'
           New-Item -ItemType Directory -Force -Path $work,$candidateDir,$wheelhouse | Out-Null
-          Copy-Item -LiteralPath $direct -Destination $inputFile
           $basePython = (Get-Command python.exe -ErrorAction Stop).Source
           & $basePython -m venv $toolVenv
           if ($LASTEXITCODE -ne 0) { throw 'Could not create isolated lock-tool environment.' }
           $toolPython = Join-Path $toolVenv 'Scripts/python.exe'
           & $toolPython -m pip install --disable-pip-version-check --no-cache-dir --index-url https://pypi.org/simple --only-binary=:all: --upgrade 'pip==26.2.2' 'pip-tools==7.6.2'
           if ($LASTEXITCODE -ne 0) { throw 'Could not install the version-pinned lock-generation tools.' }
-          $pipVersion = (& $toolPython -m pip --version).Trim()
-          $pipToolsVersion = (& $toolPython -m piptools compile --version).Trim()
+          $pipVersion = (& $toolPython -m pip --version | Out-String).Trim()
+          $pipToolsVersion = (& $toolPython -m piptools compile --version | Out-String).Trim()
           $toolFreeze = (& $toolPython -m pip freeze | Out-String).Trim()
           Write-Host "PIP_TOOL_VERSION=$pipVersion"
           Write-Host "PIP_TOOLS_VERSION=$pipToolsVersion"
@@ -174,14 +184,34 @@ jobs:
             --rebuild `
             --upgrade `
             --no-header `
+            --newline lf `
             --uploaded-prior-to=2026-10-23T00:00:00Z `
             --pip-args=--only-binary=:all: `
             --output-file $candidateLock `
             $inputFile
           if ($LASTEXITCODE -ne 0) { throw 'pip-compile failed; no qualified lock will be emitted.' }
+          $lockText = [System.IO.File]::ReadAllText($candidateLock)
+          if ($lockText.Contains("`r")) { throw "pip-compile did not emit LF-only output." }
+          if ($lockText.Contains("rdt-lockgen-")) { throw "Generated lock contains runner-specific temporary paths." }
           $validator = Join-Path $repo 'backend/windows/scripts/validate_windows_requirements_lock.py'
           & $toolPython $validator --lock $candidateLock --target-arch $env:TARGET_ARCH --direct-requirements $direct
           if ($LASTEXITCODE -ne 0) { throw 'Static/native lock validation failed.' }
+
+          # Use the same canonical UTF-8/LF hash definition as the source guard.
+          # Keep the raw checkout hash separate for diagnostics only.
+          $directBytes = [System.IO.File]::ReadAllBytes($direct)
+          $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+          $directText = $strictUtf8.GetString($directBytes)
+          $canonicalText = $directText.Replace("`r`n", "`n").Replace("`r", "`n")
+          $canonicalBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $directHash = [Convert]::ToHexString($sha256.ComputeHash($canonicalBytes)).ToLowerInvariant()
+          } finally {
+            $sha256.Dispose()
+          }
+          $directRawHash = (Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant()
+
           $lockHash = (Get-FileHash -LiteralPath $candidateLock -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "LOCK_PATH=$candidateLock"
           Write-Host "LOCK_SHA256=$lockHash"
@@ -198,7 +228,8 @@ jobs:
             "PIP_TOOLS_FREEZE_END"
             "LOCK_FILE=$env:LOCK_FILE"
             "LOCK_SHA256=$lockHash"
-            "DIRECT_REQUIREMENTS_SHA256=$((Get-FileHash -LiteralPath $direct -Algorithm SHA256).Hash.ToLowerInvariant())"
+            "DIRECT_REQUIREMENTS_SHA256=$directHash"
+            "DIRECT_REQUIREMENTS_RAW_SHA256=$directRawHash"
             "RESOLUTION_UPLOAD_CUTOFF=2026-10-23T00:00:00Z"
           ) | Set-Content -LiteralPath $report -Encoding utf8
 
@@ -235,7 +266,7 @@ jobs:
           $bad = @()
           foreach ($wheel in Get-ChildItem -LiteralPath $wheelhouse -Filter '*.whl' -File) {
             $name = $wheel.Name.ToLowerInvariant()
-            $allowedPattern = '-(any|' + [regex]::Escape($env:EXPECTED_WHEEL_PLATFORM) + ').whl$'
+            $allowedPattern = '-(any|' + [regex]::Escape($env:EXPECTED_WHEEL_PLATFORM) + ')\.whl$'
             if ($name -notmatch $allowedPattern) {
               $bad += $wheel.Name
             }

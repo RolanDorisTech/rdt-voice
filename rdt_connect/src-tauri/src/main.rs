@@ -8536,10 +8536,54 @@ fn tray_location_name() -> &'static str {
 }
 
 #[tauri::command]
+#[cfg(target_os = "linux")]
+fn linux_status_notifier_watcher_available() -> bool {
+    use std::time::Duration;
+
+    let connection = match dbus::blocking::Connection::new_session() {
+        Ok(connection) => connection,
+        Err(error) => {
+            eprintln!(
+                "[RDT Connect] Linux session D-Bus unavailable; close-to-tray is disabled: {error}"
+            );
+            return false;
+        }
+    };
+
+    let proxy = connection.with_proxy(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        Duration::from_millis(500),
+    );
+    let owner: Result<(bool,), _> = proxy.method_call(
+        "org.freedesktop.DBus",
+        "NameHasOwner",
+        ("org.kde.StatusNotifierWatcher",),
+    );
+
+    match owner {
+        Ok((available,)) => available,
+        Err(error) => {
+            eprintln!(
+                "[RDT Connect] Linux tray-host check failed; close-to-tray is disabled: {error}"
+            );
+            false
+        }
+    }
+}
+
+#[tauri::command]
 fn get_tray_location_name() -> String {
     tray_location_name().to_string()
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn get_keep_in_menu_bar(state: State<'_, BackendState>) -> bool {
+    state.keep_in_menu_bar() && linux_status_notifier_watcher_available()
+}
+
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 fn get_keep_in_menu_bar(state: State<'_, BackendState>) -> bool {
     state.keep_in_menu_bar()
@@ -8551,6 +8595,14 @@ fn set_keep_in_menu_bar(
     state: State<'_, BackendState>,
     enabled: bool,
 ) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if enabled && !linux_status_notifier_watcher_available() {
+        return Err(
+            "No Linux system-tray host is available. The main window will remain visible."
+                .to_string(),
+        );
+    }
+
     let previous = state.keep_in_menu_bar();
     state.set_keep_in_menu_bar(enabled)?;
     let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") else {
@@ -8573,6 +8625,12 @@ async fn start_backend(
     model: String,
     preferred_port: u16,
 ) -> Result<BackendStatus, String> {
+    if NATIVE_BENCHMARK_STARTING.load(Ordering::SeqCst) {
+        return Err(
+            "The local server cannot be started while hardware optimization owns the lifecycle."
+                .into(),
+        );
+    }
     let worker_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         start_backend_blocking(worker_app, model, preferred_port)
@@ -8583,11 +8641,243 @@ async fn start_backend(
 
 const NORMAL_BACKEND_STARTUP_TIMEOUT: Duration = Duration::from_secs(180);
 
+#[cfg(any(windows, target_os = "linux"))]
+fn first_start_path_is_symlink(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .unwrap_or(false)
+}
+
+fn first_start_report_is_usable(report_path: &Path, model: &str) -> bool {
+    let Ok(bytes) = fs::read(report_path) else {
+        return false;
+    };
+    let Ok(report) = serde_json::from_slice::<Value>(&bytes) else {
+        return false;
+    };
+    let Some(profile) = report.get("engine_profile") else {
+        return false;
+    };
+    let Some(runtime) = profile.get("selected_runtime") else {
+        return false;
+    };
+
+    let digest = runtime
+        .get("worker_sha256")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let provider = runtime
+        .get("provider")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let candidate_id = runtime
+        .get("candidate_id")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let identity_kind = runtime
+        .get("identity_kind")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let identity_value = runtime
+        .get("identity_value")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let selection_kind = profile
+        .get("selection_kind")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    report.get("completed").and_then(Value::as_bool) == Some(true)
+        && profile.get("schema").and_then(Value::as_u64) == Some(1)
+        && profile.get("completed").and_then(Value::as_bool) == Some(true)
+        && profile.get("model_id").and_then(Value::as_str) == Some(model)
+        && !selection_kind.is_empty()
+        && selection_kind != "none"
+        && !candidate_id.is_empty()
+        && matches!(provider, "cpu" | "cuda" | "vulkan")
+        && digest.len() == 64
+        && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && !identity_kind.is_empty()
+        && !identity_value.is_empty()
+        && !matches!(
+            identity_kind.to_ascii_lowercase().as_str(),
+            "unknown" | "none" | "-"
+        )
+        && !matches!(
+            identity_value.to_ascii_lowercase().as_str(),
+            "unknown" | "none" | "-"
+        )
+}
+
+#[cfg(any(windows, target_os = "linux"))]
+fn ensure_windows_linux_first_start_benchmark(app: &AppHandle, model: &str) -> Result<(), String> {
+    let state = app.state::<BackendState>();
+    let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
+
+    validate_model(model)?;
+    if state.status().running {
+        return Err(
+            "The first-start hardware benchmark cannot run while the local backend is already running."
+                .into(),
+        );
+    }
+    if state
+        .model_download_status
+        .lock()
+        .map(|status| status.active)
+        .unwrap_or(true)
+    {
+        return Err(
+            "Finish or cancel the model download before the first-start hardware benchmark.".into(),
+        );
+    }
+
+    // Revalidate HTTPS trust at the native boundary, not only in the frontend.
+    let tls_config = load_local_tls_config(&state)?;
+    if tls_config.mode.eq_ignore_ascii_case("http") {
+        return Err("The first-start hardware benchmark requires trusted local HTTPS.".into());
+    }
+    validate_tls_material(&tls_config)?;
+    if !configured_certificate_trusted(&tls_config) {
+        return Err(
+            "Local HTTPS is not trusted yet. Complete certificate trust before benchmarking."
+                .into(),
+        );
+    }
+
+    let (model_storage_root, model_cached) = resolve_model_storage_root(&state, model)?;
+    if !model_cached {
+        return Err(
+            "The selected model is not fully cached. Download and verify it before benchmarking."
+                .into(),
+        );
+    }
+
+    let hardware_dir = model_storage_root.join("hardware");
+    fs::create_dir_all(&hardware_dir)
+        .map_err(|error| format!("Could not create the private hardware folder: {error}"))?;
+    set_private_permissions(&hardware_dir, 0o700)
+        .map_err(|error| format!("Could not secure the hardware folder: {error}"))?;
+
+    let report_path = hardware_dir.join(format!("first-start-{model}.json"));
+    let profile_path = hardware_dir.join(format!("first-start-profile-{model}.json"));
+    if first_start_path_is_symlink(&report_path) || first_start_path_is_symlink(&profile_path) {
+        return Err("The first-start report path is not a safe app-owned file.".into());
+    }
+    if first_start_report_is_usable(&report_path, model) {
+        eprintln!(
+            "[RDT Connect] Existing completed report found; revalidating current model, hardware inventory, workers and runtime fingerprint."
+        );
+    }
+
+    let resource_dir = resolve_resource_dir(app)?;
+    let executable = backend_executable_path(&resource_dir);
+    if !executable.is_file() {
+        return Err(format!(
+            "The packaged backend executable is missing at {}.",
+            executable.display()
+        ));
+    }
+    let bundle_dir = executable
+        .parent()
+        .ok_or_else(|| "Could not resolve the packaged backend folder.".to_string())?;
+
+    let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+    let runtime_path = std::env::join_paths(
+        std::iter::once(bundle_dir.to_path_buf()).chain(std::env::split_paths(&inherited_path)),
+    )
+    .map_err(|error| format!("Could not prepare backend runtime PATH: {error}"))?;
+
+    let mut command = Command::new(&executable);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+
+    command
+        .arg("--benchmark-first-start")
+        .arg("--benchmark-report")
+        .arg(&report_path)
+        .arg("--benchmark-profile")
+        .arg(&profile_path)
+        .current_dir(bundle_dir)
+        .env("PATH", runtime_path)
+        .env("WHISPER_MODEL_ID", model)
+        .env("RDT_GGML_MODEL_DIR", model_storage_root.join("ggml"))
+        .env("RDT_BENCHMARK_REPORT_PATH", &report_path)
+        .env("RDT_BENCHMARK_PROFILE_PATH", &profile_path)
+        .env_remove("RDT_WHISPER_WORKER_EXE")
+        .env_remove("RDT_WHISPER_PROVIDER")
+        .env_remove("RDT_WHISPER_WORKER_VARIANT")
+        .env_remove("RDT_WHISPER_DEVICE_SELECTOR")
+        .env_remove("RDT_WHISPER_DEVICE_INDEX")
+        .env_remove("RDT_WHISPER_EXPECTED_DEVICE_IDENTITY_KIND")
+        .env_remove("RDT_WHISPER_EXPECTED_DEVICE_IDENTITY_VALUE")
+        .env_remove("HF_TOKEN")
+        .env_remove("HF_READ_TOKEN")
+        .env_remove("HF_WRITE_TOKEN")
+        .env_remove("HUGGING_FACE_HUB_TOKEN")
+        .env_remove("RDT_BENCHMARK_CPU_READINESS_TIMEOUT_SECONDS")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(unix)]
+    command.process_group(0);
+
+    if let Ok(parent_exe) = std::env::current_exe() {
+        command
+            .env("RDT_CONNECT_PARENT_PID", std::process::id().to_string())
+            .env("RDT_CONNECT_PARENT_EXE", parent_exe);
+    }
+
+    eprintln!(
+        "[RDT Connect] Running mandatory Windows/Linux first-start benchmark for model {model}"
+    );
+    let output = match command.output() {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!(
+                "[RDT Connect] First-start benchmark could not launch ({error}); using deterministic backend fallback."
+            );
+            return Ok(());
+        }
+    };
+
+    if !output.status.success() {
+        let diagnostic = String::from_utf8_lossy(&output.stderr);
+        let diagnostic = diagnostic.trim();
+        if !diagnostic.is_empty() {
+            eprintln!(
+                "[RDT Connect] First-start benchmark diagnostic: {}",
+                diagnostic.chars().take(1200).collect::<String>()
+            );
+        }
+        eprintln!(
+            "[RDT Connect] First-start benchmark did not complete (exit {}). The engine will use capability-aware fallback; no measured winner is claimed.",
+            output.status.code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "terminated".into())
+        );
+        return Ok(());
+    }
+
+    if !first_start_report_is_usable(&report_path, model) {
+        eprintln!(
+            "[RDT Connect] First-start report has no usable completed winner. The engine will use capability-aware fallback; no measured winner is claimed."
+        );
+        return Ok(());
+    }
+
+    eprintln!("[RDT Connect] First-start hardware profile verified.");
+    Ok(())
+}
+
 fn start_backend_blocking(
     app: AppHandle,
     model: String,
     preferred_port: u16,
 ) -> Result<BackendStatus, String> {
+    #[cfg(any(windows, target_os = "linux"))]
+    ensure_windows_linux_first_start_benchmark(&app, &model)?;
+
     // Model resolution and the real MLX warm-up inference happen before /health
     // is served. Allow a bounded first load without changing benchmark deadlines.
     start_backend_blocking_with_options(
@@ -8605,6 +8895,52 @@ fn start_backend_blocking_with_options(
     preferred_port: u16,
     inference_device_override: Option<&str>,
     startup_timeout: Duration,
+) -> Result<BackendStatus, String> {
+    start_backend_blocking_with_options_internal(
+        app,
+        model,
+        preferred_port,
+        inference_device_override,
+        startup_timeout,
+        false,
+    )
+}
+
+// Only the manual benchmark lifecycle may restore a server while its
+// reservation is held. The lower-level Start path rechecks both flags while
+// holding BackendState.lifecycle, so normal Start cannot race restoration.
+#[cfg(any(windows, target_os = "linux"))]
+fn start_backend_blocking_with_options_for_benchmark_restore(
+    app: AppHandle,
+    model: String,
+    preferred_port: u16,
+    startup_timeout: Duration,
+) -> Result<BackendStatus, String> {
+    if !NATIVE_BENCHMARK_STARTING.load(Ordering::SeqCst)
+        || !NATIVE_BENCHMARK_RUNNING.load(Ordering::SeqCst)
+    {
+        return Err(
+            "The manual benchmark no longer owns the server-restoration reservation.".into(),
+        );
+    }
+
+    start_backend_blocking_with_options_internal(
+        app,
+        model,
+        preferred_port,
+        None,
+        startup_timeout,
+        true,
+    )
+}
+
+fn start_backend_blocking_with_options_internal(
+    app: AppHandle,
+    model: String,
+    preferred_port: u16,
+    inference_device_override: Option<&str>,
+    startup_timeout: Duration,
+    benchmark_restore: bool,
 ) -> Result<BackendStatus, String> {
     if preferred_port < 1024 {
         return Err("Choose a preferred port between 1024 and 65535.".into());
@@ -8648,6 +8984,7 @@ fn start_backend_blocking_with_options(
             port,
             inference_device_override,
             startup_timeout,
+            benchmark_restore,
         );
 
         match result {
@@ -8685,11 +9022,20 @@ fn start_backend_blocking_with_options_once(
     preferred_port: u16,
     inference_device_override: Option<&str>,
     startup_timeout: Duration,
+    benchmark_restore: bool,
 ) -> Result<BackendStatus, String> {
     // Keep this lock from the initial running check until the backend is registered or startup fails.
     // A second Start waits, then sees the first server instead of spawning another process.
     let _lifecycle = state.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
-    if inference_device_override.is_none()
+    if benchmark_restore {
+        if !NATIVE_BENCHMARK_STARTING.load(Ordering::SeqCst)
+            || !NATIVE_BENCHMARK_RUNNING.load(Ordering::SeqCst)
+        {
+            return Err(
+                "The manual benchmark reservation was lost before server restoration.".into(),
+            );
+        }
+    } else if inference_device_override.is_none()
         && (NATIVE_BENCHMARK_STARTING.load(Ordering::SeqCst)
             || NATIVE_BENCHMARK_RUNNING.load(Ordering::SeqCst))
     {
@@ -8877,7 +9223,15 @@ fn start_backend_blocking_with_options_once(
             .env("RDT_CONNECT_PARENT_EXE", parent_exe);
     }
     #[cfg(any(windows, target_os = "linux"))]
-    command.env("RDT_GGML_MODEL_DIR", model_storage_root.join("ggml"));
+    {
+        command.env("RDT_GGML_MODEL_DIR", model_storage_root.join("ggml"));
+        command.env(
+            "RDT_WHISPER_FIRST_START_REPORT_PATH",
+            model_storage_root
+                .join("hardware")
+                .join(format!("first-start-{}.json", model)),
+        );
+    }
     command
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(stderr_log));
@@ -9803,6 +10157,51 @@ struct LastServerChoice {
     preferred_port: u16,
 }
 
+fn native_server_oom_message(locale: &str) -> String {
+    const MESSAGE_KEY: &str = "msg.native_server_transcription_out_of_memory.1d47";
+    const FALLBACK: &str = "The local transcription server ran out of memory. Try a smaller model or a shorter recording.";
+    let catalog = match locale {
+        "ar" => include_str!("../../src/locales/ar.json"),
+        "cs" => include_str!("../../src/locales/cs.json"),
+        "de" => include_str!("../../src/locales/de.json"),
+        "en" => include_str!("../../src/locales/en.json"),
+        "es" => include_str!("../../src/locales/es.json"),
+        "fr" => include_str!("../../src/locales/fr.json"),
+        "hi" => include_str!("../../src/locales/hi.json"),
+        "id" => include_str!("../../src/locales/id.json"),
+        "it" => include_str!("../../src/locales/it.json"),
+        "ja" => include_str!("../../src/locales/ja.json"),
+        "ko" => include_str!("../../src/locales/ko.json"),
+        "lo" => include_str!("../../src/locales/lo.json"),
+        "ms" => include_str!("../../src/locales/ms.json"),
+        "nl" => include_str!("../../src/locales/nl.json"),
+        "no" => include_str!("../../src/locales/no.json"),
+        "pl" => include_str!("../../src/locales/pl.json"),
+        "pt" => include_str!("../../src/locales/pt.json"),
+        "ru" => include_str!("../../src/locales/ru.json"),
+        "sv" => include_str!("../../src/locales/sv.json"),
+        "th" => include_str!("../../src/locales/th.json"),
+        "tl" => include_str!("../../src/locales/tl.json"),
+        "tr" => include_str!("../../src/locales/tr.json"),
+        "uk" => include_str!("../../src/locales/uk.json"),
+        "vi" => include_str!("../../src/locales/vi.json"),
+        "zh-CN" => include_str!("../../src/locales/zh-CN.json"),
+        "zh-TW" => include_str!("../../src/locales/zh-TW.json"),
+        _ => include_str!("../../src/locales/en.json"),
+    };
+    serde_json::from_str::<serde_json::Value>(catalog)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("messages")?
+                .get(MESSAGE_KEY)?
+                .as_str()
+                .map(str::to_owned)
+        })
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| FALLBACK.to_string())
+}
+
 fn supported_locale(locale: &str) -> bool {
     matches!(
         locale,
@@ -10644,8 +11043,10 @@ fn open_about_link(kind: String, locale: Option<String>) -> Result<(), String> {
                 .as_deref()
                 .filter(|value| supported_locale(value))
                 .unwrap_or("en");
+            let native_oom_message = native_server_oom_message(selected_locale);
             url.query_pairs_mut()
-                .append_pair("rdt_connect_lang", selected_locale);
+                .append_pair("rdt_connect_lang", selected_locale)
+                .append_pair("rdt_connect_native_oom_message", &native_oom_message);
             url.to_string()
         }
         "email" => EMAIL.to_string(),
@@ -11169,6 +11570,9 @@ struct NativeBenchmarkRunGuard;
 impl Drop for NativeBenchmarkRunGuard {
     fn drop(&mut self) {
         NATIVE_BENCHMARK_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+        // STARTING is frontend-owned. Keep the reservation through command
+        // completion; the frontend outer finally releases it after this
+        // command returns. Clearing it here opens a start-race window.
         NATIVE_BENCHMARK_RUNNING.store(false, Ordering::SeqCst);
     }
 }
@@ -12117,6 +12521,620 @@ mod native_benchmark_1d30_privacy_tests {
         assert!(native_benchmark_candidate_timeout_ms("first-run", None, None).is_err());
         assert!(native_benchmark_candidate_timeout_ms("manual", Some("invalid"), None).is_err());
     }
+}
+
+#[tauri::command]
+async fn run_manual_hardware_benchmark(
+    app: AppHandle,
+    model: String,
+    run_id: String,
+    candidate_ids: Vec<String>,
+    order: String,
+    fixture: String,
+    time_limit_enabled: bool,
+) -> Result<Value, String> {
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            run_manual_hardware_benchmark_blocking(
+                app,
+                model,
+                run_id,
+                candidate_ids,
+                order,
+                fixture,
+                time_limit_enabled,
+            )
+        })
+        .await
+        .map_err(|error| format!("Manual hardware benchmark worker failed: {error}"))?
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = (
+            app,
+            model,
+            run_id,
+            candidate_ids,
+            order,
+            fixture,
+            time_limit_enabled,
+        );
+        Err("The packaged manual hardware runner is available on Windows and Linux only.".into())
+    }
+}
+
+#[cfg(any(windows, target_os = "linux"))]
+fn run_manual_hardware_benchmark_blocking(
+    app: AppHandle,
+    model: String,
+    run_id: String,
+    candidate_ids: Vec<String>,
+    order: String,
+    fixture: String,
+    time_limit_enabled: bool,
+) -> Result<Value, String> {
+    validate_model(&model)?;
+
+    if run_id.len() < 16
+        || run_id.len() > 128
+        || !run_id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+    {
+        return Err("The manual benchmark run identifier is invalid.".into());
+    }
+    if candidate_ids.is_empty()
+        || candidate_ids.len() > 256
+        || candidate_ids
+            .iter()
+            .any(|id| id.trim().is_empty() || id.len() > 512)
+    {
+        return Err("The manual benchmark candidate selection is invalid.".into());
+    }
+    let unique_ids: std::collections::BTreeSet<&str> =
+        candidate_ids.iter().map(String::as_str).collect();
+    if unique_ids.len() != candidate_ids.len() {
+        return Err("The manual benchmark candidate selection contains duplicates.".into());
+    }
+    if !matches!(order.as_str(), "recommended" | "gpu" | "cpu") {
+        return Err("The manual benchmark order is invalid.".into());
+    }
+    if !matches!(fixture.as_str(), "12s" | "21s") {
+        return Err("The manual benchmark audio fixture is invalid.".into());
+    }
+    if !NATIVE_BENCHMARK_STARTING.load(Ordering::SeqCst) {
+        return Err("The manual hardware benchmark reservation was released.".into());
+    }
+
+    // Share the native benchmark exclusion gate. This prevents a native
+    // comparison and the standalone W/L worker from running simultaneously.
+    {
+        let _control = NATIVE_BENCHMARK_CONTROL_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if NATIVE_BENCHMARK_RUNNING
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err("Another hardware benchmark is already running.".into());
+        }
+        NATIVE_BENCHMARK_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+    }
+    let run_guard = NativeBenchmarkRunGuard;
+
+    let state = app.state::<BackendState>();
+    let download_active = state
+        .model_download_status
+        .lock()
+        .map_err(|_| "Could not inspect model-download state.".to_string())?
+        .active;
+    if download_active {
+        drop(run_guard);
+        return Err("Finish or cancel the model download before benchmarking.".into());
+    }
+
+    let (model_storage_root, model_cached) = resolve_model_storage_root(&state, &model)?;
+    if !model_cached {
+        drop(run_guard);
+        return Err(
+            "The selected model is not fully cached. Download and verify it before benchmarking."
+                .into(),
+        );
+    }
+
+    let initial_status = state.status();
+    let original_server = if initial_status.running {
+        let original_model = initial_status.model.clone().ok_or_else(|| {
+            "The running server did not report its model; it was left untouched.".to_string()
+        })?;
+        let original_port = initial_status.port.ok_or_else(|| {
+            "The running server did not report its port; it was left untouched.".to_string()
+        })?;
+        let original_pid = initial_status.pid.ok_or_else(|| {
+            "The running server did not report its process identity; it was left untouched."
+                .to_string()
+        })?;
+        let original_protocol = initial_status
+            .local_url
+            .as_deref()
+            .and_then(|url| url.split_once("://").map(|(scheme, _)| scheme.to_owned()));
+        Some((
+            original_model,
+            original_port,
+            original_pid,
+            original_protocol,
+        ))
+    } else {
+        None
+    };
+
+    let mut runner_process_tree_cleanup_verified = true;
+    let benchmark_result = (|| -> Result<Value, String> {
+        // Stop only the backend owned by this BackendState. The standalone
+        // Python CLI then takes its own nonblocking model-use lease.
+        if initial_status.running {
+            let stop_result = state.stop();
+            if state.status().running {
+                return Err(format!(
+                    "The managed server could not be confirmed stopped; the manual benchmark was not started. {}",
+                    stop_result.err().unwrap_or_else(|| "The server is still running.".into())
+                ));
+            }
+            stop_result.map_err(|error| {
+                format!("The managed server stopped with a cleanup error; benchmarking was not started: {error}")
+            })?;
+            refresh_tray_menu(&app);
+        }
+
+        if state.status().running {
+            return Err(
+                "A managed backend is still running; manual benchmarking was refused.".into(),
+            );
+        }
+
+        let hardware_dir = model_storage_root.join("hardware");
+        let runs_dir = hardware_dir.join("manual-runs");
+        if first_start_path_is_symlink(&hardware_dir) || first_start_path_is_symlink(&runs_dir) {
+            return Err(
+                "The manual benchmark storage path is not a safe app-owned directory.".into(),
+            );
+        }
+        fs::create_dir_all(&runs_dir)
+            .map_err(|error| format!("Could not create the manual benchmark directory: {error}"))?;
+        set_private_permissions(&hardware_dir, 0o700)
+            .map_err(|error| format!("Could not secure the model hardware directory: {error}"))?;
+        set_private_permissions(&runs_dir, 0o700)
+            .map_err(|error| format!("Could not secure the manual benchmark directory: {error}"))?;
+
+        let run_dir = runs_dir.join(&run_id);
+        fs::create_dir(&run_dir).map_err(|error| {
+            format!("Could not create a unique manual benchmark run folder: {error}")
+        })?;
+        set_private_permissions(&run_dir, 0o700).map_err(|error| {
+            format!("Could not secure the manual benchmark run folder: {error}")
+        })?;
+
+        let request_path = run_dir.join("request.json");
+        let profile_path = run_dir.join("profile.json");
+        let report_path = run_dir.join("report.json");
+        let progress_path = run_dir.join("progress.json");
+        let log_path = run_dir.join("manual-benchmark.log");
+
+        let request = json!({
+            "schema": 1,
+            "run_id": run_id,
+            "candidate_ids": candidate_ids,
+            "order": order,
+            "fixture": fixture,
+            "time_limit_enabled": time_limit_enabled
+        });
+        let request_bytes = serde_json::to_vec_pretty(&request)
+            .map_err(|error| format!("Could not encode the manual benchmark request: {error}"))?;
+        let mut request_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&request_path)
+            .map_err(|error| {
+                format!("Could not create the private manual benchmark request: {error}")
+            })?;
+        request_file
+            .write_all(&request_bytes)
+            .map_err(|error| format!("Could not write the manual benchmark request: {error}"))?;
+        request_file
+            .sync_all()
+            .map_err(|error| format!("Could not flush the manual benchmark request: {error}"))?;
+        set_private_permissions(&request_path, 0o600)
+            .map_err(|error| format!("Could not secure the manual benchmark request: {error}"))?;
+
+        let resource_dir = resolve_resource_dir(&app)?;
+        let executable = backend_executable_path(&resource_dir);
+        if !executable.is_file() {
+            return Err(format!(
+                "The packaged backend executable is missing at {}.",
+                executable.display()
+            ));
+        }
+        let bundle_dir = executable
+            .parent()
+            .ok_or_else(|| "Could not resolve the packaged backend folder.".to_string())?;
+        let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+        let runtime_path = std::env::join_paths(
+            std::iter::once(bundle_dir.to_path_buf()).chain(std::env::split_paths(&inherited_path)),
+        )
+        .map_err(|error| format!("Could not prepare the backend runtime PATH: {error}"))?;
+
+        let log_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&log_path)
+            .map_err(|error| format!("Could not create the manual benchmark log: {error}"))?;
+        set_private_permissions(&log_path, 0o600)
+            .map_err(|error| format!("Could not secure the manual benchmark log: {error}"))?;
+        let stderr_log = log_file
+            .try_clone()
+            .map_err(|error| format!("Could not attach the manual benchmark error log: {error}"))?;
+
+        let mut command = Command::new(&executable);
+        #[cfg(windows)]
+        command.creation_flags(0x08000000);
+
+        command
+            .arg("--benchmark-manual")
+            .arg("--benchmark-manual-request")
+            .arg(&request_path)
+            .arg("--benchmark-manual-profile")
+            .arg(&profile_path)
+            .arg("--benchmark-manual-report")
+            .arg(&report_path)
+            .arg("--benchmark-manual-progress")
+            .arg(&progress_path)
+            .current_dir(bundle_dir)
+            .env("PATH", runtime_path)
+            .env("WHISPER_MODEL_ID", &model)
+            .env("RDT_GGML_MODEL_DIR", model_storage_root.join("ggml"))
+            .env_remove("RDT_WHISPER_WORKER_EXE")
+            .env_remove("RDT_WHISPER_PROVIDER")
+            .env_remove("RDT_WHISPER_WORKER_VARIANT")
+            .env_remove("RDT_WHISPER_DEVICE_SELECTOR")
+            .env_remove("RDT_WHISPER_DEVICE_INDEX")
+            .env_remove("RDT_WHISPER_EXPECTED_DEVICE_IDENTITY_KIND")
+            .env_remove("RDT_WHISPER_EXPECTED_DEVICE_IDENTITY_VALUE")
+            .env_remove("HF_TOKEN")
+            .env_remove("HF_READ_TOKEN")
+            .env_remove("HF_WRITE_TOKEN")
+            .env_remove("HUGGING_FACE_HUB_TOKEN")
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(stderr_log));
+
+        #[cfg(unix)]
+        command.process_group(0);
+
+        if let Ok(parent_exe) = std::env::current_exe() {
+            command
+                .env("RDT_CONNECT_PARENT_PID", std::process::id().to_string())
+                .env("RDT_CONNECT_PARENT_EXE", parent_exe);
+        }
+
+        eprintln!("[RDT Connect] Starting standalone W/L manual benchmark for model {model}; run={run_id}");
+        let mut child = command.spawn().map_err(|error| {
+            format!(
+                "Could not start the packaged manual benchmark runner: {error}; log={}",
+                log_path.display()
+            )
+        })?;
+
+        let runner_pid = child.id();
+        let mut last_progress: Option<Vec<u8>> = None;
+        let exit_status = loop {
+            if let Ok(bytes) = fs::read(&progress_path) {
+                if last_progress.as_ref() != Some(&bytes) {
+                    if let Ok(progress) = serde_json::from_slice::<Value>(&bytes) {
+                        let _ = app.emit("rdt-manual-hardware-progress", progress);
+                    }
+                    last_progress = Some(bytes);
+                }
+            }
+
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => thread::sleep(Duration::from_millis(250)),
+                Err(error) => {
+                    // Unix launches the runner in its own process group; on
+                    // Windows the shared helper terminates the captured root
+                    // and its descendants. Do not leave worker children behind.
+                    let process_tree_stopped =
+                        terminate_process_group(runner_pid, Some(&mut child));
+                    if !process_tree_stopped {
+                        runner_process_tree_cleanup_verified = false;
+                    }
+                    let cleanup_status = if process_tree_stopped {
+                        "the runner process tree was terminated and verified"
+                    } else {
+                        "runner process-tree termination could not be verified"
+                    };
+                    return Err(format!(
+                        "Could not monitor the manual benchmark process: {error}; {cleanup_status}; log={}",
+                        log_path.display()
+                    ));
+                }
+            }
+        };
+
+        // The runner root may exit while a worker descendant remains.
+        // Verify the process tree before reading results or restoring the server.
+        if process_group_alive(runner_pid) {
+            runner_process_tree_cleanup_verified =
+                terminate_process_group(runner_pid, Some(&mut child));
+        }
+        if !runner_process_tree_cleanup_verified {
+            return Err(format!(
+                "The manual benchmark runner process tree could not be confirmed stopped; log={}",
+                log_path.display()
+            ));
+        }
+
+        if let Ok(bytes) = fs::read(&progress_path) {
+            if let Ok(progress) = serde_json::from_slice::<Value>(&bytes) {
+                let _ = app.emit("rdt-manual-hardware-progress", progress);
+            }
+        }
+
+        let report_bytes = fs::read(&report_path).map_err(|error| {
+            format!(
+                "The manual benchmark did not produce a readable report (exit={:?}): {error}; log={}",
+                exit_status.code(),
+                log_path.display()
+            )
+        })?;
+        let mut report: Value = serde_json::from_slice(&report_bytes).map_err(|error| {
+            format!(
+                "The manual benchmark report is invalid: {error}; log={}",
+                log_path.display()
+            )
+        })?;
+        if report.get("schema").and_then(Value::as_u64) != Some(1)
+            || report.get("mode").and_then(Value::as_str) != Some("manual")
+            || report.get("run_id").and_then(Value::as_str) != Some(run_id.as_str())
+        {
+            return Err(format!(
+                "The manual benchmark report failed its run identity check; log={}",
+                log_path.display()
+            ));
+        }
+
+        fn redact_worker_paths(value: &mut Value) {
+            match value {
+                Value::Object(map) => {
+                    for key in [
+                        "worker_path",
+                        "executable_path",
+                        "report_path",
+                        "profile_path",
+                        "progress_path",
+                    ] {
+                        map.remove(key);
+                    }
+                    for child in map.values_mut() {
+                        redact_worker_paths(child);
+                    }
+                }
+                Value::Array(items) => {
+                    for child in items {
+                        redact_worker_paths(child);
+                    }
+                }
+                _ => {}
+            }
+        }
+        redact_worker_paths(&mut report);
+        if let Some(object) = report.as_object_mut() {
+            object.insert("process_exit_code".into(), json!(exit_status.code()));
+        }
+        eprintln!(
+            "[RDT Connect] Manual benchmark process finished: exit={:?}; run={run_id}",
+            exit_status.code()
+        );
+        Ok(report)
+    })();
+
+    // The standalone runner has exited and released its model-use lease.
+    // Keep the benchmark-running guard and the STARTING reservation held while
+    // restoring. Only the reservation-checked restore helper may start a
+    // backend during this interval; normal and candidate starts remain blocked.
+    let restore_result: Result<bool, String> = (|| {
+        if !runner_process_tree_cleanup_verified {
+            return Err(
+                "The manual benchmark process tree may still be running. The original server was left stopped to prevent overlapping workers.".into(),
+            );
+        }
+
+        if let Some((original_model, original_port, original_pid, original_protocol)) =
+            original_server
+        {
+            let current = state.status();
+            if current.running {
+                if current.model.as_deref() == Some(original_model.as_str())
+                    && current.port == Some(original_port)
+                    && current.pid == Some(original_pid)
+                {
+                    return Ok(true);
+                }
+                return Err("A different backend is running after the manual benchmark. The original server was not replaced.".into());
+            }
+
+            let restored = start_backend_blocking_with_options_for_benchmark_restore(
+                app.clone(),
+                original_model.clone(),
+                original_port,
+                NORMAL_BACKEND_STARTUP_TIMEOUT,
+            )?;
+            if !restored.running
+                || restored.model.as_deref() != Some(original_model.as_str())
+                || restored.port != Some(original_port)
+                || restored.pid.is_none()
+            {
+                return Err("The original server did not restore with its exact model, port and process identity.".into());
+            }
+            let restored_protocol = restored
+                .local_url
+                .as_deref()
+                .and_then(|url| url.split_once("://").map(|(scheme, _)| scheme.to_owned()));
+            if original_protocol.is_some() && restored_protocol != original_protocol {
+                return Err(
+                    "The original server's HTTP/HTTPS transport could not be restored.".into(),
+                );
+            }
+            Ok(true)
+        } else {
+            if state.status().running {
+                return Err("A backend appeared during the manual benchmark even though none was running beforehand; it was left untouched.".into());
+            }
+            Ok(false)
+        }
+    })();
+
+    // Restoration is complete (or has failed safely); now release the
+    // benchmark-running exclusion. The frontend releases STARTING afterward.
+    drop(run_guard);
+
+    match (benchmark_result, restore_result) {
+        (Ok(mut report), Ok(restored)) => {
+            if let Some(object) = report.as_object_mut() {
+                object.insert("server_restored".into(), json!(restored));
+            }
+            refresh_tray_menu(&app);
+            Ok(report)
+        }
+        (Err(run_error), Ok(_)) => Err(run_error),
+        (Ok(_), Err(restore_error)) => Err(format!(
+            "The manual benchmark finished, but the original server could not be safely restored: {restore_error}"
+        )),
+        (Err(run_error), Err(restore_error)) => Err(format!(
+            "{run_error}; original server restoration also failed: {restore_error}"
+        )),
+    }
+}
+
+#[tauri::command]
+async fn discover_manual_hardware_candidates(app: AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(any(windows, target_os = "linux"))]
+        {
+            let resource_dir = resolve_resource_dir(&app)?;
+            let executable = backend_executable_path(&resource_dir);
+            if !executable.is_file() {
+                return Err(format!(
+                    "Packaged backend executable is missing at {}.",
+                    executable.display()
+                ));
+            }
+            let bundle_dir = executable
+                .parent()
+                .ok_or_else(|| "Could not resolve the packaged backend folder.".to_string())?;
+
+            let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+            let runtime_path = std::env::join_paths(
+                std::iter::once(bundle_dir.to_path_buf())
+                    .chain(std::env::split_paths(&inherited_path)),
+            )
+            .map_err(|error| format!("Could not prepare backend runtime PATH: {error}"))?;
+
+            let mut command = Command::new(&executable);
+            #[cfg(windows)]
+            command.creation_flags(0x08000000);
+
+            command
+                .arg("--benchmark-manual-discover")
+                .current_dir(bundle_dir)
+                .env("PATH", runtime_path)
+                .env_remove("RDT_WHISPER_WORKER_EXE")
+                .env_remove("RDT_WHISPER_PROVIDER")
+                .env_remove("HF_TOKEN")
+                .env_remove("HF_READ_TOKEN")
+                .env_remove("HF_WRITE_TOKEN")
+                .env_remove("HUGGING_FACE_HUB_TOKEN")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            let output = command
+                .output()
+                .map_err(|error| format!("Could not start packaged hardware discovery: {error}"))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!(
+                    "[RDT Connect] Manual hardware discovery exited with {}: {}",
+                    output.status,
+                    stderr.lines().take(12).collect::<Vec<_>>().join("\n")
+                );
+                return Err(format!(
+                    "Hardware discovery failed ({}). Check the RDT Connect backend log.",
+                    output.status
+                ));
+            }
+
+            let payload: Value = serde_json::from_slice(&output.stdout).map_err(|error| {
+                eprintln!("[RDT Connect] Manual hardware discovery returned invalid JSON: {error}");
+                "Hardware discovery returned an invalid response.".to_string()
+            })?;
+
+            let physical_choice_count = payload
+                .get("physical_choice_count")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    "Hardware discovery omitted the physical hardware count.".to_string()
+                })?;
+            let show_selector = payload
+                .get("show_selector")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    "Hardware discovery omitted the selector threshold result.".to_string()
+                })?;
+            if show_selector != (physical_choice_count >= 3) {
+                return Err(
+                    "Hardware discovery returned an inconsistent physical-device selector threshold."
+                        .into(),
+                );
+            }
+
+            let candidates = payload
+                .get("candidates")
+                .and_then(Value::as_array)
+                .ok_or_else(|| "Hardware discovery omitted its candidate inventory.".to_string())?;
+
+            for candidate in candidates {
+                if candidate
+                    .get("candidate_id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.trim().is_empty())
+                    .is_none()
+                {
+                    return Err(
+                        "Hardware discovery returned a candidate without a stable ID.".into(),
+                    );
+                }
+                if candidate.get("worker_path").is_some()
+                    || candidate.get("executable_path").is_some()
+                {
+                    return Err(
+                        "Hardware discovery attempted to expose a packaged executable path.".into(),
+                    );
+                }
+            }
+
+            Ok(payload)
+        }
+
+        #[cfg(not(any(windows, target_os = "linux")))]
+        {
+            let _ = app;
+            Err("Manual hardware benchmarking is supported on Windows and Linux only.".into())
+        }
+    })
+    .await
+    .map_err(|error| format!("Hardware discovery worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -14697,7 +15715,7 @@ fn main() {
                 tauri::include_image!("icons/rdt-menu-bar-icon.png"),
                 false,
             );
-            TrayIconBuilder::with_id("rdt-connect-menu-bar")
+            let tray_build_result = TrayIconBuilder::with_id("rdt-connect-menu-bar")
                 .icon(tray_icon)
                 .icon_as_template(tray_icon_is_template)
                 .menu(&menu)
@@ -14795,11 +15813,34 @@ fn main() {
                 // Left-click presents the menu only. Opening the window is an explicit
                 // menu action, so a click cannot immediately dismiss the menu by raising
                 // the Dock window underneath it.
-                .build(app)?;
-            // Respect the saved visibility preference on every launch. When disabled,
-            // the application remains a normal Dock/window app but has no menu-bar item.
-            if let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") {
-                tray.set_visible(state.keep_in_menu_bar()).map_err(std::io::Error::other)?;
+                .build(app);
+            #[cfg(target_os = "linux")]
+            {
+                match tray_build_result {
+                    Ok(tray) => {
+                        if let Err(error) = tray.set_visible(state.keep_in_menu_bar()) {
+                            eprintln!("[RDT Connect] Linux system tray could not apply its visibility preference: {error}. Continuing with the main window available.");
+                            state.keep_in_menu_bar.store(false, Ordering::SeqCst);
+                            if let Err(persist_error) = state.set_keep_in_menu_bar(false) {
+                                eprintln!("[RDT Connect] Could not persist the disabled Linux tray fallback: {persist_error}");
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("[RDT Connect] Linux system tray initialization failed: {error}. Continuing without tray integration.");
+                        state.keep_in_menu_bar.store(false, Ordering::SeqCst);
+                        if let Err(persist_error) = state.set_keep_in_menu_bar(false) {
+                            eprintln!("[RDT Connect] Could not persist the disabled Linux tray fallback: {persist_error}");
+                        }
+                    }
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                tray_build_result?;
+                if let Some(tray) = app.tray_by_id("rdt-connect-menu-bar") {
+                    tray.set_visible(state.keep_in_menu_bar()).map_err(std::io::Error::other)?;
+                }
             }
             // Do not replace the active NSStatusItem menu on a timer. Replacing the
             // menu every few seconds dismisses the user's open menu. Status is refreshed
@@ -14816,7 +15857,7 @@ fn main() {
             get_local_https_status, pick_tls_file, setup_local_https_certificate, link_local_https_certificate, trust_local_https_ca, remove_rdt_https_trust, set_local_transport,
             get_tailscale_status, get_remote_access_diagnostics, enable_private_access, generate_pairing_qr,
             list_pair_requests, approve_pair_request, deny_pair_request,
-            list_paired_devices, revoke_paired_device, open_about_link, open_windows_installation_guide, open_youtube_channel, get_apple_gpu_display_label, get_lifetime_statistics, get_server_token, get_inference_device_preference, set_inference_device_preference, set_native_benchmark_starting, is_hardware_optimization_supported, is_first_run_hardware_optimization_required, start_hardware_candidate_backend, stop_hardware_candidate_backend, run_hardware_native_benchmark, get_native_benchmark_diagnostics, finalize_hardware_optimization, get_hardware_optimization_profile, apply_hardware_optimization_profile, clear_hardware_optimization_active_profile, cancel_native_benchmark, get_hardware_candidate_demotions, record_hardware_candidate_outcome
+            list_paired_devices, revoke_paired_device, open_about_link, open_windows_installation_guide, open_youtube_channel, get_apple_gpu_display_label, get_lifetime_statistics, get_server_token, get_inference_device_preference, set_inference_device_preference, set_native_benchmark_starting, is_hardware_optimization_supported, is_first_run_hardware_optimization_required, start_hardware_candidate_backend, stop_hardware_candidate_backend, discover_manual_hardware_candidates, run_manual_hardware_benchmark, run_hardware_native_benchmark, get_native_benchmark_diagnostics, finalize_hardware_optimization, get_hardware_optimization_profile, apply_hardware_optimization_profile, clear_hardware_optimization_active_profile, cancel_native_benchmark, get_hardware_candidate_demotions, record_hardware_candidate_outcome
         ])
         .build(context)
         .expect("error while building RDT Connect");
@@ -14831,6 +15872,8 @@ fn main() {
                 .try_state::<BackendState>()
                 .map(|state| state.keep_in_menu_bar())
                 .unwrap_or(false);
+            #[cfg(target_os = "linux")]
+            let keep = keep && linux_status_notifier_watcher_available();
             if keep {
                 api.prevent_close();
                 hide_main_window_to_menu_bar(handle);
@@ -16402,5 +17445,136 @@ mod model_download_registration_lock_tests {
         .join();
 
         assert!(lock_model_download_registration_stores(&pid_store, log_store.as_ref(),).is_err());
+    }
+}
+
+#[cfg(test)]
+mod windows_linux_first_start_profile_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn write_report(report: Value) -> (PathBuf, PathBuf) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "rdt-first-start-profile-test-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).expect("create temporary test directory");
+        let report_path = directory.join("report.json");
+        fs::write(
+            &report_path,
+            serde_json::to_vec(&report).expect("serialize test report"),
+        )
+        .expect("write test report");
+        (directory, report_path)
+    }
+
+    fn valid_report() -> Value {
+        serde_json::json!({
+            "completed": true,
+            "engine_profile": {
+                "schema": 1,
+                "completed": true,
+                "selection_kind": "measured",
+                "model_id": "large-v3-turbo",
+                "selected_runtime": {
+                    "candidate_id": "cuda:pci:0000:01:00.0",
+                    "provider": "cuda",
+                    "worker_sha256": "a".repeat(64),
+                    "identity_kind": "pci_bdf",
+                    "identity_value": "0000:01:00.0"
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn accepts_completed_profile_for_same_model() {
+        let (directory, report_path) = write_report(valid_report());
+        assert!(first_start_report_is_usable(&report_path, "large-v3-turbo"));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn rejects_incomplete_report() {
+        let mut report = valid_report();
+        report["completed"] = Value::Bool(false);
+        let (directory, report_path) = write_report(report);
+        assert!(!first_start_report_is_usable(
+            &report_path,
+            "large-v3-turbo"
+        ));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn rejects_incomplete_engine_profile() {
+        let mut report = valid_report();
+        report["engine_profile"]["completed"] = Value::Bool(false);
+        let (directory, report_path) = write_report(report);
+        assert!(!first_start_report_is_usable(
+            &report_path,
+            "large-v3-turbo"
+        ));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn rejects_profile_for_different_model() {
+        let (directory, report_path) = write_report(valid_report());
+        assert!(!first_start_report_is_usable(&report_path, "small-model"));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn rejects_missing_or_malformed_worker_hash() {
+        for digest in ["", "abc", "g".repeat(64).as_str()] {
+            let mut report = valid_report();
+            report["engine_profile"]["selected_runtime"]["worker_sha256"] =
+                Value::String(digest.to_string());
+            let (directory, report_path) = write_report(report);
+            assert!(!first_start_report_is_usable(
+                &report_path,
+                "large-v3-turbo"
+            ));
+            let _ = fs::remove_dir_all(directory);
+        }
+    }
+
+    #[test]
+    fn rejects_missing_physical_identity() {
+        let mut report = valid_report();
+        report["engine_profile"]["selected_runtime"]["identity_value"] =
+            Value::String("unknown".into());
+        let (directory, report_path) = write_report(report);
+        assert!(!first_start_report_is_usable(
+            &report_path,
+            "large-v3-turbo"
+        ));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn rejects_missing_candidate_or_unsupported_provider() {
+        let mut report = valid_report();
+        report["engine_profile"]["selected_runtime"]["candidate_id"] = Value::String(String::new());
+        let (directory, report_path) = write_report(report);
+        assert!(!first_start_report_is_usable(
+            &report_path,
+            "large-v3-turbo"
+        ));
+        let _ = fs::remove_dir_all(directory);
+
+        let mut report = valid_report();
+        report["engine_profile"]["selected_runtime"]["provider"] = Value::String("mlx".into());
+        let (directory, report_path) = write_report(report);
+        assert!(!first_start_report_is_usable(
+            &report_path,
+            "large-v3-turbo"
+        ));
+        let _ = fs::remove_dir_all(directory);
     }
 }

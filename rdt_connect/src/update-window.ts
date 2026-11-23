@@ -1,5 +1,4 @@
 import { emit, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getActiveLocale, initializeLocalization, translateKey } from "./i18n";
 import "./update.css";
 
@@ -14,7 +13,6 @@ const checkButton = document.getElementById("update-window-check-button") as HTM
 const primaryButton = document.getElementById("update-window-primary-button") as HTMLButtonElement;
 const heading = document.querySelector<HTMLHeadingElement>(".update-window-header h1");
 let currentAction: UpdateUiAction = null;
-let dismissalTimer: number | null = null;
 
 function text(key: string, params: Record<string, string> = {}): string {
   return translateKey(key, params, getActiveLocale());
@@ -35,22 +33,11 @@ function render(state: UpdateUiState): void {
   else if (currentAction === "reopen") primaryButton.textContent = text("updater.reopenApp");
   checkButton.hidden = currentAction === "install" || currentAction === "installing" || currentAction === "reopen";
 
-  // Automatically dismiss passive results, but keep actionable updates and the Reopen App action visible.
-  if (dismissalTimer !== null) window.clearTimeout(dismissalTimer);
-  dismissalTimer = null;
-  const passiveResult = currentAction === null && (
-    state.key === "updater.upToDate" || state.key === "updater.checkFailed" || state.key === "updater.feedMissing"
-  );
-  if (passiveResult) {
-    const delayMs = state.key === "updater.upToDate" ? 3800 : 6500;
-    dismissalTimer = window.setTimeout(() => {
-      void getCurrentWindow().close().catch(() => undefined);
-    }, delayMs);
-  }
+  // Keep results visible so users can read them and manually retry checks.
 }
 
 async function requestMainState(): Promise<void> {
-  await emit("rdt-connect-update-window-ready", {});
+  await emit("rdt-connect-update-window-state-request", {});
 }
 
 async function start(): Promise<void> {
@@ -58,7 +45,9 @@ async function start(): Promise<void> {
   checkButton.textContent = text("msg.check_for_updates.f26f3275");
   if (message) message.textContent = text("updater.checking");
   await listen<UpdateUiState>("rdt-connect-update-status", (event) => render(event.payload));
-  await listen("rdt-connect-update-window-recheck", () => { void requestMainState(); });
+  await listen("rdt-connect-update-window-recheck", () => {
+    void emit("rdt-connect-update-check-request", {});
+  });
   checkButton.addEventListener("click", () => { void emit("rdt-connect-update-check-request", {}); });
   primaryButton.addEventListener("click", () => {
     if (currentAction === "install") void emit("rdt-connect-update-install-request", {});
@@ -68,6 +57,6 @@ async function start(): Promise<void> {
 }
 
 void start().catch((error) => {
-  if (message) message.textContent = `Could not connect to the updater: ${String(error)}`;
+  if (message) message.textContent = text("updater.checkFailed");
   shell?.classList.remove("is-busy");
 });

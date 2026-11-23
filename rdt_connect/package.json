@@ -1,20 +1,6 @@
 {
-  "name": "rdt-connect-desktop",
-  "private": true,
-  "version": "0.2.0-dev.12.1D47",
-  "type": "module",
-  "scripts": {
-    "prebuild": "node scripts/check-embedded-rdt-voice.mjs",
-    "dev": "vite --host 127.0.0.1 --port 1420",
-    "build": "node scripts/test-frontend-runtime-identifiers.cjs && tsc && vite build",
-    "tauri": "tauri",
-    "prepare:desktop-resources": "bash scripts/prepare-macos-bundle.sh ..",
-    "build:desktop:macos": "bash scripts/build-macos-with-marker.sh",
-    "build:custom-dmg": "bash scripts/run-release-contracts.sh && python3 scripts/build-custom-dmg.py",
-    "build:desktop:custom-dmg:macos": "RDT_SKIP_UPDATER_ARTIFACTS=1 RDT_BUILD_APP_ONLY=1 bash scripts/build-macos-with-marker.sh && python3 scripts/build-custom-dmg.py",
-    "test:versioning": "node scripts/test-build-versioning.cjs",
-    "test:release-contracts": "bash scripts/run-release-contracts.sh",
-    "sync:build-version": "node scripts/sync-build-version.cjs ."
+  "allowScripts": {
+    "esbuild@0.25.12": true
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
@@ -27,7 +13,21 @@
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   },
-  "allowScripts": {
-    "esbuild@0.25.12": true
-  }
+  "name": "rdt-connect-desktop",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/test-frontend-runtime-identifiers.cjs && tsc && vite build",
+    "build:custom-dmg": "bash scripts/run-release-contracts.sh && python3 scripts/build-custom-dmg.py",
+    "build:desktop:custom-dmg:macos": "RDT_SKIP_UPDATER_ARTIFACTS=1 RDT_BUILD_APP_ONLY=1 bash scripts/build-macos-with-marker.sh && python3 scripts/build-custom-dmg.py",
+    "build:desktop:macos": "bash scripts/build-macos-with-marker.sh",
+    "dev": "vite --host 127.0.0.1 --port 1420",
+    "prebuild": "node scripts/check-embedded-rdt-voice.mjs",
+    "prepare:desktop-resources": "bash scripts/prepare-macos-bundle.sh ..",
+    "sync:build-version": "node scripts/sync-build-version.cjs .",
+    "tauri": "tauri",
+    "test:release-contracts": "bash scripts/run-release-contracts.sh",
+    "test:versioning": "node scripts/test-build-versioning.cjs"
+  },
+  "type": "module",
+  "version": "0.2.0-dev.12.1D47"
 }

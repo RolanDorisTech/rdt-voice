@@ -17,11 +17,11 @@ TARGET_PREFIXES = {
     "linux-aarch64": "4",
     "linux-x86_64": "5",
 }
-MARKER_RE = re.compile(r"^[1-5][A-Z][0-9]{2}$")
+MARKER_RE = re.compile(r"^(?:[1-3][A-KM-Z][0-9]{2}|[45]L[0-9]{3})$")
 VERSION_RE = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)"
-    r"\.([1-5][A-Z][0-9]{2})$"
+    r"\.((?:[1-3][A-KM-Z][0-9]{2}|[45]L[0-9]{3}))$"
 )
 IDENT_RE = re.compile(r"^[0-9A-Za-z-]+$")
 

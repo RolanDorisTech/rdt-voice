@@ -1,0 +1,9 @@
+RDT Voice Alpha Testing source snapshot for RDT Connect offline embedding.
+Canonical owner source at snapshot time: $HOME/dev/rdt-voice/alpha_testing
+Snapshot identity: RDT Voice Build R82 / alpha_testing.
+The 62 source files are pinned by alpha_source_files in:
+rdt_connect/src-tauri/resources/rdt_voice_web_manifest.json
+The resource generator verifies every SHA-256 before copying or packaging.
+Do not update this snapshot from a moving branch or public tag.
+To update it, obtain a new owner-approved canonical Alpha snapshot and update
+the manifest fingerprints and tests as one reviewed change.

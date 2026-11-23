@@ -328,6 +328,14 @@ jobs:
         shell: pwsh
         run: npm run test:versioning
 
+      - name: Generate and verify embedded RDT Voice R82 resources (Windows x64)
+        shell: pwsh
+        run: |
+          python rdt_connect/scripts/generate-embedded-rdt-voice.py --repo-root $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { throw 'Embedded RDT Voice resource generation failed.' }
+      - name: Merge shared R82 notices into Windows x64 package inventory
+        run: python rdt_connect/scripts/merge-platform-third-party-notices.py --repo-root "$env:GITHUB_WORKSPACE" --platform windows
+
       - name: Build frontend
         working-directory: rdt_connect
         shell: pwsh

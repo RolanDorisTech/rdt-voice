@@ -208,42 +208,8 @@ jobs:
           bash -n rdt_connect/scripts/prepare-linux-bundle.sh
           git diff --check
 
-      - name: Prepare embedded frontend resources for Rust tests
-        run: |
-          set -euo pipefail
-          RESOURCE_ROOT="rdt_connect/src-tauri/resources"
-          WEB="$RESOURCE_ROOT/rdt_voice_web"
-          NOTICES="$RESOURCE_ROOT/third_party_notices"
-
-          for path in "$WEB" "$NOTICES" "$RESOURCE_ROOT/rdt_voice_backend"; do
-            if [[ -e "$path" ]]; then
-              echo "STOP: Refusing to overwrite existing resource: $path" >&2
-              exit 1
-            fi
-          done
-
-          mkdir -p "$WEB" "$NOTICES/opencc-js"
-          cp index.html worker.js pcm-worklet.js models.manifest.json "$WEB/"
-          cp -R locales assets "$WEB/"
-          cp -R licenses/third-party/opencc-js/. "$NOTICES/opencc-js/"
-
-          cat > "$NOTICES/BUILD-NOTICES.md" <<'EOF'
-          # RDT Connect Linux qualification resources
-
-          The embedded RDT Voice frontend is sourced from the repository root.
-          OpenCC-JS license materials are included in opencc-js/.
-          The Linux backend is assembled separately by this qualification workflow.
-          EOF
-
-          for file in index.html worker.js pcm-worklet.js models.manifest.json; do
-            test -s "$WEB/$file"
-          done
-          test -d "$WEB/locales"
-          test -d "$WEB/assets"
-          test -d "$NOTICES/opencc-js"
-          test -s "$NOTICES/BUILD-NOTICES.md"
-
-          echo "PASS: Embedded frontend and license resources prepared."
+      - name: Generate canonical R82 resources before Rust tests
+        run: python3 rdt_connect/scripts/generate-embedded-rdt-voice.py --repo-root "$GITHUB_WORKSPACE"
 
       - name: Run shared Rust Linux TLS tests
         run: |
@@ -448,6 +414,9 @@ jobs:
             echo "STOP: local Tauri CLI was not installed from the project lockfile." >&2
             exit 1
           }
+
+      - name: Merge shared R82 notices into Linux package inventory
+        run: python3 rdt_connect/scripts/merge-platform-third-party-notices.py --repo-root "$GITHUB_WORKSPACE" --platform linux
 
       - name: Build Linux Debian and signed AppImage artifacts (no publish)
         env:

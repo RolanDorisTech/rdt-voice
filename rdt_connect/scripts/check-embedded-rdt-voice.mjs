@@ -164,7 +164,7 @@ if (fs.existsSync(alphaSourceRoot)) {
     if (transform) {
       const expectedTransform = name === "worker.js"
         ? "rdt-offline-runtime-worker-v1"
-        : "rdt-connect-offline-easywhisper-v2";
+        : "rdt-connect-offline-easywhisper-v3-native-oom-bridge-v1";
       return transform.transform !== expectedTransform ||
         transform.source_sha256 !== alpha[name] ||
         transform.staged_sha256 !== actual[name] ||

@@ -1,0 +1,727 @@
+[
+  {
+    "id": "p01",
+    "regex": "^About (\\d+) sec left$",
+    "en": "約剩 $1 秒"
+  },
+  {
+    "id": "p02",
+    "regex": "^About (\\d+) min left$",
+    "en": "約剩 $1 分鐘"
+  },
+  {
+    "id": "p03",
+    "regex": "^(\\d+)s ago$",
+    "en": "$1 秒前"
+  },
+  {
+    "id": "p04",
+    "regex": "^(\\d+)m ago$",
+    "en": "$1 分鐘前"
+  },
+  {
+    "id": "p05",
+    "regex": "^(\\d+)h (\\d+)m ago$",
+    "en": "$1 小時 $2 分鐘前"
+  },
+  {
+    "id": "p06",
+    "regex": "^(\\d+)d ago$",
+    "en": "$1 天前"
+  },
+  {
+    "id": "p07",
+    "regex": "^(\\d+)w ago$",
+    "en": "$1 週前"
+  },
+  {
+    "id": "p08",
+    "regex": "^(\\d+)w • (\\d+) WPM • filler: (.+)$",
+    "en": "$1 字 • $2 WPM • 贅詞：$3"
+  },
+  {
+    "id": "p09",
+    "regex": "^TRANSCRIBING( · \\d+ QUEUED)?$",
+    "en": "轉錄中$1"
+  },
+  {
+    "id": "p10",
+    "regex": "^(\\d+) QUEUED$",
+    "en": "$1 個排隊中"
+  },
+  {
+    "id": "p11",
+    "regex": "^(\\d+) selected$",
+    "en": "已選取 $1 項"
+  },
+  {
+    "id": "p12",
+    "regex": "^Copy selected \\((\\d+)\\)$",
+    "en": "複製所選 ($1)"
+  },
+  {
+    "id": "p13",
+    "regex": "^Attachments \\((\\d+)\\)$",
+    "en": "附件 ($1)"
+  },
+  {
+    "id": "p14",
+    "regex": "^Load (\\d+) selected$",
+    "en": "載入所選 $1 項"
+  },
+  {
+    "id": "p15",
+    "regex": "^Delete (\\d+) selected item(s?)\\?$",
+    "en": "要刪除選取的 $1 個項目$2 嗎？"
+  },
+  {
+    "id": "p16",
+    "regex": "^Loaded (\\d+) item(s?)$",
+    "en": "已載入 $1 個項目$2"
+  },
+  {
+    "id": "p17",
+    "regex": "^Cleaned up (\\d+) old recording(s?)\\.$",
+    "en": "已清理 $1 筆舊錄音。"
+  },
+  {
+    "id": "p18",
+    "regex": "^Downloaded 1 ZIP containing (\\d+) attachment(s?)\\.$",
+    "en": "已下載 1 個 ZIP，內含 $1 個附件$2。"
+  },
+  {
+    "id": "p19",
+    "regex": "^Queued (\\d+) audio file(s?) — they will transcribe in order\\.$",
+    "en": "已將 $1 個音訊檔案$2 加入佇列，會依序轉錄。"
+  },
+  {
+    "id": "p20",
+    "regex": "^(\\d+) audio file(s?) added to the paused queue\\.$",
+    "en": "已將 $1 個音訊檔案$2 加入暫停中的佇列。"
+  },
+  {
+    "id": "p21",
+    "regex": "^(\\d+) non-audio file(s?) ignored\\.$",
+    "en": "已忽略 $1 個非音訊檔案$2。"
+  },
+  {
+    "id": "p22",
+    "regex": "^Audio queue paused after an error\\. (\\d+) file(s?) remain(s?) queued\\.$",
+    "en": "音訊佇列因錯誤而暫停。佇列中還有 $1 個檔案$2$3。"
+  },
+  {
+    "id": "p23",
+    "regex": "^Copied\\.( \\d+ images? included inline\\.)?( \\d+ files? remain attached here; nothing was downloaded\\.)?$",
+    "en": "已複製.$1$2"
+  },
+  {
+    "id": "p24",
+    "regex": "^Transcribing: (.+)$",
+    "en": "轉錄中：$1"
+  },
+  {
+    "id": "p25",
+    "regex": "^Folder selected: (.+) — edit the field if your backend needs the full path\\.$",
+    "en": "已選擇資料夾：$1 — 如果您的後端需要完整路徑，請編輯此欄位。"
+  },
+  {
+    "id": "p26",
+    "regex": "^Could not open folder: (.+)$",
+    "en": "無法開啟資料夾：$1"
+  },
+  {
+    "id": "p28",
+    "regex": "^Backed up (\\d+) files \\((.+)\\)\\.$",
+    "en": "已備份 $1 個檔案 （$2）。"
+  },
+  {
+    "id": "p29",
+    "regex": "^Backup failed: (.+)$",
+    "en": "備份失敗：$1"
+  },
+  {
+    "id": "p30",
+    "regex": "^Restored (\\d+) files \\((.+)\\)\\. Reload to use\\.$",
+    "en": "已還原 $1 個檔案 （$2）。重新載入即可使用。"
+  },
+  {
+    "id": "p31",
+    "regex": "^Restore failed: (.+)$",
+    "en": "還原失敗：$1"
+  },
+  {
+    "id": "p32",
+    "regex": "^Export failed: (.+)$",
+    "en": "匯出失敗：$1"
+  },
+  {
+    "id": "p33",
+    "regex": "^Could not start microphone: (.+)$",
+    "en": "無法啟動麥克風：$1"
+  },
+  {
+    "id": "p34",
+    "regex": "^Storage estimate failed: (.+)$",
+    "en": "儲存空間估算失敗：$1"
+  },
+  {
+    "id": "p35",
+    "regex": "^EasyWhisper worker failed: (.+)$",
+    "en": "EasyWhisper worker 故障：$1"
+  },
+  {
+    "id": "p36",
+    "regex": "^EasyWhisper error: (.+)$",
+    "en": "EasyWhisper 錯誤：$1"
+  },
+  {
+    "id": "p37",
+    "regex": "^LIVE chunk failed: (.+)$",
+    "en": "即時片段失敗：$1"
+  },
+  {
+    "id": "p38",
+    "regex": "^Manifest unavailable: (.+)$",
+    "en": "清單無法取得：$1"
+  },
+  {
+    "id": "p39",
+    "regex": "^Worker stalled for (\\d+)s without any progress message\\.$",
+    "en": "Worker 已停滯 $1 秒，沒有任何進度訊息。"
+  },
+  {
+    "id": "p40",
+    "regex": "^(.+) Your recording is kept — retry from the dialog or download it\\.$",
+    "en": "$1 您的錄音已保留 — 可從對話框重試或下載。"
+  },
+  {
+    "id": "p41",
+    "regex": "^(.+) — your audio is kept\\. Retry, or download it from the recordings list\\.$",
+    "en": "$1 — 您的音訊已保留。請重試，或從錄音清單下載。"
+  },
+  {
+    "id": "p43",
+    "regex": "^([\\s\\S]+)\\n\\nTip: switch to Local Server in Settings if your backend is running\\.$",
+    "en": "$1\n\n提示：如果您的後端正在執行，請在設定中切換到本機伺服器。"
+  },
+  {
+    "id": "p46",
+    "regex": "^This browser/page cannot record audio \\(missing: (.+)\\)\\. Use HTTPS or localhost and a current browser\\.$",
+    "en": "此瀏覽器/頁面無法錄製音訊（缺少：$1）。請使用 HTTPS 或 localhost 以及新版瀏覽器。"
+  },
+  {
+    "id": "p47",
+    "regex": "^The browser reported (.+)\\. RDT Voice stopped instead of silently sending a partial recording\\.$",
+    "en": "瀏覽器回報了 $1。RDT Voice 已停止，而不是悄悄傳送不完整的錄音。"
+  },
+  {
+    "id": "p48",
+    "regex": "^RDT Voice expected about ([\\d.]+)s, but the captured audio is only about ([\\d.]+)s\\. We did NOT send this recording for transcription\\. The captured audio is kept here so you can retry or inspect it\\.$",
+    "en": "RDT Voice 預期約 $1 秒，但擷取到的音訊僅約 $2 秒。我們並未將此錄音送出轉錄。已擷取的音訊保留在這裡，您可以重試或檢查。"
+  },
+  {
+    "id": "p49",
+    "regex": "^No audio data was captured \\(([\\d.]+)s elapsed but 0 bytes received\\)\\. RDT Voice did not send anything for transcription\\. Close other apps using the mic, then try again\\.$",
+    "en": "未擷取到音訊資料（已經過 $1 秒但收到 0 位元組）。RDT Voice 未傳送任何內容進行轉錄。請關閉其他使用麥克風的應用程式，然後再試一次。"
+  },
+  {
+    "id": "p50",
+    "regex": "^Model not in pinned manifest: (.+)$",
+    "en": "模型不在固定清單中：$1"
+  },
+  {
+    "id": "p51",
+    "regex": "^RAM (.+) GB$",
+    "en": "RAM $1 GB"
+  },
+  {
+    "id": "p52",
+    "regex": "^CPU · (\\d+) threads reported$",
+    "en": "CPU · 回報 $1 個執行緒"
+  },
+  {
+    "id": "p53",
+    "regex": "^(\\d+) percent, (.+)$",
+    "en": "$1%，$2"
+  },
+  {
+    "id": "p54",
+    "regex": "^(\\d+)% · Downloading model$",
+    "en": "$1% · 正在下載模型"
+  },
+  {
+    "id": "p55",
+    "regex": "^Segment (\\d+)$",
+    "en": "段落 $1"
+  },
+  {
+    "id": "p56",
+    "regex": "^Backend (\\d+)$",
+    "en": "後端 $1"
+  },
+  {
+    "id": "p57",
+    "regex": "^Ready • Model: (.+) • Port: (.+)$",
+    "en": "就緒 • 模型：$1 • 連接埠：$2"
+  },
+  {
+    "id": "p58",
+    "regex": "^Latency: (.+)ms$",
+    "en": "延遲：$1ms"
+  },
+  {
+    "id": "p59",
+    "regex": "^Local: (.+)$",
+    "en": "本機：$1"
+  },
+  {
+    "id": "p60",
+    "regex": "^Remote → (.+)$",
+    "en": "遠端 → $1"
+  },
+  {
+    "id": "p61",
+    "regex": "^model: (.+)$",
+    "en": "模型：$1"
+  },
+  {
+    "id": "p62",
+    "regex": "^total: (.+)$",
+    "en": "總計：$1"
+  },
+  {
+    "id": "p63",
+    "regex": "^Model: (.+)$",
+    "en": "模型：$1"
+  },
+  {
+    "id": "p64",
+    "regex": "^Size: (.+)$",
+    "en": "大小：$1"
+  },
+  {
+    "id": "p65",
+    "regex": "^Length: (.+)$",
+    "en": "長度：$1"
+  },
+  {
+    "id": "p66",
+    "regex": "^Selected: (.+)$",
+    "en": "已選擇：$1"
+  },
+  {
+    "id": "p67",
+    "regex": "^Linked: (.+)$",
+    "en": "已連結：$1"
+  },
+  {
+    "id": "p68",
+    "regex": "^Open Folder \\(:(\\d+)\\)$",
+    "en": "開啟資料夾 (:$1)"
+  },
+  {
+    "id": "p69",
+    "regex": "^Port (.+) • Latency (.+)ms( • Last .+)?$",
+    "en": "連接埠 $1 • 延遲 $2ms$3"
+  },
+  {
+    "id": "p70",
+    "regex": "^(\\d+) GB \\(custom\\)$",
+    "en": "$1 GB（自訂）"
+  },
+  {
+    "id": "p71",
+    "regex": "^(\\d+) days \\(custom\\)$",
+    "en": "$1 天（自訂）"
+  },
+  {
+    "id": "p72",
+    "regex": "^(-?\\d+) dBFS$",
+    "en": "$1 dBFS"
+  },
+  {
+    "id": "p73",
+    "regex": "^(\\d+) file(s?)$",
+    "en": "$1 個檔案$2"
+  },
+  {
+    "id": "p74",
+    "regex": "^⬇ LOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ 載入此模型 ($1)"
+  },
+  {
+    "id": "p75",
+    "regex": "^⬇ DOWNLOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ 下載此模型 ($1)"
+  },
+  {
+    "id": "p76",
+    "regex": "^✓ Backend OK · (\\d+)ms$",
+    "en": "✓ 後端正常 · $1ms"
+  },
+  {
+    "id": "p77",
+    "regex": "^✗ Backend HTTP (\\d+)$",
+    "en": "✗ 後端 HTTP $1"
+  },
+  {
+    "id": "p78",
+    "regex": "^✗ Backend: (.+)$",
+    "en": "✗ 後端：$1"
+  },
+  {
+    "id": "p81",
+    "regex": "^Couldn't check for updates: (.+)$",
+    "en": "無法檢查更新：$1"
+  },
+  {
+    "id": "p82",
+    "regex": "^Latest (.+): (.+)$",
+    "en": "最新 $1：$2"
+  },
+  {
+    "id": "p83",
+    "regex": "^⚠ BATCH mode sends audio to (.+)\\. Audio leaves this device\\.$",
+    "en": "⚠ 批次模式會將音訊傳送到 $1。音訊會離開此裝置。"
+  },
+  {
+    "id": "p84",
+    "regex": "^(.+) is loaded into the browser\\. Future transcriptions will be instant\\.$",
+    "en": "$1 已載入瀏覽器。未來的轉錄將立即完成。"
+  },
+  {
+    "id": "p85",
+    "regex": "^The (.+) model hasn't been loaded into the browser\\. Load it now — this only needs to happen once\\.$",
+    "en": "$1 模型尚未載入瀏覽器。立即載入 — 這只需執行一次。"
+  },
+  {
+    "id": "p86",
+    "regex": "^Loading (.+)$",
+    "en": "正在載入 $1"
+  },
+  {
+    "id": "p87",
+    "regex": "^Open (.+)/health — you should see JSON\\.$",
+    "en": "開啟 $1/health — 您應該會看到 JSON。"
+  },
+  {
+    "id": "p88",
+    "regex": "^No file list – add GET /v1/recordings/list in server\\.py \\(port (\\d+)\\)$",
+    "en": "沒有檔案清單 – 請在 server.py 中加入 GET /v1/recordings/list（連接埠 $1）"
+  },
+  {
+    "id": "p89",
+    "regex": "^Preview cleanup would affect (\\d+) words • WPM (.+) • Reading time ~(.+) min$",
+    "en": "預覽清理將影響 $1 個字 • WPM $2 • 閱讀時間約 $3 分鐘"
+  },
+  {
+    "id": "p90",
+    "regex": "^Last: Length (.+) • Processing (.+) • (.+)x • Transcription (.+) words • Transcription WPM (.+) • (.+) chars • (.+) sentences • Peak (.+) tok/s • Model (.+)$",
+    "en": "上次：長度 $1 • 處理 $2 • $3 倍速 • 轉錄 $4 字 • 轉錄 WPM $5 • $6 個字元 • $7 個句子 • 峰值 $8 tok/s • 模型 $9"
+  },
+  {
+    "id": "p91",
+    "regex": "^(.+) • (.+) tok/s • (.+)x(.*)$",
+    "en": "$1 • $2 tok/s • $3 倍速$4"
+  },
+  {
+    "id": "p93",
+    "regex": "^(\\d+)h ago$",
+    "en": "$1 小時前"
+  },
+  {
+    "id": "p94",
+    "regex": "^(\\d+)mo ago$",
+    "en": "$1 個月前"
+  },
+  {
+    "id": "p95",
+    "regex": "^About (\\d+) hr (\\d+) min left$",
+    "en": "約剩 $1 小時 $2 分鐘"
+  },
+  {
+    "id": "p96",
+    "regex": "^LIVE speech is unavailable offline in this browser for (.+)\\. Connect to the internet or use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "此瀏覽器中 $1 的即時語音離線時無法使用。請連接網路，或使用批次/EasyWhisper 進行離線轉錄。"
+  },
+  {
+    "id": "p97",
+    "regex": "^RAM ≥(\\d+) GB$",
+    "en": "RAM ≥$1 GB"
+  },
+  {
+    "id": "p98",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB \\(user\\)$",
+    "en": "RAM $1–$2 GB（使用者）"
+  },
+  {
+    "id": "p99",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB$",
+    "en": "RAM $1–$2 GB"
+  },
+  {
+    "id": "p100",
+    "regex": "^RAM (\\d+)\\+ GB \\(user\\)$",
+    "en": "RAM $1+ GB（使用者）"
+  },
+  {
+    "id": "p101",
+    "regex": "^RAM (\\d+) GB \\(user\\)$",
+    "en": "RAM $1 GB（使用者）"
+  },
+  {
+    "id": "p102",
+    "regex": "^RAM (\\d+)\\+ GB$",
+    "en": "RAM $1+ GB"
+  },
+  {
+    "id": "p103",
+    "regex": "^Copied (\\d+) image(s?)\\. (\\d+) files still need Download All or ZIP\\.$",
+    "en": "已複製 $1 張圖片$2。還有 $3 個檔案需要使用「全部下載」或 ZIP。"
+  },
+  {
+    "id": "p104",
+    "regex": "^Copied (\\d+) image(s?)\\. No files were downloaded\\.$",
+    "en": "已複製 $1 張圖片$2。沒有下載任何檔案。"
+  },
+  {
+    "id": "p105",
+    "regex": "^Downloaded (\\d+) attachment(s?)\\.$",
+    "en": "已下載 $1 個附件$2。"
+  },
+  {
+    "id": "p106",
+    "regex": "^(\\d+) recording(s?) deleted\\.$",
+    "en": "已刪除 $1 個錄音$2。"
+  },
+  {
+    "id": "p107",
+    "regex": "^1 recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "已刪除 1 個錄音；$1 個失敗。"
+  },
+  {
+    "id": "p108",
+    "regex": "^(\\d+) model(s?) reset( · files purged)?$",
+    "en": "已重設 $1 個模型$2$3"
+  },
+  {
+    "id": "p109",
+    "regex": "^Live speech stopped unexpectedly( \\([^)]+\\)|\\.)$",
+    "en": "即時語音意外停止$1"
+  },
+  {
+    "id": "p110",
+    "regex": "^Switched to (.+) — testing…$",
+    "en": "已切換至 $1 — 正在測試…"
+  },
+  {
+    "id": "p111",
+    "regex": "^Could not switch: (.+)$",
+    "en": "無法切換：$1"
+  },
+  {
+    "id": "p112",
+    "regex": "^Opened (.+)$",
+    "en": "已開啟 $1"
+  },
+  {
+    "id": "p114",
+    "regex": "^DEV LAB • (.+) • EXPERIMENTAL$",
+    "en": "DEV LAB • $1 • 實驗性"
+  },
+  {
+    "id": "p115",
+    "regex": "^Copied (\\d+) image(s?)\\. 1 file still need Download All or ZIP\\.$",
+    "en": "已複製 $1 張圖片$2。還有 1 個檔案需要使用「全部下載」或 ZIP。"
+  },
+  {
+    "id": "p116",
+    "regex": "^ADVANCED • RAW SEGMENTS \\((\\d+)\\)$",
+    "en": "進階 • 原始片段（$1）"
+  },
+  {
+    "id": "p117",
+    "regex": "^Long recording audio · (.+)$",
+    "en": "長時間錄音音訊 · $1"
+  },
+  {
+    "id": "p118",
+    "regex": "^(\\d+) selected · (\\d+) recordings$",
+    "en": "已選取 $1 項 · $2 個錄音"
+  },
+  {
+    "id": "p119",
+    "regex": "^((?:[2-9]|[1-9]\\d+)) recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "已刪除 $1 個錄音；$2 個失敗。"
+  },
+  {
+    "id": "p120",
+    "regex": "^PLAYING · (.+)$",
+    "en": "正在播放 · $1"
+  },
+  {
+    "id": "p121",
+    "regex": "^EasyWhisper · (.+)$",
+    "en": "EasyWhisper · $1"
+  },
+  {
+    "id": "p122",
+    "regex": "^• Spoken (.+) WPM • (.+)w$",
+    "en": "• 語速 $1 WPM • $2 字"
+  },
+  {
+    "id": "p123",
+    "regex": "^Already connected( · \\d+ ms)?$",
+    "en": "已連線$1"
+  },
+  {
+    "id": "p124",
+    "regex": "^Current status: (.+)$",
+    "en": "目前狀態：$1"
+  },
+  {
+    "id": "p125",
+    "regex": "^Latest\\s+v(.+)$",
+    "en": "最新版本 v$1"
+  },
+  {
+    "id": "p126",
+    "regex": "^GPU renderer: (.+)$",
+    "en": "GPU 繪圖器：$1"
+  },
+  {
+    "id": "p127",
+    "regex": "^Worker OK\\. Empty result: \"([\\s\\S]+)\"$",
+    "en": "Worker 正常。空白結果：「$1」"
+  },
+  {
+    "id": "p128",
+    "regex": "^FAILED: ([\\s\\S]+)$",
+    "en": "失敗：$1"
+  },
+  {
+    "id": "p129",
+    "regex": "^Cache keys: (.+)$",
+    "en": "快取索引鍵：$1"
+  },
+  {
+    "id": "p130",
+    "regex": "^Cache check failed: ([\\s\\S]+)$",
+    "en": "快取檢查失敗：$1"
+  },
+  {
+    "id": "p131",
+    "regex": "^worker\\.js fetched \\((\\d+) bytes\\)\\. See console\\.$",
+    "en": "已取得 worker.js（$1 位元組）。請查看主控台。"
+  },
+  {
+    "id": "p132",
+    "regex": "^worker\\.js fetch failed: ([\\s\\S]+)$",
+    "en": "取得 worker.js 失敗：$1"
+  },
+  {
+    "id": "p133",
+    "regex": "^Manifest fetch failed: ([\\s\\S]+)$",
+    "en": "取得 manifest 失敗：$1"
+  },
+  {
+    "id": "p134",
+    "regex": "^Assembling (\\d+(?:\\.\\d+)?) min of captured audio$",
+    "en": "正在組合擷取的 $1 分鐘音訊"
+  },
+  {
+    "id": "p135",
+    "regex": "^Assembling audio · (\\d+)%$",
+    "en": "正在組合音訊 · $1%"
+  },
+  {
+    "id": "p136",
+    "regex": "^Decoding recorded audio \\(([\\d.]+) MB\\)$",
+    "en": "正在解碼錄音音訊（$1 MB）"
+  },
+  {
+    "id": "p137",
+    "regex": "^Sending ([\\d.]+) min of audio to the transcription worker$",
+    "en": "正在將 $1 分鐘音訊傳送至轉錄 worker"
+  },
+  {
+    "id": "p138",
+    "regex": "^((?:🌐 )?)Display language — (.+) \\(([^()]+)\\)$",
+    "en": "$1 顯示語言 — $2（$3）"
+  },
+  {
+    "id": "p139",
+    "regex": "^A required model file could not be fetched\\. This is a network/CDN CORS failure, not a WebGPU placement warning\\. The app did not repeat the same fetch using WASM\\. Please retry later or test the same model download in another browser/network; the site cannot add missing CORS headers to Hugging Face's response\\. Details: ([\\s\\S]*)$",
+    "en": "無法取得必要的模型檔案。這是網路／CDN 的 CORS 錯誤，不是 WebGPU 配置警告。應用程式沒有透過 WASM 重複擷取相同檔案。請稍後重試，或用其他瀏覽器／網路測試下載相同模型；網站無法替 Hugging Face 的回應加入缺少的 CORS 標頭。詳細資料：$1"
+  },
+  {
+    "id": "p141",
+    "regex": "^Permanently delete (\\d+) selected recording(s?)\\? This cannot be undone\\.$",
+    "en": "要永久刪除選取的 $1 個錄音$2 嗎？此操作無法復原。"
+  },
+  {
+    "id": "p142",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE preview needs an internet connection here\\. You can still use BATCH/EasyWhisper transcription offline\\.$",
+    "en": "此瀏覽器尚未準備好對 $1 使用裝置端語音辨識。LIVE 預覽在此需要網際網路連線。你仍可離線使用 BATCH／EasyWhisper 轉錄。"
+  },
+  {
+    "id": "p143",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE needs an internet connection here\\. Use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "此瀏覽器尚未準備好對 $1 使用裝置端語音辨識。LIVE 需要網際網路連線。離線時請使用 BATCH／EasyWhisper。"
+  },
+  {
+    "id": "p144",
+    "regex": "^Your audio is safe\\. Save it now, then retry\\. Details: ([\\s\\S]*)$",
+    "en": "音訊安全無虞。請立即儲存，再重試。詳細資料：$1"
+  },
+  {
+    "id": "p145",
+    "regex": "^Duration: (.+)$",
+    "en": "長度：$1"
+  },
+  {
+    "id": "p146",
+    "regex": "^Segments: (\\d+)$",
+    "en": "片段：$1"
+  },
+  {
+    "id": "p147",
+    "regex": "^Total: (.+)$",
+    "en": "總計：$1"
+  },
+  {
+    "id": "p148",
+    "regex": "^Base: (.+) • Format: (.+)$",
+    "en": "基本：$1 • 格式：$2"
+  },
+  {
+    "id": "p149",
+    "regex": "^Total fillers: (\\d+)$",
+    "en": "贅詞總數：$1"
+  },
+  {
+    "id": "p150",
+    "regex": "^(\\d+(?:\\.\\d+)?) (days|months|years)$",
+    "en": "$1 $2"
+  },
+  {
+    "id": "p151",
+    "regex": "^(\\d+) transcriptions • since (.+)$",
+    "en": "$1 次轉錄 • 自 $2 起"
+  },
+  {
+    "id": "p152",
+    "regex": "^(\\d+(?:\\.\\d+)?)([smh])$",
+    "en": "$1$2"
+  },
+  {
+    "id": "p153",
+    "regex": "^port: (.+)$",
+    "en": "連接埠：$1"
+  },
+  {
+    "id": "p154",
+    "regex": "^latency: (.+)$",
+    "en": "延遲：$1"
+  }
+]

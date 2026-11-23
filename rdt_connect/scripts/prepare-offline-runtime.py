@@ -132,6 +132,123 @@ def refresh_inline_script_csp(document):
         fail(f"CSP inline script hashes remain missing: {len(missing)}")
     return document
 
+def apply_connect_native_oom_bridge(document):
+    "Add Connect-localized native-server OOM handling to verified R82 HTML."
+    forbidden = (
+        "RDT_CONNECT_NATIVE_OOM_MESSAGE",
+        "rdt_connect_native_oom_message",
+        "rdtIsNativeServerOutOfMemory",
+        "RDT_NATIVE_SERVER_OUT_OF_MEMORY",
+    )
+    present = [marker for marker in forbidden if marker in document]
+    if present:
+        fail("R82 source already contains OOM bridge markers: " + ", ".join(present))
+
+    def replace_once(old, *parts):
+        nonlocal document
+        if len(parts) < 2:
+            fail("native OOM bridge replacement is missing content or label")
+        label = parts[-1]
+        new = "".join(parts[:-1])
+        count = document.count(old)
+        if count != 1:
+            fail(f"native OOM bridge {label}: expected one anchor, found {count}")
+        document = document.replace(old, new, 1)
+
+    replace_once(
+        "let RDT_LANG = rdtDetectDisplayLanguage();",
+        "let RDT_LANG = rdtDetectDisplayLanguage();\n"
+        'let RDT_CONNECT_NATIVE_OOM_MESSAGE = "The local transcription server ran out of memory. Try a smaller model or a shorter recording.";',
+        "message declaration",
+    )
+    replace_once(
+        '  const incoming = params.get("rdt_connect_lang");\n',
+        '  const incoming = params.get("rdt_connect_lang");\n'
+        '  const incomingNativeOomMessage = params.get("rdt_connect_native_oom_message");\n'
+        '  if (incomingNativeOomMessage && incomingNativeOomMessage.length <= 240\n'
+        "      && !/[" + chr(92) * 2 + "u0000-" + chr(92) * 2 + "u001f]/.test(incomingNativeOomMessage)) {\n",
+        '    RDT_CONNECT_NATIVE_OOM_MESSAGE = incomingNativeOomMessage;\n'
+        '  }\n',
+        "query message validation",
+    )
+    replace_once(
+        '  if (params.has("rdt_connect_lang")) {\n',
+        '  if (params.has("rdt_connect_lang") || params.has("rdt_connect_native_oom_message")) {\n',
+        "query cleanup condition",
+    )
+    replace_once(
+        '    params.delete("rdt_connect_lang");\n',
+        '    params.delete("rdt_connect_lang");\n'
+        '    params.delete("rdt_connect_native_oom_message");\n',
+        "query cleanup",
+    )
+
+    helpers = (
+        "function rdtIsNativeServerOutOfMemory(status, responseText) {\n"
+        "  if (Number(status) !== 503) return false;\n"
+        '  let detail = String(responseText || "");\n'
+        "  try {\n"
+        "    const payload = JSON.parse(detail);\n"
+        "    if (payload && payload.detail) detail = String(payload.detail);\n"
+        "  } catch (e) {}\n"
+        "  return /out of memory/i.test(detail);\n"
+        "}\n"
+        "function rdtNativeServerOutOfMemoryMessage() {\n"
+        "  return RDT_CONNECT_NATIVE_OOM_MESSAGE;\n"
+        "}\n\n"
+    )
+    replace_once(
+        "async function transcribeBatch(blob, durEstimate, runOptions={}){",
+        helpers + "async function transcribeBatch(blob, durEstimate, runOptions={}){",
+        "helper insertion",
+    )
+    replace_once(
+        "          : _httpStatus >= 500",
+        "          : _httpStatus === 503 && /out of memory/i.test(_serverDetail)\n"
+        "              ? rdtNativeServerOutOfMemoryMessage()\n"
+        "          : _httpStatus >= 500",
+        "batch transcription 503 mapping",
+    )
+    replace_once(
+        'if(!resp.ok){const t=await resp.text(); throw new Error(resp.status+" "+t.slice(0,200));}',
+        'if(!resp.ok){\n'
+        '         const t=await resp.text();\n'
+        '         if(rdtIsNativeServerOutOfMemory(resp.status,t)) {\n'
+        '           throw new Error("RDT_NATIVE_SERVER_OUT_OF_MEMORY");\n'
+        '         }\n'
+        '         throw new Error(resp.status+" "+t.slice(0,200));\n'
+        '       }',
+        "live response mapping",
+    )
+    replace_once(
+        '}catch(e){ setError("LIVE chunk failed: "+(e.message||"").slice(0,80)); setTimeout(()=>setError(""),2500); }',
+        '}catch(e){\n'
+        '       if(e && e.message === "RDT_NATIVE_SERVER_OUT_OF_MEMORY") {\n'
+        '         setError(rdtNativeServerOutOfMemoryMessage());\n'
+        '       } else {\n'
+        '         setError("LIVE chunk failed: "+(e.message||"").slice(0,80));\n'
+        '         setTimeout(()=>setError(""),2500);\n'
+        '       }\n'
+        '     }',
+        "live catch mapping",
+    )
+
+    required = (
+        "RDT_CONNECT_NATIVE_OOM_MESSAGE",
+        'params.get("rdt_connect_native_oom_message")',
+        'params.delete("rdt_connect_native_oom_message")',
+        "function rdtIsNativeServerOutOfMemory(",
+        "function rdtNativeServerOutOfMemoryMessage()",
+        '_httpStatus === 503 && /out of memory/i.test(_serverDetail)',
+        'rdtIsNativeServerOutOfMemory(resp.status,t)',
+        "RDT_NATIVE_SERVER_OUT_OF_MEMORY",
+        "setError(rdtNativeServerOutOfMemoryMessage())",
+    )
+    missing = [marker for marker in required if marker not in document]
+    if missing:
+        fail("native OOM bridge output incomplete: " + ", ".join(missing))
+    return document
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
@@ -195,6 +312,7 @@ def main():
     # Apply the Connect-only offline marker to the hash-verified staged Alpha
     # index. Never substitute an older checked-in embedded HTML copy.
     index_html = index_path.read_text(encoding="utf-8")
+    index_html = apply_connect_native_oom_bridge(index_html)
     marker = '<meta name="rdt-connect-offline-easywhisper" content="disabled">'
     if index_html.count(marker) != 0 or index_html.count("</head>") != 1:
         fail("verified Alpha index already has the offline marker or has an invalid head section")
@@ -317,7 +435,7 @@ def main():
             "staged_sha256": sha256(worker_path),
         },
         "index.html": {
-            "transform": "rdt-connect-offline-easywhisper-v2",
+            "transform": "rdt-connect-offline-easywhisper-v3-native-oom-bridge-v1",
             "source_sha256": source_index_sha256,
             "staged_sha256": sha256(index_path),
         },

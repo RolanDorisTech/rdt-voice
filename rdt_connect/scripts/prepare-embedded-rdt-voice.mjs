@@ -43,6 +43,10 @@ for (const marker of [
   "rdt-connect-offline-easywhisper",
   "rdt_connect_native_oom_message",
   "RDT_CONNECT_NATIVE_OOM_MESSAGE",
+  "rdtIsNativeServerOutOfMemory",
+  "rdtNativeServerOutOfMemoryMessage",
+  "RDT_NATIVE_SERVER_OUT_OF_MEMORY",
+  "_httpStatus === 503 && /out of memory/i.test(_serverDetail)",
   "RDT_NATIVE_SERVER_OUT_OF_MEMORY",
   "rdtIsNativeServerOutOfMemory",
   "rdtNativeServerOutOfMemoryMessage"

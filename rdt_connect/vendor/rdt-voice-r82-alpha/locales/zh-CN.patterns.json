@@ -1,0 +1,727 @@
+[
+  {
+    "id": "p01",
+    "regex": "^About (\\d+) sec left$",
+    "en": "约剩 $1 秒"
+  },
+  {
+    "id": "p02",
+    "regex": "^About (\\d+) min left$",
+    "en": "约剩 $1 分钟"
+  },
+  {
+    "id": "p03",
+    "regex": "^(\\d+)s ago$",
+    "en": "$1 秒前"
+  },
+  {
+    "id": "p04",
+    "regex": "^(\\d+)m ago$",
+    "en": "$1 分钟前"
+  },
+  {
+    "id": "p05",
+    "regex": "^(\\d+)h (\\d+)m ago$",
+    "en": "$1 小时 $2 分钟前"
+  },
+  {
+    "id": "p06",
+    "regex": "^(\\d+)d ago$",
+    "en": "$1 天前"
+  },
+  {
+    "id": "p07",
+    "regex": "^(\\d+)w ago$",
+    "en": "$1 周前"
+  },
+  {
+    "id": "p08",
+    "regex": "^(\\d+)w • (\\d+) WPM • filler: (.+)$",
+    "en": "$1 字 • $2 WPM • 填充词：$3"
+  },
+  {
+    "id": "p09",
+    "regex": "^TRANSCRIBING( · \\d+ QUEUED)?$",
+    "en": "正在转录$1"
+  },
+  {
+    "id": "p10",
+    "regex": "^(\\d+) QUEUED$",
+    "en": "$1 排队中"
+  },
+  {
+    "id": "p11",
+    "regex": "^(\\d+) selected$",
+    "en": "$1 已选择"
+  },
+  {
+    "id": "p12",
+    "regex": "^Copy selected \\((\\d+)\\)$",
+    "en": "复制所选（$1）"
+  },
+  {
+    "id": "p13",
+    "regex": "^Attachments \\((\\d+)\\)$",
+    "en": "附件（$1）"
+  },
+  {
+    "id": "p14",
+    "regex": "^Load (\\d+) selected$",
+    "en": "加载 $1 个所选项目"
+  },
+  {
+    "id": "p15",
+    "regex": "^Delete (\\d+) selected item(s?)\\?$",
+    "en": "要删除选中的 $1 项$2 吗？"
+  },
+  {
+    "id": "p16",
+    "regex": "^Loaded (\\d+) item(s?)$",
+    "en": "已加载 $1 项$2"
+  },
+  {
+    "id": "p17",
+    "regex": "^Cleaned up (\\d+) old recording(s?)\\.$",
+    "en": "已清理 $1 条旧录音。"
+  },
+  {
+    "id": "p18",
+    "regex": "^Downloaded 1 ZIP containing (\\d+) attachment(s?)\\.$",
+    "en": "已下载 1 个 ZIP，其中包含 $1 个附件$2。"
+  },
+  {
+    "id": "p19",
+    "regex": "^Queued (\\d+) audio file(s?) — they will transcribe in order\\.$",
+    "en": "已将 $1 个音频文件$2 加入队列，将按顺序转录。"
+  },
+  {
+    "id": "p20",
+    "regex": "^(\\d+) audio file(s?) added to the paused queue\\.$",
+    "en": "已将 $1 个音频文件$2 添加到暂停队列。"
+  },
+  {
+    "id": "p21",
+    "regex": "^(\\d+) non-audio file(s?) ignored\\.$",
+    "en": "已忽略 $1 个非音频文件$2。"
+  },
+  {
+    "id": "p22",
+    "regex": "^Audio queue paused after an error\\. (\\d+) file(s?) remain(s?) queued\\.$",
+    "en": "音频队列因错误而暂停。队列中还剩 $1 个文件$2$3。"
+  },
+  {
+    "id": "p23",
+    "regex": "^Copied\\.( \\d+ images? included inline\\.)?( \\d+ files? remain attached here; nothing was downloaded\\.)?$",
+    "en": "已复制。$1$2"
+  },
+  {
+    "id": "p24",
+    "regex": "^Transcribing: (.+)$",
+    "en": "正在转录：$1"
+  },
+  {
+    "id": "p25",
+    "regex": "^Folder selected: (.+) — edit the field if your backend needs the full path\\.$",
+    "en": "已选择文件夹：$1 — 如果后端需要完整路径，请编辑该字段。"
+  },
+  {
+    "id": "p26",
+    "regex": "^Could not open folder: (.+)$",
+    "en": "无法打开文件夹：$1"
+  },
+  {
+    "id": "p28",
+    "regex": "^Backed up (\\d+) files \\((.+)\\)\\.$",
+    "en": "已备份 $1 个文件（$2）。"
+  },
+  {
+    "id": "p29",
+    "regex": "^Backup failed: (.+)$",
+    "en": "备份失败：$1"
+  },
+  {
+    "id": "p30",
+    "regex": "^Restored (\\d+) files \\((.+)\\)\\. Reload to use\\.$",
+    "en": "已恢复 $1 个文件（$2）。重新加载以使用。"
+  },
+  {
+    "id": "p31",
+    "regex": "^Restore failed: (.+)$",
+    "en": "恢复失败：$1"
+  },
+  {
+    "id": "p32",
+    "regex": "^Export failed: (.+)$",
+    "en": "导出失败：$1"
+  },
+  {
+    "id": "p33",
+    "regex": "^Could not start microphone: (.+)$",
+    "en": "无法启动麦克风：$1"
+  },
+  {
+    "id": "p34",
+    "regex": "^Storage estimate failed: (.+)$",
+    "en": "存储估算失败：$1"
+  },
+  {
+    "id": "p35",
+    "regex": "^EasyWhisper worker failed: (.+)$",
+    "en": "EasyWhisper worker 失败：$1"
+  },
+  {
+    "id": "p36",
+    "regex": "^EasyWhisper error: (.+)$",
+    "en": "EasyWhisper 错误：$1"
+  },
+  {
+    "id": "p37",
+    "regex": "^LIVE chunk failed: (.+)$",
+    "en": "实时片段失败：$1"
+  },
+  {
+    "id": "p38",
+    "regex": "^Manifest unavailable: (.+)$",
+    "en": "清单不可用：$1"
+  },
+  {
+    "id": "p39",
+    "regex": "^Worker stalled for (\\d+)s without any progress message\\.$",
+    "en": "Worker 停滞 $1 秒且没有任何进度消息。"
+  },
+  {
+    "id": "p40",
+    "regex": "^(.+) Your recording is kept — retry from the dialog or download it\\.$",
+    "en": "$1 你的录音已保留 — 可从对话框重试或下载。"
+  },
+  {
+    "id": "p41",
+    "regex": "^(.+) — your audio is kept\\. Retry, or download it from the recordings list\\.$",
+    "en": "$1 — 你的音频已保留。请重试，或从录音列表下载。"
+  },
+  {
+    "id": "p43",
+    "regex": "^([\\s\\S]+)\\n\\nTip: switch to Local Server in Settings if your backend is running\\.$",
+    "en": "$1\n\n提示：如果你的后端正在运行，请在设置中切换到本地服务器。"
+  },
+  {
+    "id": "p46",
+    "regex": "^This browser/page cannot record audio \\(missing: (.+)\\)\\. Use HTTPS or localhost and a current browser\\.$",
+    "en": "此浏览器/页面无法录制音频（缺少：$1）。请使用 HTTPS 或 localhost 以及当前浏览器。"
+  },
+  {
+    "id": "p47",
+    "regex": "^The browser reported (.+)\\. RDT Voice stopped instead of silently sending a partial recording\\.$",
+    "en": "浏览器报告了 $1。RDT Voice 已停止，而不是悄悄发送不完整的录音。"
+  },
+  {
+    "id": "p48",
+    "regex": "^RDT Voice expected about ([\\d.]+)s, but the captured audio is only about ([\\d.]+)s\\. We did NOT send this recording for transcription\\. The captured audio is kept here so you can retry or inspect it\\.$",
+    "en": "RDT Voice 预期约 $1 秒，但采集到的音频仅约 $2 秒。我们未将此录音发送转录。采集到的音频保留在此处，以便你重试或检查。"
+  },
+  {
+    "id": "p49",
+    "regex": "^No audio data was captured \\(([\\d.]+)s elapsed but 0 bytes received\\)\\. RDT Voice did not send anything for transcription\\. Close other apps using the mic, then try again\\.$",
+    "en": "未采集到音频数据（已过 $1 秒但收到 0 字节）。RDT Voice 未发送任何内容进行转录。关闭其他使用麦克风的应用，然后重试。"
+  },
+  {
+    "id": "p50",
+    "regex": "^Model not in pinned manifest: (.+)$",
+    "en": "固定清单中没有模型：$1"
+  },
+  {
+    "id": "p51",
+    "regex": "^RAM (.+) GB$",
+    "en": "内存 $1 GB"
+  },
+  {
+    "id": "p52",
+    "regex": "^CPU · (\\d+) threads reported$",
+    "en": "CPU · 报告线程数 $1"
+  },
+  {
+    "id": "p53",
+    "regex": "^(\\d+) percent, (.+)$",
+    "en": "$1%，$2"
+  },
+  {
+    "id": "p54",
+    "regex": "^(\\d+)% · Downloading model$",
+    "en": "$1% · 正在下载模型"
+  },
+  {
+    "id": "p55",
+    "regex": "^Segment (\\d+)$",
+    "en": "片段 $1"
+  },
+  {
+    "id": "p56",
+    "regex": "^Backend (\\d+)$",
+    "en": "后端 $1"
+  },
+  {
+    "id": "p57",
+    "regex": "^Ready • Model: (.+) • Port: (.+)$",
+    "en": "就绪 • 模型：$1 • 端口：$2"
+  },
+  {
+    "id": "p58",
+    "regex": "^Latency: (.+)ms$",
+    "en": "延迟：$1ms"
+  },
+  {
+    "id": "p59",
+    "regex": "^Local: (.+)$",
+    "en": "本地：$1"
+  },
+  {
+    "id": "p60",
+    "regex": "^Remote → (.+)$",
+    "en": "远程 → $1"
+  },
+  {
+    "id": "p61",
+    "regex": "^model: (.+)$",
+    "en": "模型：$1"
+  },
+  {
+    "id": "p62",
+    "regex": "^total: (.+)$",
+    "en": "总计：$1"
+  },
+  {
+    "id": "p63",
+    "regex": "^Model: (.+)$",
+    "en": "模型：$1"
+  },
+  {
+    "id": "p64",
+    "regex": "^Size: (.+)$",
+    "en": "大小：$1"
+  },
+  {
+    "id": "p65",
+    "regex": "^Length: (.+)$",
+    "en": "长度：$1"
+  },
+  {
+    "id": "p66",
+    "regex": "^Selected: (.+)$",
+    "en": "已选择：$1"
+  },
+  {
+    "id": "p67",
+    "regex": "^Linked: (.+)$",
+    "en": "已链接：$1"
+  },
+  {
+    "id": "p68",
+    "regex": "^Open Folder \\(:(\\d+)\\)$",
+    "en": "打开文件夹（:$1）"
+  },
+  {
+    "id": "p69",
+    "regex": "^Port (.+) • Latency (.+)ms( • Last .+)?$",
+    "en": "端口 $1 • 延迟 $2ms$3"
+  },
+  {
+    "id": "p70",
+    "regex": "^(\\d+) GB \\(custom\\)$",
+    "en": "$1 GB（自定义）"
+  },
+  {
+    "id": "p71",
+    "regex": "^(\\d+) days \\(custom\\)$",
+    "en": "$1 天（自定义）"
+  },
+  {
+    "id": "p72",
+    "regex": "^(-?\\d+) dBFS$",
+    "en": "$1 dBFS"
+  },
+  {
+    "id": "p73",
+    "regex": "^(\\d+) file(s?)$",
+    "en": "$1 个文件$2"
+  },
+  {
+    "id": "p74",
+    "regex": "^⬇ LOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ 加载此模型（$1）"
+  },
+  {
+    "id": "p75",
+    "regex": "^⬇ DOWNLOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ 下载此模型（$1）"
+  },
+  {
+    "id": "p76",
+    "regex": "^✓ Backend OK · (\\d+)ms$",
+    "en": "✓ 后端正常 · $1ms"
+  },
+  {
+    "id": "p77",
+    "regex": "^✗ Backend HTTP (\\d+)$",
+    "en": "✗ 后端 HTTP $1"
+  },
+  {
+    "id": "p78",
+    "regex": "^✗ Backend: (.+)$",
+    "en": "✗ 后端：$1"
+  },
+  {
+    "id": "p81",
+    "regex": "^Couldn't check for updates: (.+)$",
+    "en": "无法检查更新：$1"
+  },
+  {
+    "id": "p82",
+    "regex": "^Latest (.+): (.+)$",
+    "en": "最新 $1：$2"
+  },
+  {
+    "id": "p83",
+    "regex": "^⚠ BATCH mode sends audio to (.+)\\. Audio leaves this device\\.$",
+    "en": "⚠ 批量模式会将音频发送到 $1。音频会离开此设备。"
+  },
+  {
+    "id": "p84",
+    "regex": "^(.+) is loaded into the browser\\. Future transcriptions will be instant\\.$",
+    "en": "$1 已加载到浏览器中。以后的转录将立即完成。"
+  },
+  {
+    "id": "p85",
+    "regex": "^The (.+) model hasn't been loaded into the browser\\. Load it now — this only needs to happen once\\.$",
+    "en": "$1 模型尚未加载到浏览器中。立即加载 — 这只需要发生一次。"
+  },
+  {
+    "id": "p86",
+    "regex": "^Loading (.+)$",
+    "en": "正在加载 $1"
+  },
+  {
+    "id": "p87",
+    "regex": "^Open (.+)/health — you should see JSON\\.$",
+    "en": "打开 $1/health — 你应该会看到 JSON。"
+  },
+  {
+    "id": "p88",
+    "regex": "^No file list – add GET /v1/recordings/list in server\\.py \\(port (\\d+)\\)$",
+    "en": "没有文件列表 – 在 server.py（端口 $1）中添加 GET /v1/recordings/list"
+  },
+  {
+    "id": "p89",
+    "regex": "^Preview cleanup would affect (\\d+) words • WPM (.+) • Reading time ~(.+) min$",
+    "en": "预览清理将影响 $1 个词 • WPM $2 • 阅读时间约 $3 分钟"
+  },
+  {
+    "id": "p90",
+    "regex": "^Last: Length (.+) • Processing (.+) • (.+)x • Transcription (.+) words • Transcription WPM (.+) • (.+) chars • (.+) sentences • Peak (.+) tok/s • Model (.+)$",
+    "en": "上次：时长 $1 • 处理 $2 • $3 倍速 • 转录 $4 字 • 转录 WPM $5 • $6 字符 • $7 句 • 峰值 $8 tok/s • 模型 $9"
+  },
+  {
+    "id": "p91",
+    "regex": "^(.+) • (.+) tok/s • (.+)x(.*)$",
+    "en": "$1 • $2 tok/s • $3 倍速$4"
+  },
+  {
+    "id": "p93",
+    "regex": "^(\\d+)h ago$",
+    "en": "$1 小时前"
+  },
+  {
+    "id": "p94",
+    "regex": "^(\\d+)mo ago$",
+    "en": "$1 个月前"
+  },
+  {
+    "id": "p95",
+    "regex": "^About (\\d+) hr (\\d+) min left$",
+    "en": "约剩 $1 小时 $2 分钟"
+  },
+  {
+    "id": "p96",
+    "regex": "^LIVE speech is unavailable offline in this browser for (.+)\\. Connect to the internet or use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "此浏览器中 $1 的实时语音离线不可用。请连接互联网或使用批量/EasyWhisper 进行离线转录。"
+  },
+  {
+    "id": "p97",
+    "regex": "^RAM ≥(\\d+) GB$",
+    "en": "内存 ≥$1 GB"
+  },
+  {
+    "id": "p98",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB \\(user\\)$",
+    "en": "内存 $1–$2 GB（用户）"
+  },
+  {
+    "id": "p99",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB$",
+    "en": "内存 $1–$2 GB"
+  },
+  {
+    "id": "p100",
+    "regex": "^RAM (\\d+)\\+ GB \\(user\\)$",
+    "en": "内存 $1+ GB（用户）"
+  },
+  {
+    "id": "p101",
+    "regex": "^RAM (\\d+) GB \\(user\\)$",
+    "en": "内存 $1 GB（用户）"
+  },
+  {
+    "id": "p102",
+    "regex": "^RAM (\\d+)\\+ GB$",
+    "en": "内存 $1+ GB"
+  },
+  {
+    "id": "p103",
+    "regex": "^Copied (\\d+) image(s?)\\. (\\d+) files still need Download All or ZIP\\.$",
+    "en": "已复制 $1 张图片$2。还有 $3 个文件需要“全部下载”或 ZIP。"
+  },
+  {
+    "id": "p104",
+    "regex": "^Copied (\\d+) image(s?)\\. No files were downloaded\\.$",
+    "en": "已复制 $1 张图片$2。没有下载任何文件。"
+  },
+  {
+    "id": "p105",
+    "regex": "^Downloaded (\\d+) attachment(s?)\\.$",
+    "en": "已下载 $1 个附件$2。"
+  },
+  {
+    "id": "p106",
+    "regex": "^(\\d+) recording(s?) deleted\\.$",
+    "en": "已删除 $1 个录音$2。"
+  },
+  {
+    "id": "p107",
+    "regex": "^1 recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "已删除 1 个录音；$1 个失败。"
+  },
+  {
+    "id": "p108",
+    "regex": "^(\\d+) model(s?) reset( · files purged)?$",
+    "en": "已重置 $1 个模型$2$3"
+  },
+  {
+    "id": "p109",
+    "regex": "^Live speech stopped unexpectedly( \\([^)]+\\)|\\.)$",
+    "en": "实时语音意外停止$1"
+  },
+  {
+    "id": "p110",
+    "regex": "^Switched to (.+) — testing…$",
+    "en": "已切换到 $1 — 正在测试…"
+  },
+  {
+    "id": "p111",
+    "regex": "^Could not switch: (.+)$",
+    "en": "无法切换：$1"
+  },
+  {
+    "id": "p112",
+    "regex": "^Opened (.+)$",
+    "en": "已打开 $1"
+  },
+  {
+    "id": "p114",
+    "regex": "^DEV LAB • (.+) • EXPERIMENTAL$",
+    "en": "DEV LAB • $1 • 实验性"
+  },
+  {
+    "id": "p115",
+    "regex": "^Copied (\\d+) image(s?)\\. 1 file still need Download All or ZIP\\.$",
+    "en": "已复制 $1 张图片$2。还有 1 个文件需要“全部下载”或 ZIP。"
+  },
+  {
+    "id": "p116",
+    "regex": "^ADVANCED • RAW SEGMENTS \\((\\d+)\\)$",
+    "en": "高级 • 原始片段（$1）"
+  },
+  {
+    "id": "p117",
+    "regex": "^Long recording audio · (.+)$",
+    "en": "长录音音频 · $1"
+  },
+  {
+    "id": "p118",
+    "regex": "^(\\d+) selected · (\\d+) recordings$",
+    "en": "已选 $1 项 · $2 个录音"
+  },
+  {
+    "id": "p119",
+    "regex": "^((?:[2-9]|[1-9]\\d+)) recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "已删除 $1 个录音；$2 个失败。"
+  },
+  {
+    "id": "p120",
+    "regex": "^PLAYING · (.+)$",
+    "en": "正在播放 · $1"
+  },
+  {
+    "id": "p121",
+    "regex": "^EasyWhisper · (.+)$",
+    "en": "EasyWhisper · $1"
+  },
+  {
+    "id": "p122",
+    "regex": "^• Spoken (.+) WPM • (.+)w$",
+    "en": "• 语速 $1 WPM • $2 字"
+  },
+  {
+    "id": "p123",
+    "regex": "^Already connected( · \\d+ ms)?$",
+    "en": "已连接$1"
+  },
+  {
+    "id": "p124",
+    "regex": "^Current status: (.+)$",
+    "en": "当前状态：$1"
+  },
+  {
+    "id": "p125",
+    "regex": "^Latest\\s+v(.+)$",
+    "en": "最新版本 v$1"
+  },
+  {
+    "id": "p126",
+    "regex": "^GPU renderer: (.+)$",
+    "en": "GPU 渲染器：$1"
+  },
+  {
+    "id": "p127",
+    "regex": "^Worker OK\\. Empty result: \"([\\s\\S]+)\"$",
+    "en": "Worker 正常。空结果：“$1”"
+  },
+  {
+    "id": "p128",
+    "regex": "^FAILED: ([\\s\\S]+)$",
+    "en": "失败：$1"
+  },
+  {
+    "id": "p129",
+    "regex": "^Cache keys: (.+)$",
+    "en": "缓存键：$1"
+  },
+  {
+    "id": "p130",
+    "regex": "^Cache check failed: ([\\s\\S]+)$",
+    "en": "缓存检查失败：$1"
+  },
+  {
+    "id": "p131",
+    "regex": "^worker\\.js fetched \\((\\d+) bytes\\)\\. See console\\.$",
+    "en": "已获取 worker.js（$1 字节）。请查看控制台。"
+  },
+  {
+    "id": "p132",
+    "regex": "^worker\\.js fetch failed: ([\\s\\S]+)$",
+    "en": "获取 worker.js 失败：$1"
+  },
+  {
+    "id": "p133",
+    "regex": "^Manifest fetch failed: ([\\s\\S]+)$",
+    "en": "获取清单失败：$1"
+  },
+  {
+    "id": "p134",
+    "regex": "^Assembling (\\d+(?:\\.\\d+)?) min of captured audio$",
+    "en": "正在拼接已捕获的 $1 分钟音频"
+  },
+  {
+    "id": "p135",
+    "regex": "^Assembling audio · (\\d+)%$",
+    "en": "正在拼接音频 · $1%"
+  },
+  {
+    "id": "p136",
+    "regex": "^Decoding recorded audio \\(([\\d.]+) MB\\)$",
+    "en": "正在解码录音音频（$1 MB）"
+  },
+  {
+    "id": "p137",
+    "regex": "^Sending ([\\d.]+) min of audio to the transcription worker$",
+    "en": "正在向转录工作线程发送 $1 分钟音频"
+  },
+  {
+    "id": "p138",
+    "regex": "^((?:🌐 )?)Display language — (.+) \\(([^()]+)\\)$",
+    "en": "$1显示语言 — $2（$3）"
+  },
+  {
+    "id": "p139",
+    "regex": "^A required model file could not be fetched\\. This is a network/CDN CORS failure, not a WebGPU placement warning\\. The app did not repeat the same fetch using WASM\\. Please retry later or test the same model download in another browser/network; the site cannot add missing CORS headers to Hugging Face's response\\. Details: ([\\s\\S]*)$",
+    "en": "无法获取所需模型文件。这是网络/CDN 的 CORS 错误，不是 WebGPU 放置警告。应用没有通过 WASM 重复请求相同文件。请稍后重试，或在其他浏览器/网络中测试相同模型下载；网站无法为 Hugging Face 的响应添加缺失的 CORS 标头。详情：$1"
+  },
+  {
+    "id": "p141",
+    "regex": "^Permanently delete (\\d+) selected recording(s?)\\? This cannot be undone\\.$",
+    "en": "要永久删除选中的 $1 个录音$2 吗？此操作无法撤销。"
+  },
+  {
+    "id": "p142",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE preview needs an internet connection here\\. You can still use BATCH/EasyWhisper transcription offline\\.$",
+    "en": "此浏览器尚未准备好对 $1 使用设备端语音识别。LIVE 预览在此需要联网。你仍可离线使用 BATCH/EasyWhisper 转录。"
+  },
+  {
+    "id": "p143",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE needs an internet connection here\\. Use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "此浏览器尚未准备好对 $1 使用设备端语音识别。LIVE 需要联网。离线时请使用 BATCH/EasyWhisper。"
+  },
+  {
+    "id": "p144",
+    "regex": "^Your audio is safe\\. Save it now, then retry\\. Details: ([\\s\\S]*)$",
+    "en": "音频是安全的。请立即保存，然后重试。详情：$1"
+  },
+  {
+    "id": "p145",
+    "regex": "^Duration: (.+)$",
+    "en": "时长：$1"
+  },
+  {
+    "id": "p146",
+    "regex": "^Segments: (\\d+)$",
+    "en": "片段：$1"
+  },
+  {
+    "id": "p147",
+    "regex": "^Total: (.+)$",
+    "en": "总计：$1"
+  },
+  {
+    "id": "p148",
+    "regex": "^Base: (.+) • Format: (.+)$",
+    "en": "基础：$1 • 格式：$2"
+  },
+  {
+    "id": "p149",
+    "regex": "^Total fillers: (\\d+)$",
+    "en": "填充词总数：$1"
+  },
+  {
+    "id": "p150",
+    "regex": "^(\\d+(?:\\.\\d+)?) (days|months|years)$",
+    "en": "$1 $2"
+  },
+  {
+    "id": "p151",
+    "regex": "^(\\d+) transcriptions • since (.+)$",
+    "en": "$1 次转录 • 始于 $2"
+  },
+  {
+    "id": "p152",
+    "regex": "^(\\d+(?:\\.\\d+)?)([smh])$",
+    "en": "$1$2"
+  },
+  {
+    "id": "p153",
+    "regex": "^port: (.+)$",
+    "en": "端口：$1"
+  },
+  {
+    "id": "p154",
+    "regex": "^latency: (.+)$",
+    "en": "延迟：$1"
+  }
+]

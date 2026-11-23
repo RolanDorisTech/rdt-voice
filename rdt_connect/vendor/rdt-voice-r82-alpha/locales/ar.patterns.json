@@ -1,0 +1,727 @@
+[
+  {
+    "id": "p01",
+    "regex": "^About (\\d+) sec left$",
+    "en": "متبقي حوالي $1 ثانية"
+  },
+  {
+    "id": "p02",
+    "regex": "^About (\\d+) min left$",
+    "en": "متبقي حوالي $1 دقيقة"
+  },
+  {
+    "id": "p03",
+    "regex": "^(\\d+)s ago$",
+    "en": "منذ $1s"
+  },
+  {
+    "id": "p04",
+    "regex": "^(\\d+)m ago$",
+    "en": "منذ $1m"
+  },
+  {
+    "id": "p05",
+    "regex": "^(\\d+)h (\\d+)m ago$",
+    "en": "منذ $1h $2m"
+  },
+  {
+    "id": "p06",
+    "regex": "^(\\d+)d ago$",
+    "en": "منذ $1d"
+  },
+  {
+    "id": "p07",
+    "regex": "^(\\d+)w ago$",
+    "en": "منذ $1w"
+  },
+  {
+    "id": "p08",
+    "regex": "^(\\d+)w • (\\d+) WPM • filler: (.+)$",
+    "en": "$1 كلمة • $2 كلمة/دقيقة • الحشو: $3"
+  },
+  {
+    "id": "p09",
+    "regex": "^TRANSCRIBING( · \\d+ QUEUED)?$",
+    "en": "جارٍ التفريغ$1"
+  },
+  {
+    "id": "p10",
+    "regex": "^(\\d+) QUEUED$",
+    "en": "$1 قيد الانتظار"
+  },
+  {
+    "id": "p11",
+    "regex": "^(\\d+) selected$",
+    "en": "تم تحديد $1"
+  },
+  {
+    "id": "p12",
+    "regex": "^Copy selected \\((\\d+)\\)$",
+    "en": "نسخ المحدد ($1)"
+  },
+  {
+    "id": "p13",
+    "regex": "^Attachments \\((\\d+)\\)$",
+    "en": "المرفقات ($1)"
+  },
+  {
+    "id": "p14",
+    "regex": "^Load (\\d+) selected$",
+    "en": "تحميل $1 محدد"
+  },
+  {
+    "id": "p15",
+    "regex": "^Delete (\\d+) selected item(s?)\\?$",
+    "en": "هل تريد حذف $1 عنصر$2 محدد؟"
+  },
+  {
+    "id": "p16",
+    "regex": "^Loaded (\\d+) item(s?)$",
+    "en": "تم تحميل $1 عنصر$2"
+  },
+  {
+    "id": "p17",
+    "regex": "^Cleaned up (\\d+) old recording(s?)\\.$",
+    "en": "اكتمل تنظيف التسجيلات القديمة: $1."
+  },
+  {
+    "id": "p18",
+    "regex": "^Downloaded 1 ZIP containing (\\d+) attachment(s?)\\.$",
+    "en": "تم تنزيل ملف ZIP واحد يحتوي على $1 مرفق$2."
+  },
+  {
+    "id": "p19",
+    "regex": "^Queued (\\d+) audio file(s?) — they will transcribe in order\\.$",
+    "en": "تم وضع $1 ملف$2 صوتي في قائمة الانتظار — ستتمّ معالجتها بالترتيب."
+  },
+  {
+    "id": "p20",
+    "regex": "^(\\d+) audio file(s?) added to the paused queue\\.$",
+    "en": "أُضيف $1 ملف$2 صوتي إلى قائمة الانتظار المتوقفة مؤقتًا."
+  },
+  {
+    "id": "p21",
+    "regex": "^(\\d+) non-audio file(s?) ignored\\.$",
+    "en": "تم تجاهل $1 ملف$2 غير صوتي."
+  },
+  {
+    "id": "p22",
+    "regex": "^Audio queue paused after an error\\. (\\d+) file(s?) remain(s?) queued\\.$",
+    "en": "توقفت قائمة انتظار الصوت مؤقتًا بعد حدوث خطأ. لا يزال $1 ملف$2 في قائمة الانتظار$3."
+  },
+  {
+    "id": "p23",
+    "regex": "^Copied\\.( \\d+ images? included inline\\.)?( \\d+ files? remain attached here; nothing was downloaded\\.)?$",
+    "en": "تم النسخ.$1$2"
+  },
+  {
+    "id": "p24",
+    "regex": "^Transcribing: (.+)$",
+    "en": "جارٍ التفريغ: $1"
+  },
+  {
+    "id": "p25",
+    "regex": "^Folder selected: (.+) — edit the field if your backend needs the full path\\.$",
+    "en": "تم تحديد المجلد: $1 — حرر الحقل إذا كانت الواجهة الخلفية تحتاج إلى المسار الكامل."
+  },
+  {
+    "id": "p26",
+    "regex": "^Could not open folder: (.+)$",
+    "en": "تعذر فتح المجلد: $1"
+  },
+  {
+    "id": "p28",
+    "regex": "^Backed up (\\d+) files \\((.+)\\)\\.$",
+    "en": "تم نسخ $1 ملفات احتياطيًا ($2)."
+  },
+  {
+    "id": "p29",
+    "regex": "^Backup failed: (.+)$",
+    "en": "فشل النسخ الاحتياطي: $1"
+  },
+  {
+    "id": "p30",
+    "regex": "^Restored (\\d+) files \\((.+)\\)\\. Reload to use\\.$",
+    "en": "تمت استعادة $1 ملفات ($2). أعد التحميل للاستخدام."
+  },
+  {
+    "id": "p31",
+    "regex": "^Restore failed: (.+)$",
+    "en": "فشلت الاستعادة: $1"
+  },
+  {
+    "id": "p32",
+    "regex": "^Export failed: (.+)$",
+    "en": "فشل التصدير: $1"
+  },
+  {
+    "id": "p33",
+    "regex": "^Could not start microphone: (.+)$",
+    "en": "تعذر بدء الميكروفون: $1"
+  },
+  {
+    "id": "p34",
+    "regex": "^Storage estimate failed: (.+)$",
+    "en": "فشل تقدير التخزين: $1"
+  },
+  {
+    "id": "p35",
+    "regex": "^EasyWhisper worker failed: (.+)$",
+    "en": "فشل عامل EasyWhisper: $1"
+  },
+  {
+    "id": "p36",
+    "regex": "^EasyWhisper error: (.+)$",
+    "en": "خطأ EasyWhisper: $1"
+  },
+  {
+    "id": "p37",
+    "regex": "^LIVE chunk failed: (.+)$",
+    "en": "فشل جزء LIVE: $1"
+  },
+  {
+    "id": "p38",
+    "regex": "^Manifest unavailable: (.+)$",
+    "en": "Manifest غير متاح: $1"
+  },
+  {
+    "id": "p39",
+    "regex": "^Worker stalled for (\\d+)s without any progress message\\.$",
+    "en": "توقف العامل لمدة $1s دون أي رسالة تقدم."
+  },
+  {
+    "id": "p40",
+    "regex": "^(.+) Your recording is kept — retry from the dialog or download it\\.$",
+    "en": "$1 تسجيلك محفوظ — أعد المحاولة من مربع الحوار أو نزّله."
+  },
+  {
+    "id": "p41",
+    "regex": "^(.+) — your audio is kept\\. Retry, or download it from the recordings list\\.$",
+    "en": "$1 — صوتك محفوظ. أعد المحاولة، أو نزّله من قائمة التسجيلات."
+  },
+  {
+    "id": "p43",
+    "regex": "^([\\s\\S]+)\\n\\nTip: switch to Local Server in Settings if your backend is running\\.$",
+    "en": "$1\n\nنصيحة: بدّل إلى Local Server في Settings إذا كانت الواجهة الخلفية تعمل."
+  },
+  {
+    "id": "p46",
+    "regex": "^This browser/page cannot record audio \\(missing: (.+)\\)\\. Use HTTPS or localhost and a current browser\\.$",
+    "en": "لا يمكن لهذا المتصفح/الصفحة تسجيل الصوت (مفقود: $1). استخدم HTTPS أو localhost ومتصفحًا حديثًا."
+  },
+  {
+    "id": "p47",
+    "regex": "^The browser reported (.+)\\. RDT Voice stopped instead of silently sending a partial recording\\.$",
+    "en": "أبلغ المتصفح عن $1. أوقف RDT Voice التسجيل بدلًا من إرسال تسجيل جزئي بصمت."
+  },
+  {
+    "id": "p48",
+    "regex": "^RDT Voice expected about ([\\d.]+)s, but the captured audio is only about ([\\d.]+)s\\. We did NOT send this recording for transcription\\. The captured audio is kept here so you can retry or inspect it\\.$",
+    "en": "توقع RDT Voice حوالي $1s، لكن الصوت الملتقط مدته حوالي $2s فقط. لم نرسل هذا التسجيل للتفريغ. الصوت الملتقط محفوظ هنا حتى تتمكن من إعادة المحاولة أو فحصه."
+  },
+  {
+    "id": "p49",
+    "regex": "^No audio data was captured \\(([\\d.]+)s elapsed but 0 bytes received\\)\\. RDT Voice did not send anything for transcription\\. Close other apps using the mic, then try again\\.$",
+    "en": "لم يتم التقاط أي بيانات صوتية ($1s انقضت لكن تم استلام 0 بايت). لم يرسل RDT Voice أي شيء للتفريغ. أغلق التطبيقات الأخرى التي تستخدم الميكروفون، ثم حاول مرة أخرى."
+  },
+  {
+    "id": "p50",
+    "regex": "^Model not in pinned manifest: (.+)$",
+    "en": "النموذج غير موجود في Manifest المثبت: $1"
+  },
+  {
+    "id": "p51",
+    "regex": "^RAM (.+) GB$",
+    "en": "ذاكرة RAM $1 GB"
+  },
+  {
+    "id": "p52",
+    "regex": "^CPU · (\\d+) threads reported$",
+    "en": "CPU · عدد الخيوط المُبلّغ عنها $1"
+  },
+  {
+    "id": "p53",
+    "regex": "^(\\d+) percent, (.+)$",
+    "en": "$1 بالمائة, $2"
+  },
+  {
+    "id": "p54",
+    "regex": "^(\\d+)% · Downloading model$",
+    "en": "$1% · جارٍ تنزيل النموذج"
+  },
+  {
+    "id": "p55",
+    "regex": "^Segment (\\d+)$",
+    "en": "المقطع $1"
+  },
+  {
+    "id": "p56",
+    "regex": "^Backend (\\d+)$",
+    "en": "الواجهة الخلفية $1"
+  },
+  {
+    "id": "p57",
+    "regex": "^Ready • Model: (.+) • Port: (.+)$",
+    "en": "جاهز • النموذج: $1 • المنفذ: $2"
+  },
+  {
+    "id": "p58",
+    "regex": "^Latency: (.+)ms$",
+    "en": "زمن الاستجابة: $1ms"
+  },
+  {
+    "id": "p59",
+    "regex": "^Local: (.+)$",
+    "en": "محلي: $1"
+  },
+  {
+    "id": "p60",
+    "regex": "^Remote → (.+)$",
+    "en": "بعيد → $1"
+  },
+  {
+    "id": "p61",
+    "regex": "^model: (.+)$",
+    "en": "النموذج: $1"
+  },
+  {
+    "id": "p62",
+    "regex": "^total: (.+)$",
+    "en": "الإجمالي: $1"
+  },
+  {
+    "id": "p63",
+    "regex": "^Model: (.+)$",
+    "en": "النموذج: $1"
+  },
+  {
+    "id": "p64",
+    "regex": "^Size: (.+)$",
+    "en": "الحجم: $1"
+  },
+  {
+    "id": "p65",
+    "regex": "^Length: (.+)$",
+    "en": "الطول: $1"
+  },
+  {
+    "id": "p66",
+    "regex": "^Selected: (.+)$",
+    "en": "المحدد: $1"
+  },
+  {
+    "id": "p67",
+    "regex": "^Linked: (.+)$",
+    "en": "مرتبط: $1"
+  },
+  {
+    "id": "p68",
+    "regex": "^Open Folder \\(:(\\d+)\\)$",
+    "en": "فتح المجلد (:$1)"
+  },
+  {
+    "id": "p69",
+    "regex": "^Port (.+) • Latency (.+)ms( • Last .+)?$",
+    "en": "المنفذ $1 • زمن الاستجابة $2ms$3"
+  },
+  {
+    "id": "p70",
+    "regex": "^(\\d+) GB \\(custom\\)$",
+    "en": "$1 GB (مخصص)"
+  },
+  {
+    "id": "p71",
+    "regex": "^(\\d+) days \\(custom\\)$",
+    "en": "$1 يومًا (مخصص)"
+  },
+  {
+    "id": "p72",
+    "regex": "^(-?\\d+) dBFS$",
+    "en": "$1 dBFS"
+  },
+  {
+    "id": "p73",
+    "regex": "^(\\d+) file(s?)$",
+    "en": "$1 ملف$2"
+  },
+  {
+    "id": "p74",
+    "regex": "^⬇ LOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ تحميل هذا النموذج ($1)"
+  },
+  {
+    "id": "p75",
+    "regex": "^⬇ DOWNLOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ تنزيل هذا النموذج ($1)"
+  },
+  {
+    "id": "p76",
+    "regex": "^✓ Backend OK · (\\d+)ms$",
+    "en": "✓ الواجهة الخلفية OK · $1ms"
+  },
+  {
+    "id": "p77",
+    "regex": "^✗ Backend HTTP (\\d+)$",
+    "en": "✗ الواجهة الخلفية HTTP $1"
+  },
+  {
+    "id": "p78",
+    "regex": "^✗ Backend: (.+)$",
+    "en": "✗ الواجهة الخلفية: $1"
+  },
+  {
+    "id": "p81",
+    "regex": "^Couldn't check for updates: (.+)$",
+    "en": "تعذر التحقق من التحديثات: $1"
+  },
+  {
+    "id": "p82",
+    "regex": "^Latest (.+): (.+)$",
+    "en": "الأحدث $1: $2"
+  },
+  {
+    "id": "p83",
+    "regex": "^⚠ BATCH mode sends audio to (.+)\\. Audio leaves this device\\.$",
+    "en": "⚠ يرسل BATCH mode الصوت إلى $1. يغادر الصوت هذا الجهاز."
+  },
+  {
+    "id": "p84",
+    "regex": "^(.+) is loaded into the browser\\. Future transcriptions will be instant\\.$",
+    "en": "تم تحميل $1 في المتصفح. ستكون عمليات التفريغ المستقبلية فورية."
+  },
+  {
+    "id": "p85",
+    "regex": "^The (.+) model hasn't been loaded into the browser\\. Load it now — this only needs to happen once\\.$",
+    "en": "لم يتم تحميل نموذج $1 في المتصفح. حمّله الآن — لا يلزم القيام بذلك إلا مرة واحدة."
+  },
+  {
+    "id": "p86",
+    "regex": "^Loading (.+)$",
+    "en": "جارٍ تحميل $1"
+  },
+  {
+    "id": "p87",
+    "regex": "^Open (.+)/health — you should see JSON\\.$",
+    "en": "افتح $1/health — يجب أن ترى JSON."
+  },
+  {
+    "id": "p88",
+    "regex": "^No file list – add GET /v1/recordings/list in server\\.py \\(port (\\d+)\\)$",
+    "en": "لا توجد قائمة ملفات – أضف GET /v1/recordings/list في server.py (المنفذ $1)"
+  },
+  {
+    "id": "p89",
+    "regex": "^Preview cleanup would affect (\\d+) words • WPM (.+) • Reading time ~(.+) min$",
+    "en": "سيؤثر تنظيف المعاينة على $1 كلمة • WPM $2 • وقت القراءة \\~$3 دقيقة"
+  },
+  {
+    "id": "p90",
+    "regex": "^Last: Length (.+) • Processing (.+) • (.+)x • Transcription (.+) words • Transcription WPM (.+) • (.+) chars • (.+) sentences • Peak (.+) tok/s • Model (.+)$",
+    "en": "الأخير: المدة $1 • المعالجة $2 • $3x • كلمات التفريغ $4 • سرعة التفريغ $5 كلمة/دقيقة • $6 حرفًا • $7 جمل • الذروة $8 رمز/ث • النموذج $9"
+  },
+  {
+    "id": "p91",
+    "regex": "^(.+) • (.+) tok/s • (.+)x(.*)$",
+    "en": "$1 • $2 رمز/ث • $3x$4"
+  },
+  {
+    "id": "p93",
+    "regex": "^(\\d+)h ago$",
+    "en": "منذ $1h"
+  },
+  {
+    "id": "p94",
+    "regex": "^(\\d+)mo ago$",
+    "en": "منذ $1mo"
+  },
+  {
+    "id": "p95",
+    "regex": "^About (\\d+) hr (\\d+) min left$",
+    "en": "متبقي حوالي $1 ساعة $2 دقيقة"
+  },
+  {
+    "id": "p96",
+    "regex": "^LIVE speech is unavailable offline in this browser for (.+)\\. Connect to the internet or use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "كلام LIVE غير متاح دون اتصال في هذا المتصفح لـ $1. اتصل بالإنترنت أو استخدم BATCH/EasyWhisper للتفريغ دون اتصال."
+  },
+  {
+    "id": "p97",
+    "regex": "^RAM ≥(\\d+) GB$",
+    "en": "ذاكرة RAM ≥$1 GB"
+  },
+  {
+    "id": "p98",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB \\(user\\)$",
+    "en": "RAM $1–$2 GB (المستخدم)"
+  },
+  {
+    "id": "p99",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB$",
+    "en": "ذاكرة RAM $1–$2 GB"
+  },
+  {
+    "id": "p100",
+    "regex": "^RAM (\\d+)\\+ GB \\(user\\)$",
+    "en": "RAM $1+ GB (المستخدم)"
+  },
+  {
+    "id": "p101",
+    "regex": "^RAM (\\d+) GB \\(user\\)$",
+    "en": "RAM $1 GB (المستخدم)"
+  },
+  {
+    "id": "p102",
+    "regex": "^RAM (\\d+)\\+ GB$",
+    "en": "ذاكرة RAM $1+ GB"
+  },
+  {
+    "id": "p103",
+    "regex": "^Copied (\\d+) image(s?)\\. (\\d+) files still need Download All or ZIP\\.$",
+    "en": "تم نسخ $1 صورة$2. لا تزال $3 ملفات بحاجة إلى تنزيل الكل أو ZIP."
+  },
+  {
+    "id": "p104",
+    "regex": "^Copied (\\d+) image(s?)\\. No files were downloaded\\.$",
+    "en": "تم نسخ $1 صورة$2. لم يتم تنزيل أي ملفات."
+  },
+  {
+    "id": "p105",
+    "regex": "^Downloaded (\\d+) attachment(s?)\\.$",
+    "en": "تم تنزيل $1 مرفق$2."
+  },
+  {
+    "id": "p106",
+    "regex": "^(\\d+) recording(s?) deleted\\.$",
+    "en": "تم حذف $1 تسجيل$2."
+  },
+  {
+    "id": "p107",
+    "regex": "^1 recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "تم حذف تسجيل واحد؛ وفشل $1."
+  },
+  {
+    "id": "p108",
+    "regex": "^(\\d+) model(s?) reset( · files purged)?$",
+    "en": "تمت إعادة ضبط $1 نموذج$2$3"
+  },
+  {
+    "id": "p109",
+    "regex": "^Live speech stopped unexpectedly( \\([^)]+\\)|\\.)$",
+    "en": "توقف الكلام المباشر بشكل غير متوقع$1"
+  },
+  {
+    "id": "p110",
+    "regex": "^Switched to (.+) — testing…$",
+    "en": "تم التبديل إلى $1 — جارٍ الاختبار…"
+  },
+  {
+    "id": "p111",
+    "regex": "^Could not switch: (.+)$",
+    "en": "تعذّر التبديل: $1"
+  },
+  {
+    "id": "p112",
+    "regex": "^Opened (.+)$",
+    "en": "تم فتح $1"
+  },
+  {
+    "id": "p114",
+    "regex": "^DEV LAB • (.+) • EXPERIMENTAL$",
+    "en": "مختبر التطوير • $1 • تجريبي"
+  },
+  {
+    "id": "p115",
+    "regex": "^Copied (\\d+) image(s?)\\. 1 file still need Download All or ZIP\\.$",
+    "en": "تم نسخ $1 صورة$2. لا يزال ملف واحد بحاجة إلى تنزيل الكل أو ZIP."
+  },
+  {
+    "id": "p116",
+    "regex": "^ADVANCED • RAW SEGMENTS \\((\\d+)\\)$",
+    "en": "متقدم • المقاطع الخام ($1)"
+  },
+  {
+    "id": "p117",
+    "regex": "^Long recording audio · (.+)$",
+    "en": "صوت تسجيل طويل · $1"
+  },
+  {
+    "id": "p118",
+    "regex": "^(\\d+) selected · (\\d+) recordings$",
+    "en": "تم تحديد $1 · $2 تسجيلات"
+  },
+  {
+    "id": "p119",
+    "regex": "^((?:[2-9]|[1-9]\\d+)) recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "تم حذف $1 تسجيلات؛ وفشل $2."
+  },
+  {
+    "id": "p120",
+    "regex": "^PLAYING · (.+)$",
+    "en": "قيد التشغيل · $1"
+  },
+  {
+    "id": "p121",
+    "regex": "^EasyWhisper · (.+)$",
+    "en": "EasyWhisper · $1"
+  },
+  {
+    "id": "p122",
+    "regex": "^• Spoken (.+) WPM • (.+)w$",
+    "en": "• الكلام المنطوق $1 كلمة/دقيقة • $2w"
+  },
+  {
+    "id": "p123",
+    "regex": "^Already connected( · \\d+ ms)?$",
+    "en": "متصل بالفعل$1"
+  },
+  {
+    "id": "p124",
+    "regex": "^Current status: (.+)$",
+    "en": "الحالة الحالية: $1"
+  },
+  {
+    "id": "p125",
+    "regex": "^Latest\\s+v(.+)$",
+    "en": "أحدث إصدار v$1"
+  },
+  {
+    "id": "p126",
+    "regex": "^GPU renderer: (.+)$",
+    "en": "عارض GPU: $1"
+  },
+  {
+    "id": "p127",
+    "regex": "^Worker OK\\. Empty result: \"([\\s\\S]+)\"$",
+    "en": "العامل يعمل. نتيجة فارغة: \"$1\""
+  },
+  {
+    "id": "p128",
+    "regex": "^FAILED: ([\\s\\S]+)$",
+    "en": "فشل: $1"
+  },
+  {
+    "id": "p129",
+    "regex": "^Cache keys: (.+)$",
+    "en": "مفاتيح ذاكرة التخزين المؤقت: $1"
+  },
+  {
+    "id": "p130",
+    "regex": "^Cache check failed: ([\\s\\S]+)$",
+    "en": "فشل التحقق من ذاكرة التخزين المؤقت: $1"
+  },
+  {
+    "id": "p131",
+    "regex": "^worker\\.js fetched \\((\\d+) bytes\\)\\. See console\\.$",
+    "en": "تم جلب worker.js ($1 بايت). راجع وحدة التحكم."
+  },
+  {
+    "id": "p132",
+    "regex": "^worker\\.js fetch failed: ([\\s\\S]+)$",
+    "en": "فشل جلب worker.js: $1"
+  },
+  {
+    "id": "p133",
+    "regex": "^Manifest fetch failed: ([\\s\\S]+)$",
+    "en": "فشل جلب البيان: $1"
+  },
+  {
+    "id": "p134",
+    "regex": "^Assembling (\\d+(?:\\.\\d+)?) min of captured audio$",
+    "en": "جارٍ تجميع $1 دقيقة من الصوت المسجّل"
+  },
+  {
+    "id": "p135",
+    "regex": "^Assembling audio · (\\d+)%$",
+    "en": "جارٍ تجميع الصوت · $1٪"
+  },
+  {
+    "id": "p136",
+    "regex": "^Decoding recorded audio \\(([\\d.]+) MB\\)$",
+    "en": "جارٍ فك ترميز الصوت المسجّل ($1 MB)"
+  },
+  {
+    "id": "p137",
+    "regex": "^Sending ([\\d.]+) min of audio to the transcription worker$",
+    "en": "جارٍ إرسال $1 دقيقة من الصوت إلى عامل التفريغ"
+  },
+  {
+    "id": "p138",
+    "regex": "^((?:🌐 )?)Display language — (.+) \\(([^()]+)\\)$",
+    "en": "$1لغة العرض — $2 ($3)"
+  },
+  {
+    "id": "p139",
+    "regex": "^A required model file could not be fetched\\. This is a network/CDN CORS failure, not a WebGPU placement warning\\. The app did not repeat the same fetch using WASM\\. Please retry later or test the same model download in another browser/network; the site cannot add missing CORS headers to Hugging Face's response\\. Details: ([\\s\\S]*)$",
+    "en": "تعذّر جلب ملف نموذج مطلوب. هذا فشل CORS في الشبكة/CDN، وليس تحذيرًا عن موضع WebGPU. لم يُعِد التطبيق طلب الملف نفسه باستخدام WASM. أعد المحاولة لاحقًا أو اختبر تنزيل النموذج نفسه في متصفح/شبكة أخرى؛ لا يمكن للموقع إضافة ترويسات CORS المفقودة إلى استجابة Hugging Face. التفاصيل: $1"
+  },
+  {
+    "id": "p141",
+    "regex": "^Permanently delete (\\d+) selected recording(s?)\\? This cannot be undone\\.$",
+    "en": "هل تريد حذف $1 تسجيل$2 محدد نهائيًا؟ لا يمكن التراجع عن ذلك."
+  },
+  {
+    "id": "p142",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE preview needs an internet connection here\\. You can still use BATCH/EasyWhisper transcription offline\\.$",
+    "en": "لم يجهز هذا المتصفح ميزة التعرف على الكلام على الجهاز للغة $1. تحتاج المعاينة المباشرة إلى اتصال بالإنترنت هنا. لا يزال بإمكانك استخدام تفريغ BATCH/EasyWhisper دون اتصال."
+  },
+  {
+    "id": "p143",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE needs an internet connection here\\. Use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "لم يجهز هذا المتصفح ميزة التعرف على الكلام على الجهاز للغة $1. يحتاج LIVE إلى اتصال بالإنترنت هنا. استخدم BATCH/EasyWhisper للتفريغ دون اتصال."
+  },
+  {
+    "id": "p144",
+    "regex": "^Your audio is safe\\. Save it now, then retry\\. Details: ([\\s\\S]*)$",
+    "en": "الصوت آمن. احفظه الآن ثم أعد المحاولة. التفاصيل: $1"
+  },
+  {
+    "id": "p145",
+    "regex": "^Duration: (.+)$",
+    "en": "المدة: $1"
+  },
+  {
+    "id": "p146",
+    "regex": "^Segments: (\\d+)$",
+    "en": "المقاطع: $1"
+  },
+  {
+    "id": "p147",
+    "regex": "^Total: (.+)$",
+    "en": "الإجمالي: $1"
+  },
+  {
+    "id": "p148",
+    "regex": "^Base: (.+) • Format: (.+)$",
+    "en": "الأساس: $1 • التنسيق: $2"
+  },
+  {
+    "id": "p149",
+    "regex": "^Total fillers: (\\d+)$",
+    "en": "إجمالي كلمات الحشو: $1"
+  },
+  {
+    "id": "p150",
+    "regex": "^(\\d+(?:\\.\\d+)?) (days|months|years)$",
+    "en": "$1 $2"
+  },
+  {
+    "id": "p151",
+    "regex": "^(\\d+) transcriptions • since (.+)$",
+    "en": "$1 عملية تفريغ • منذ $2"
+  },
+  {
+    "id": "p152",
+    "regex": "^(\\d+(?:\\.\\d+)?)([smh])$",
+    "en": "$1$2"
+  },
+  {
+    "id": "p153",
+    "regex": "^port: (.+)$",
+    "en": "المنفذ: $1"
+  },
+  {
+    "id": "p154",
+    "regex": "^latency: (.+)$",
+    "en": "زمن الاستجابة: $1"
+  }
+]

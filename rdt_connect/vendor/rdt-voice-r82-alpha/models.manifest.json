@@ -1,0 +1,618 @@
+{
+  "generated": "2026-10-03T09:19:26.709529+00:00",
+  "models": [
+    {
+      "id": "onnx-community/whisper-tiny",
+      "revision": "ff4177021cc41f7db950912b73ea4fdf7d01d8e7",
+      "totalBytes": 1411504682,
+      "files": [
+        {
+          "path": "onnx/decoder_model.onnx",
+          "size": 118397483,
+          "sha256": "ab79e3f2a9a3d98f159f853a3172120a38af7eb5f7863d706aa7d39c228f009e"
+        },
+        {
+          "path": "onnx/decoder_model_bnb4.onnx",
+          "size": 85963382,
+          "sha256": "333321c601e9b9f8703f69801834880cf647e637ac4e54a5203791d7d1ef047f"
+        },
+        {
+          "path": "onnx/decoder_model_fp16.onnx",
+          "size": 59370049,
+          "sha256": "1e27915a597b2e3da3c5ca141e8974d54228b064ac7a316b9ae7d0eb6dbb80f5"
+        },
+        {
+          "path": "onnx/decoder_model_int8.onnx",
+          "size": 30461071,
+          "sha256": "2a160a2a5ccf901f83aa4d4ceec580a269bd2cec582871e0816e98c610594f12"
+        },
+        {
+          "path": "onnx/decoder_model_merged.onnx",
+          "size": 118553827,
+          "sha256": "8d20f4157407006e871d63ca0a3c54dddd7db33dfc4ee076960f1f8b2763ce3e"
+        },
+        {
+          "path": "onnx/decoder_model_merged_bnb4.onnx",
+          "size": 86124414,
+          "sha256": "fd66992a760913909e01c151ea4b42de738ab7a5c6268ed4399fda545cb8dfbf"
+        },
+        {
+          "path": "onnx/decoder_model_merged_fp16.onnx",
+          "size": 59593896,
+          "sha256": "a1aac8aa5f4e9e835e343025edf5e4d1644ab6f629c0f8c21e121868e60b3f6c"
+        },
+        {
+          "path": "onnx/decoder_model_merged_int8.onnx",
+          "size": 30719241,
+          "sha256": "25e807a962b6349356d0ea5d0dfe530b7e5bf0e2a484aeca0359d03143faddd3"
+        },
+        {
+          "path": "onnx/decoder_model_merged_q4.onnx",
+          "size": 86713702,
+          "sha256": "a7573efde84f7d018d59e50e7f860c03e26623d68e23eb6037b76135367e72eb"
+        },
+        {
+          "path": "onnx/decoder_model_merged_quantized.onnx",
+          "size": 30719241,
+          "sha256": "25e807a962b6349356d0ea5d0dfe530b7e5bf0e2a484aeca0359d03143faddd3"
+        },
+        {
+          "path": "onnx/decoder_model_merged_uint8.onnx",
+          "size": 30719271,
+          "sha256": "8dca2dedbb3aaa64e840d60d9f58f12f5b6b259f62b6dcffe4b37a4d1edce808"
+        },
+        {
+          "path": "onnx/decoder_model_q4.onnx",
+          "size": 86552958,
+          "sha256": "cd1b657642b8f9a05f5f49e8531539b30175df8db04c03224a042abe613b8606"
+        },
+        {
+          "path": "onnx/decoder_model_quantized.onnx",
+          "size": 30461071,
+          "sha256": "2a160a2a5ccf901f83aa4d4ceec580a269bd2cec582871e0816e98c610594f12"
+        },
+        {
+          "path": "onnx/decoder_model_uint8.onnx",
+          "size": 30461101,
+          "sha256": "972de4000f5af03dcaa31d937b473d340687dc24b62ea5eaac84fcf21c2d74e5"
+        },
+        {
+          "path": "onnx/decoder_with_past_model.onnx",
+          "size": 113638998,
+          "sha256": "0485135066eb1d36dcb04dbabd0cc1141c7cd8c442217abd0798d55fe2bc6bed"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_bnb4.onnx",
+          "size": 85258697,
+          "sha256": "25afc50f69113946574e4934ea64bba34ce6cbb84688e2b28d94073ddca02ba6"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_fp16.onnx",
+          "size": 56961977,
+          "sha256": "3c51c9c39e16dfc87dc2943a814df827731d8d1c4ca0ba952dcfe7fdecf0dfaa"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_int8.onnx",
+          "size": 29220476,
+          "sha256": "9fe615bbbf4e871eac150e6ab3732b22515ae347d6f73fb009775c6ee04c5858"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_q4.onnx",
+          "size": 85774593,
+          "sha256": "14577b73aaadc7c78ec4b6e9dab1890ea6bf934b9a646cce0f81c00acb270631"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_quantized.onnx",
+          "size": 29220476,
+          "sha256": "9fe615bbbf4e871eac150e6ab3732b22515ae347d6f73fb009775c6ee04c5858"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_uint8.onnx",
+          "size": 29220499,
+          "sha256": "04e76af506eb343fcdf7b4852272c00dcf1c84447e8f4e81113200aa80a66f81"
+        },
+        {
+          "path": "onnx/encoder_model.onnx",
+          "size": 32904992,
+          "sha256": "6642befb640f950d4a8cbbd17834d59e7e75f575b81ccf213e06b050623ab1dd"
+        },
+        {
+          "path": "onnx/encoder_model_bnb4.onnx",
+          "size": 8578451,
+          "sha256": "c8596d911d020092caa4d80bf06929f4a0c5f573701a6882bc37dd761dc383bf"
+        },
+        {
+          "path": "onnx/encoder_model_fp16.onnx",
+          "size": 16519192,
+          "sha256": "fc4bf9f3fadc450b128c3ef0711a4e61a55797447b6a700abe7fb97d9f549518"
+        },
+        {
+          "path": "onnx/encoder_model_int8.onnx",
+          "size": 10124977,
+          "sha256": "03ff3c99ce804f79a42afd6212c9492eb75e55625926de66f8fc192e9567d336"
+        },
+        {
+          "path": "onnx/encoder_model_q4.onnx",
+          "size": 9020667,
+          "sha256": "45a55cedf1ff46606520f5938ed40c94bd4f6b38beb2a646eed8636225342488"
+        },
+        {
+          "path": "onnx/encoder_model_quantized.onnx",
+          "size": 10124990,
+          "sha256": "2af4a414ca47aa30f61246017e5fe82b0a8d229281d1255ba666a2a7f6b84d19"
+        },
+        {
+          "path": "onnx/encoder_model_uint8.onnx",
+          "size": 10124990,
+          "sha256": "2af4a414ca47aa30f61246017e5fe82b0a8d229281d1255ba666a2a7f6b84d19"
+        }
+      ]
+    },
+    {
+      "id": "onnx-community/whisper-base",
+      "revision": "1846881b6b3a3024392c1eea3ad983695bc23925",
+      "totalBytes": 2352710388,
+      "files": [
+        {
+          "path": "onnx/decoder_model.onnx",
+          "size": 208289724,
+          "sha256": "70d26763610c0d6bb407373b7f30d415252ee470e62a0f816c8a46b2caca7326"
+        },
+        {
+          "path": "onnx/decoder_model_bnb4.onnx",
+          "size": 121791631,
+          "sha256": "da5b3d1df90c8a1493570969d00d7cac6c7eb3607c1fbdad6473ea81c8fad065"
+        },
+        {
+          "path": "onnx/decoder_model_fp16.onnx",
+          "size": 104396174,
+          "sha256": "8acaa9ed6e16d309df746b097a2ea1363bf90ceeee51813b8aa67aca289ba3fc"
+        },
+        {
+          "path": "onnx/decoder_model_int8.onnx",
+          "size": 53310178,
+          "sha256": "c859636f4463dd5a9ea752546c6c7badeb48ab3e22b340cafef08a15552fcb2e"
+        },
+        {
+          "path": "onnx/decoder_model_merged.onnx",
+          "size": 208521528,
+          "sha256": "514903744bb1b45803ec571af99b31110491c6f77b0a154825866995fb124b73"
+        },
+        {
+          "path": "onnx/decoder_model_merged_bnb4.onnx",
+          "size": 122030467,
+          "sha256": "c89adc212fe988bec3013348e6e78c0b9d587177ae67de583f24d751924cb613"
+        },
+        {
+          "path": "onnx/decoder_model_merged_fp16.onnx",
+          "size": 104727818,
+          "sha256": "2078fb08b753e3a74120e6a52446eef1b98f6152d1da43658731367a93fd71a4"
+        },
+        {
+          "path": "onnx/decoder_model_merged_int8.onnx",
+          "size": 53693315,
+          "sha256": "fa3ef9902734ce5ae6f9ef2bdb2ba9a6c4b5785b09f4f420ce036573dc9d090b"
+        },
+        {
+          "path": "onnx/decoder_model_merged_q4.onnx",
+          "size": 123602419,
+          "sha256": "09f83b71ceedc97dab1d90b914715dc532a646a147abda11d83c64867b7c319c"
+        },
+        {
+          "path": "onnx/decoder_model_merged_quantized.onnx",
+          "size": 53693315,
+          "sha256": "fa3ef9902734ce5ae6f9ef2bdb2ba9a6c4b5785b09f4f420ce036573dc9d090b"
+        },
+        {
+          "path": "onnx/decoder_model_merged_uint8.onnx",
+          "size": 53693343,
+          "sha256": "cd342d30d837133239a83d66b70dc080b474a1a730b5a858e96c00eb8ba87c01"
+        },
+        {
+          "path": "onnx/decoder_model_q4.onnx",
+          "size": 123364015,
+          "sha256": "97f93efe026e2bb174aa418d0b0c8650d4d09865da83d613c63ef1a73d89ac9f"
+        },
+        {
+          "path": "onnx/decoder_model_quantized.onnx",
+          "size": 53310178,
+          "sha256": "c859636f4463dd5a9ea752546c6c7badeb48ab3e22b340cafef08a15552fcb2e"
+        },
+        {
+          "path": "onnx/decoder_model_uint8.onnx",
+          "size": 53310206,
+          "sha256": "b11bd42fa4fa1a7c2ffdeab12d7b1546449d6c537286c180e5e7e0ab14012f3a"
+        },
+        {
+          "path": "onnx/decoder_with_past_model.onnx",
+          "size": 195647494,
+          "sha256": "d777189c817e42824edb6a97bc613b37d824e0b2cfce06a41374a03cc54498c5"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_bnb4.onnx",
+          "size": 119960957,
+          "sha256": "84925e5cce2b4de1d544fd71201344118e58662073c2c56991c017b7b9979413"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_fp16.onnx",
+          "size": 98035209,
+          "sha256": "a80df24ce32fef82b8415dce6e37c09e958004b4a5a9170b4628a5cfddd82e3d"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_int8.onnx",
+          "size": 50075136,
+          "sha256": "dd0d9ff1c066992aa8db6ff1944b5fd5660e95ecbbc86e0da158300c23e52232"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_q4.onnx",
+          "size": 121336829,
+          "sha256": "7388e6102d651274656b05f0d094233e300db742b3cc22da83432fd4fee755a1"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_quantized.onnx",
+          "size": 50075136,
+          "sha256": "dd0d9ff1c066992aa8db6ff1944b5fd5660e95ecbbc86e0da158300c23e52232"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_uint8.onnx",
+          "size": 50075159,
+          "sha256": "966eaa585477bdf294e99d432dcb5be247408c6b56d4ec51a51bb63846cafaf2"
+        },
+        {
+          "path": "onnx/encoder_model.onnx",
+          "size": 82468078,
+          "sha256": "a9f3b752833b49e880dec91ee5b6d936112be7c3ea07c221024ba493439f46fe"
+        },
+        {
+          "path": "onnx/encoder_model_bnb4.onnx",
+          "size": 17593091,
+          "sha256": "e85d47267b8a146e3d7b8fdceae5cf8081e3e9b1e5e66afb7de50e40481096b8"
+        },
+        {
+          "path": "onnx/encoder_model_fp16.onnx",
+          "size": 41332612,
+          "sha256": "ffba51b20185377c1b89362b1128148d0132de936a32b200af973da2a11a5369"
+        },
+        {
+          "path": "onnx/encoder_model_int8.onnx",
+          "size": 23201297,
+          "sha256": "ca6177401f86a2c6b4dc5f7fc02fbca680678906bd0c22f6d89f0b80f124253f"
+        },
+        {
+          "path": "onnx/encoder_model_q4.onnx",
+          "size": 18772451,
+          "sha256": "9d4e9c31e8559e71de3e0e49d60b830951484699ef53747a4a06261bbbc8cb88"
+        },
+        {
+          "path": "onnx/encoder_model_quantized.onnx",
+          "size": 23201314,
+          "sha256": "5862993336bf33acd23736071aae2b32261d3b1b2f37780194460d4ef974dd46"
+        },
+        {
+          "path": "onnx/encoder_model_uint8.onnx",
+          "size": 23201314,
+          "sha256": "5862993336bf33acd23736071aae2b32261d3b1b2f37780194460d4ef974dd46"
+        }
+      ]
+    },
+    {
+      "id": "onnx-community/whisper-small",
+      "revision": "36050c46d777d46dc4b5f43f6d90574fc38f8732",
+      "totalBytes": 6339650996,
+      "files": [
+        {
+          "path": "onnx/decoder_model.onnx",
+          "size": 614865004,
+          "sha256": "12130ce1e82372a8e54e753d3fb4339f289470cbbe2eceb9c8bf89cb2cc6fe63"
+        },
+        {
+          "path": "onnx/decoder_model_bnb4.onnx",
+          "size": 225599806,
+          "sha256": "683a68c0951833eb7fb5b38319e9acf41a01ba63681584f3245ac906859ecd93"
+        },
+        {
+          "path": "onnx/decoder_model_fp16.onnx",
+          "size": 307924740,
+          "sha256": "bbf06f4be0e38b76d6cf107da618a554f311c406a873866000e23383131e3ba5"
+        },
+        {
+          "path": "onnx/decoder_model_int8.onnx",
+          "size": 155989346,
+          "sha256": "0486afa8eb464bf2210d07aca0cb3f5d91d3f2f01cbe47f9f1e6ff9122abaaf6"
+        },
+        {
+          "path": "onnx/decoder_model_merged.onnx",
+          "size": 615324301,
+          "sha256": "6ed5e35feaba79ad2e89b368ddc7b4ddaa3c00b4c37a664375d3428a76fecc6a"
+        },
+        {
+          "path": "onnx/decoder_model_merged_bnb4.onnx",
+          "size": 226073167,
+          "sha256": "783b50b5a9f30f6c1f45e7d695ed40af55c14f6a6b395c7a30002598ac4217fd"
+        },
+        {
+          "path": "onnx/decoder_model_merged_fp16.onnx",
+          "size": 308583076,
+          "sha256": "22aba6c7f5193701cbe1519051b6ef097eb530ad6887b7093065ec59b830f61d"
+        },
+        {
+          "path": "onnx/decoder_model_merged_int8.onnx",
+          "size": 156750845,
+          "sha256": "ec07c3cbb64172c39791e26ee870a65ac22b458c36722bfe2776b3dbf741e0c9"
+        },
+        {
+          "path": "onnx/decoder_model_merged_q4.onnx",
+          "size": 233149327,
+          "sha256": "795c61b344576719c2b249cc9911c78b4cc552c8c6a5407be21a3380a0791b13"
+        },
+        {
+          "path": "onnx/decoder_model_merged_quantized.onnx",
+          "size": 156750845,
+          "sha256": "ec07c3cbb64172c39791e26ee870a65ac22b458c36722bfe2776b3dbf741e0c9"
+        },
+        {
+          "path": "onnx/decoder_model_merged_uint8.onnx",
+          "size": 156750906,
+          "sha256": "b92188d1a3c4aea369131893f9649228b8605128e9a8a86e5e4da6ebb61b8f87"
+        },
+        {
+          "path": "onnx/decoder_model_q4.onnx",
+          "size": 232676830,
+          "sha256": "f9df829aeac7345c9b08c95cdaf8fdf9af82bba9e446c75f840889000afa124c"
+        },
+        {
+          "path": "onnx/decoder_model_quantized.onnx",
+          "size": 155989346,
+          "sha256": "0486afa8eb464bf2210d07aca0cb3f5d91d3f2f01cbe47f9f1e6ff9122abaaf6"
+        },
+        {
+          "path": "onnx/decoder_model_uint8.onnx",
+          "size": 155989407,
+          "sha256": "1bc30481d9fa4e9644a2878f9816857d78f28c918c41db8054496f1181e85e0e"
+        },
+        {
+          "path": "onnx/decoder_with_past_model.onnx",
+          "size": 558117914,
+          "sha256": "8e17aa98d76cd503552b39b6a716bc51d896f61aeab022f8cfbaf9aa6540e72a"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_bnb4.onnx",
+          "size": 217509476,
+          "sha256": "c3a300e2757c5c3b0259ec808077008bba830769cfe8f45954790211bbf15d7d"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_fp16.onnx",
+          "size": 279478163,
+          "sha256": "3a65cf85fdb5f77bda73bc22c360bc1de72b226f6c63dc3b0a0be17db640ac86"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_int8.onnx",
+          "size": 141652708,
+          "sha256": "f1eb4ac7fe2b3aeed93a8de8f478af45b8fcef7302491ffcf9c84f33f71b3e7b"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_q4.onnx",
+          "size": 223701932,
+          "sha256": "d4ebca1f524757f3ebea0591412ec15889acf7384c2830f039a824951d765a17"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_quantized.onnx",
+          "size": 141652708,
+          "sha256": "f1eb4ac7fe2b3aeed93a8de8f478af45b8fcef7302491ffcf9c84f33f71b3e7b"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_uint8.onnx",
+          "size": 141652756,
+          "sha256": "f3b45f22b0b35565800c4f47eb6520d9e524d6a440872d6da44e58c2c1aafaf8"
+        },
+        {
+          "path": "onnx/encoder_model.onnx",
+          "size": 352825870,
+          "sha256": "b37cd6625dc36f9178ec7539a1876b9680ea26a910097e092be39dc766320c7b"
+        },
+        {
+          "path": "onnx/encoder_model_bnb4.onnx",
+          "size": 60874216,
+          "sha256": "5ed12f343f004e5060719d2cf892b5c5e801e89919c1649f55bea78227c84040"
+        },
+        {
+          "path": "onnx/encoder_model_fp16.onnx",
+          "size": 176607756,
+          "sha256": "5549cd8666ff4b694ceb128bfa48b95bdcceec29075cf2c2212f90002cc058de"
+        },
+        {
+          "path": "onnx/encoder_model_int8.onnx",
+          "size": 92326127,
+          "sha256": "2601c9eb2d345c5916d4576d36f663a7c96589740fb2273828c48c3fc2c7db75"
+        },
+        {
+          "path": "onnx/encoder_model_q4.onnx",
+          "size": 66182104,
+          "sha256": "9f088ad0fe15ba2cf094c9fb22ac7fe1111fc9ef317c1e4d1f6a3bca38a931ba"
+        },
+        {
+          "path": "onnx/encoder_model_quantized.onnx",
+          "size": 92326160,
+          "sha256": "a43a83f3c5361cd591cfa7c36f14b43cf7cb22f47a415cc14a8d557be800fa92"
+        },
+        {
+          "path": "onnx/encoder_model_uint8.onnx",
+          "size": 92326160,
+          "sha256": "a43a83f3c5361cd591cfa7c36f14b43cf7cb22f47a415cc14a8d557be800fa92"
+        }
+      ]
+    },
+    {
+      "id": "onnx-community/whisper-large-v3-turbo",
+      "revision": "360ebcde2559d60bb474678be3c1de9ef347d01a",
+      "totalBytes": 16414768678,
+      "files": [
+        {
+          "path": "onnx/decoder_model.onnx",
+          "size": 687820062,
+          "sha256": "31aeaa936531239cc9d65b78cd603715f6462ffb404a4820d9da3935e340d053"
+        },
+        {
+          "path": "onnx/decoder_model_bnb4.onnx",
+          "size": 327378345,
+          "sha256": "5e290a56d9bc675f847aa2e701333c7ceee3b8425ecf31ae9b3bd9155dce61e6"
+        },
+        {
+          "path": "onnx/decoder_model_fp16.onnx",
+          "size": 344003183,
+          "sha256": "56026785e9d0ae5c93e76c5d5ac9560e0568051ff664fb56c3a9eb32745bd6c5"
+        },
+        {
+          "path": "onnx/decoder_model_int8.onnx",
+          "size": 439684851,
+          "sha256": "b54c67a80cf31304d75b8d525393e8758c23f848027d4fa916f26077e9f4bde2"
+        },
+        {
+          "path": "onnx/decoder_model_merged.onnx",
+          "size": 688031263,
+          "sha256": "7f4f078c567a125f91f1fa907a340c82acb74bbb870f6c69068902dbd0984060"
+        },
+        {
+          "path": "onnx/decoder_model_merged_bnb4.onnx",
+          "size": 327594234,
+          "sha256": "b815d44da896eb1a5ade5adc85c8f59bea56f02efb98597a0fb608b6abe714f6"
+        },
+        {
+          "path": "onnx/decoder_model_merged_fp16.onnx",
+          "size": 344227339,
+          "sha256": "fdf10afca73a0c7bf87286cfb96cf7028a9edbc9bb02512509a526f95b126c9d"
+        },
+        {
+          "path": "onnx/decoder_model_merged_int8.onnx",
+          "size": 439936716,
+          "sha256": "61481bd3be3a445d5a4b9070e8f8b2c6cc4fbbbbdc9f0e7ed048a132b8b84e0d"
+        },
+        {
+          "path": "onnx/decoder_model_merged_q4.onnx",
+          "size": 334147222,
+          "sha256": "8b933ac24074a24a1635084d06a4ed37e387ef22d980f184a5fc27418e9ceeb8"
+        },
+        {
+          "path": "onnx/decoder_model_merged_q4f16.onnx",
+          "size": 193505017,
+          "sha256": "45981cdd958a4c8e1447839850d2e6e27e30974ccbe31b4a1e5ebe9ad8965a5f"
+        },
+        {
+          "path": "onnx/decoder_model_merged_quantized.onnx",
+          "size": 439936716,
+          "sha256": "61481bd3be3a445d5a4b9070e8f8b2c6cc4fbbbbdc9f0e7ed048a132b8b84e0d"
+        },
+        {
+          "path": "onnx/decoder_model_merged_uint8.onnx",
+          "size": 439936710,
+          "sha256": "a82ff99d0b3fd72c3fba969e7b6b02908a4f59535da6979e4581b8b0ae2cc29d"
+        },
+        {
+          "path": "onnx/decoder_model_q4.onnx",
+          "size": 333931621,
+          "sha256": "af61e0805db8254c5a2233d0cd8c35d0fbbbc709149a09a2cdf1e8b792dc1166"
+        },
+        {
+          "path": "onnx/decoder_model_q4f16.onnx",
+          "size": 193276341,
+          "sha256": "d8def814e072fea8fddc62afb965c98257e30face6f856657e7f9798df7fc166"
+        },
+        {
+          "path": "onnx/decoder_model_quantized.onnx",
+          "size": 439684851,
+          "sha256": "b54c67a80cf31304d75b8d525393e8758c23f848027d4fa916f26077e9f4bde2"
+        },
+        {
+          "path": "onnx/decoder_model_uint8.onnx",
+          "size": 439684872,
+          "sha256": "5d2fde5388d39f161ea6a1748325c36dd61d65772a32ab5b6561579ccbc39d8c"
+        },
+        {
+          "path": "onnx/decoder_with_past_model.onnx",
+          "size": 635362163,
+          "sha256": "16972348eb181304f80a5af5d9b40ca894ed016888162fbdf65a2ccd7f3bc0f5"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_bnb4.onnx",
+          "size": 319975198,
+          "sha256": "5f465f69cf9f94b61440b51dad3b05341579bb7b4c9e979821baf49d3a874f98"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_fp16.onnx",
+          "size": 317771757,
+          "sha256": "e971827af2f12c152491e21594e9eecf5415ad568d6dc0d6fe794713dfbae815"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_int8.onnx",
+          "size": 426540585,
+          "sha256": "6058a3d09f5ef15d413de7b8e64c5582e690c539c3fd909212af83e88dc03d87"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_q4.onnx",
+          "size": 325709338,
+          "sha256": "c50b734e19853249a69bcb9d1c4c7462d7dee637be0418948716c69865e8af70"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_q4f16.onnx",
+          "size": 185885331,
+          "sha256": "5393b5d892153a3eef728c9569e19c087c81417578cc628022e5e2cb7f9c6ca1"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_quantized.onnx",
+          "size": 426540585,
+          "sha256": "6058a3d09f5ef15d413de7b8e64c5582e690c539c3fd909212af83e88dc03d87"
+        },
+        {
+          "path": "onnx/decoder_with_past_model_uint8.onnx",
+          "size": 426540601,
+          "sha256": "810851f9ee73e229924f151926d44fbd042ddf510ab15f25b24e5bf765ab42b4"
+        },
+        {
+          "path": "onnx/encoder_model.onnx",
+          "size": 439254,
+          "sha256": "67241dccb6b4023e3e56b87e89a44077577f84c4f6fe3f629e3447dd27eabb59"
+        },
+        {
+          "path": "onnx/encoder_model.onnx_data",
+          "size": 2547875840,
+          "sha256": "c87f74d17ea85478cd563a614215868eff35a8a7ec4ff692d1edd49413f56f86"
+        },
+        {
+          "path": "onnx/encoder_model_bnb4.onnx",
+          "size": 385622743,
+          "sha256": "043740046629277aab60c3bec71028a84d16a951be9017a4033850adedee0299"
+        },
+        {
+          "path": "onnx/encoder_model_fp16.onnx",
+          "size": 1274342603,
+          "sha256": "fdadc70836e6b028fd5e580417c312208dad073d2d01e509e2d127c1373399d8"
+        },
+        {
+          "path": "onnx/encoder_model_int8.onnx",
+          "size": 644822094,
+          "sha256": "e44c0d5cfcc6ad283011602a738fa28dfa1ad7f7540c9503205479072a9cc1ef"
+        },
+        {
+          "path": "onnx/encoder_model_q4.onnx",
+          "size": 424942775,
+          "sha256": "7e64b20dd7b556cb7a2c1c65d9fbf31af985323c006f993d2a9dd10083547d78"
+        },
+        {
+          "path": "onnx/encoder_model_q4f16.onnx",
+          "size": 369974078,
+          "sha256": "aafd3383f1aa372db0825a885730ebbbae7e34871ec0460428663c69641a63d0"
+        },
+        {
+          "path": "onnx/encoder_model_quantized.onnx",
+          "size": 644822195,
+          "sha256": "d2f853dc3254fdc0079f55dd4433ea716ac98ec5574d3b475f288f2a77cebba9"
+        },
+        {
+          "path": "onnx/encoder_model_uint8.onnx",
+          "size": 644822195,
+          "sha256": "d2f853dc3254fdc0079f55dd4433ea716ac98ec5574d3b475f288f2a77cebba9"
+        }
+      ]
+    }
+  ]
+}

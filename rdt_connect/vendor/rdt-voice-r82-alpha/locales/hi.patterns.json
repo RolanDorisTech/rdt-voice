@@ -1,0 +1,727 @@
+[
+  {
+    "id": "p01",
+    "regex": "^About (\\d+) sec left$",
+    "en": "लगभग $1 सेकंड बाकी"
+  },
+  {
+    "id": "p02",
+    "regex": "^About (\\d+) min left$",
+    "en": "लगभग $1 मिनट बाकी"
+  },
+  {
+    "id": "p03",
+    "regex": "^(\\d+)s ago$",
+    "en": "$1 सेकंड पहले"
+  },
+  {
+    "id": "p04",
+    "regex": "^(\\d+)m ago$",
+    "en": "$1 मिनट पहले"
+  },
+  {
+    "id": "p05",
+    "regex": "^(\\d+)h (\\d+)m ago$",
+    "en": "$1 घंटे $2 मिनट पहले"
+  },
+  {
+    "id": "p06",
+    "regex": "^(\\d+)d ago$",
+    "en": "$1 दिन पहले"
+  },
+  {
+    "id": "p07",
+    "regex": "^(\\d+)w ago$",
+    "en": "$1 सप्ताह पहले"
+  },
+  {
+    "id": "p08",
+    "regex": "^(\\d+)w • (\\d+) WPM • filler: (.+)$",
+    "en": "$1 शब्द • $2 WPM • भराव: $3"
+  },
+  {
+    "id": "p09",
+    "regex": "^TRANSCRIBING( · \\d+ QUEUED)?$",
+    "en": "ट्रांसक्राइब हो रहा है$1"
+  },
+  {
+    "id": "p10",
+    "regex": "^(\\d+) QUEUED$",
+    "en": "$1 कतार में है"
+  },
+  {
+    "id": "p11",
+    "regex": "^(\\d+) selected$",
+    "en": "$1 चयनित"
+  },
+  {
+    "id": "p12",
+    "regex": "^Copy selected \\((\\d+)\\)$",
+    "en": "चयनित कॉपी करें ($1)"
+  },
+  {
+    "id": "p13",
+    "regex": "^Attachments \\((\\d+)\\)$",
+    "en": "अटैचमेंट ($1)"
+  },
+  {
+    "id": "p14",
+    "regex": "^Load (\\d+) selected$",
+    "en": "$1 चयनित लोड करें"
+  },
+  {
+    "id": "p15",
+    "regex": "^Delete (\\d+) selected item(s?)\\?$",
+    "en": "$1 चुना हुआ आइटम$2 हटाएँ?"
+  },
+  {
+    "id": "p16",
+    "regex": "^Loaded (\\d+) item(s?)$",
+    "en": "$1 आइटम$2 लोड हुए"
+  },
+  {
+    "id": "p17",
+    "regex": "^Cleaned up (\\d+) old recording(s?)\\.$",
+    "en": "पुरानी रिकॉर्डिंग की सफ़ाई पूरी हुई: $1।"
+  },
+  {
+    "id": "p18",
+    "regex": "^Downloaded 1 ZIP containing (\\d+) attachment(s?)\\.$",
+    "en": "$1 अटैचमेंट$2 वाली 1 ZIP डाउनलोड हुई।"
+  },
+  {
+    "id": "p19",
+    "regex": "^Queued (\\d+) audio file(s?) — they will transcribe in order\\.$",
+    "en": "$1 ऑडियो फ़ाइल$2 कतार में जोड़ी गईं — उनका क्रम से ट्रांसक्रिप्शन होगा।"
+  },
+  {
+    "id": "p20",
+    "regex": "^(\\d+) audio file(s?) added to the paused queue\\.$",
+    "en": "$1 ऑडियो फ़ाइल$2 रुकी हुई कतार में जोड़ी गईं।"
+  },
+  {
+    "id": "p21",
+    "regex": "^(\\d+) non-audio file(s?) ignored\\.$",
+    "en": "$1 गैर-ऑडियो फ़ाइल$2 अनदेखी की गईं।"
+  },
+  {
+    "id": "p22",
+    "regex": "^Audio queue paused after an error\\. (\\d+) file(s?) remain(s?) queued\\.$",
+    "en": "त्रुटि के बाद ऑडियो कतार रोक दी गई। $1 फ़ाइल$2 कतार में$3 बाकी हैं।"
+  },
+  {
+    "id": "p23",
+    "regex": "^Copied\\.( \\d+ images? included inline\\.)?( \\d+ files? remain attached here; nothing was downloaded\\.)?$",
+    "en": "कॉपी किया गया.$1$2"
+  },
+  {
+    "id": "p24",
+    "regex": "^Transcribing: (.+)$",
+    "en": "ट्रांसक्राइब हो रहा है: $1"
+  },
+  {
+    "id": "p25",
+    "regex": "^Folder selected: (.+) — edit the field if your backend needs the full path\\.$",
+    "en": "फ़ोल्डर चुना गया: $1 — यदि आपके बैकएंड को पूरा पथ चाहिए तो फ़ील्ड संपादित करें."
+  },
+  {
+    "id": "p26",
+    "regex": "^Could not open folder: (.+)$",
+    "en": "फ़ोल्डर नहीं खोला जा सका: $1"
+  },
+  {
+    "id": "p28",
+    "regex": "^Backed up (\\d+) files \\((.+)\\)\\.$",
+    "en": "$1 फ़ाइलों का बैकअप लिया गया ($2)."
+  },
+  {
+    "id": "p29",
+    "regex": "^Backup failed: (.+)$",
+    "en": "बैकअप विफल: $1"
+  },
+  {
+    "id": "p30",
+    "regex": "^Restored (\\d+) files \\((.+)\\)\\. Reload to use\\.$",
+    "en": "$1 फ़ाइलें पुनर्स्थापित की गईं ($2). उपयोग करने के लिए रीलोड करें."
+  },
+  {
+    "id": "p31",
+    "regex": "^Restore failed: (.+)$",
+    "en": "पुनर्स्थापना विफल: $1"
+  },
+  {
+    "id": "p32",
+    "regex": "^Export failed: (.+)$",
+    "en": "निर्यात विफल: $1"
+  },
+  {
+    "id": "p33",
+    "regex": "^Could not start microphone: (.+)$",
+    "en": "माइक्रोफ़ोन शुरू नहीं किया जा सका: $1"
+  },
+  {
+    "id": "p34",
+    "regex": "^Storage estimate failed: (.+)$",
+    "en": "स्टोरेज अनुमान विफल: $1"
+  },
+  {
+    "id": "p35",
+    "regex": "^EasyWhisper worker failed: (.+)$",
+    "en": "EasyWhisper worker विफल: $1"
+  },
+  {
+    "id": "p36",
+    "regex": "^EasyWhisper error: (.+)$",
+    "en": "EasyWhisper त्रुटि: $1"
+  },
+  {
+    "id": "p37",
+    "regex": "^LIVE chunk failed: (.+)$",
+    "en": "LIVE chunk विफल: $1"
+  },
+  {
+    "id": "p38",
+    "regex": "^Manifest unavailable: (.+)$",
+    "en": "Manifest अनुपलब्ध: $1"
+  },
+  {
+    "id": "p39",
+    "regex": "^Worker stalled for (\\d+)s without any progress message\\.$",
+    "en": "Worker $1s तक बिना किसी प्रगति संदेश के रुका रहा."
+  },
+  {
+    "id": "p40",
+    "regex": "^(.+) Your recording is kept — retry from the dialog or download it\\.$",
+    "en": "$1 आपकी रिकॉर्डिंग सुरक्षित रखी गई है — डायलॉग से फिर प्रयास करें या इसे डाउनलोड करें."
+  },
+  {
+    "id": "p41",
+    "regex": "^(.+) — your audio is kept\\. Retry, or download it from the recordings list\\.$",
+    "en": "$1 — आपका ऑडियो सुरक्षित रखा गया है. फिर प्रयास करें, या रिकॉर्डिंग सूची से इसे डाउनलोड करें."
+  },
+  {
+    "id": "p43",
+    "regex": "^([\\s\\S]+)\\n\\nTip: switch to Local Server in Settings if your backend is running\\.$",
+    "en": "$1\n\nयुक्ति: यदि आपका बैकएंड चल रहा है तो सेटिंग्स में लोकल सर्वर पर स्विच करें."
+  },
+  {
+    "id": "p46",
+    "regex": "^This browser/page cannot record audio \\(missing: (.+)\\)\\. Use HTTPS or localhost and a current browser\\.$",
+    "en": "यह ब्राउज़र/पेज ऑडियो रिकॉर्ड नहीं कर सकता (अनुपस्थित: $1). HTTPS या localhost और वर्तमान ब्राउज़र का उपयोग करें."
+  },
+  {
+    "id": "p47",
+    "regex": "^The browser reported (.+)\\. RDT Voice stopped instead of silently sending a partial recording\\.$",
+    "en": "ब्राउज़र ने $1 रिपोर्ट किया. आंशिक रिकॉर्डिंग चुपचाप भेजने के बजाय RDT Voice रुक गया."
+  },
+  {
+    "id": "p48",
+    "regex": "^RDT Voice expected about ([\\d.]+)s, but the captured audio is only about ([\\d.]+)s\\. We did NOT send this recording for transcription\\. The captured audio is kept here so you can retry or inspect it\\.$",
+    "en": "RDT Voice को लगभग $1s की अपेक्षा थी, लेकिन कैप्चर किया गया ऑडियो केवल लगभग $2s है. हमने ट्रांसक्रिप्शन के लिए यह रिकॉर्डिंग नहीं भेजी. कैप्चर किया गया ऑडियो यहाँ सुरक्षित रखा गया है ताकि आप फिर प्रयास या निरीक्षण कर सकें."
+  },
+  {
+    "id": "p49",
+    "regex": "^No audio data was captured \\(([\\d.]+)s elapsed but 0 bytes received\\)\\. RDT Voice did not send anything for transcription\\. Close other apps using the mic, then try again\\.$",
+    "en": "कोई ऑडियो डेटा कैप्चर नहीं हुआ ($1s बीते लेकिन 0 बाइट प्राप्त हुए). RDT Voice ने ट्रांसक्रिप्शन के लिए कुछ भी नहीं भेजा. माइक का उपयोग करने वाले अन्य ऐप्स बंद करें, फिर दोबारा प्रयास करें."
+  },
+  {
+    "id": "p50",
+    "regex": "^Model not in pinned manifest: (.+)$",
+    "en": "मॉडल पिन किए गए manifest में नहीं है: $1"
+  },
+  {
+    "id": "p51",
+    "regex": "^RAM (.+) GB$",
+    "en": "RAM $1 GB"
+  },
+  {
+    "id": "p52",
+    "regex": "^CPU · (\\d+) threads reported$",
+    "en": "CPU · $1 थ्रेड रिपोर्ट किए गए"
+  },
+  {
+    "id": "p53",
+    "regex": "^(\\d+) percent, (.+)$",
+    "en": "$1 प्रतिशत, $2"
+  },
+  {
+    "id": "p54",
+    "regex": "^(\\d+)% · Downloading model$",
+    "en": "$1% · मॉडल डाउनलोड हो रहा है"
+  },
+  {
+    "id": "p55",
+    "regex": "^Segment (\\d+)$",
+    "en": "सेगमेंट $1"
+  },
+  {
+    "id": "p56",
+    "regex": "^Backend (\\d+)$",
+    "en": "बैकएंड $1"
+  },
+  {
+    "id": "p57",
+    "regex": "^Ready • Model: (.+) • Port: (.+)$",
+    "en": "तैयार • मॉडल: $1 • पोर्ट: $2"
+  },
+  {
+    "id": "p58",
+    "regex": "^Latency: (.+)ms$",
+    "en": "विलंबता: $1ms"
+  },
+  {
+    "id": "p59",
+    "regex": "^Local: (.+)$",
+    "en": "लोकल: $1"
+  },
+  {
+    "id": "p60",
+    "regex": "^Remote → (.+)$",
+    "en": "रिमोट → $1"
+  },
+  {
+    "id": "p61",
+    "regex": "^model: (.+)$",
+    "en": "मॉडल: $1"
+  },
+  {
+    "id": "p62",
+    "regex": "^total: (.+)$",
+    "en": "कुल: $1"
+  },
+  {
+    "id": "p63",
+    "regex": "^Model: (.+)$",
+    "en": "मॉडल: $1"
+  },
+  {
+    "id": "p64",
+    "regex": "^Size: (.+)$",
+    "en": "आकार: $1"
+  },
+  {
+    "id": "p65",
+    "regex": "^Length: (.+)$",
+    "en": "लंबाई: $1"
+  },
+  {
+    "id": "p66",
+    "regex": "^Selected: (.+)$",
+    "en": "चयनित: $1"
+  },
+  {
+    "id": "p67",
+    "regex": "^Linked: (.+)$",
+    "en": "लिंक किया गया: $1"
+  },
+  {
+    "id": "p68",
+    "regex": "^Open Folder \\(:(\\d+)\\)$",
+    "en": "फ़ोल्डर खोलें (:$1)"
+  },
+  {
+    "id": "p69",
+    "regex": "^Port (.+) • Latency (.+)ms( • Last .+)?$",
+    "en": "पोर्ट $1 • विलंबता $2ms$3"
+  },
+  {
+    "id": "p70",
+    "regex": "^(\\d+) GB \\(custom\\)$",
+    "en": "$1 GB (कस्टम)"
+  },
+  {
+    "id": "p71",
+    "regex": "^(\\d+) days \\(custom\\)$",
+    "en": "$1 दिन (कस्टम)"
+  },
+  {
+    "id": "p72",
+    "regex": "^(-?\\d+) dBFS$",
+    "en": "$1 dBFS"
+  },
+  {
+    "id": "p73",
+    "regex": "^(\\d+) file(s?)$",
+    "en": "$1 फ़ाइल$2"
+  },
+  {
+    "id": "p74",
+    "regex": "^⬇ LOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ यह मॉडल लोड करें ($1)"
+  },
+  {
+    "id": "p75",
+    "regex": "^⬇ DOWNLOAD THIS MODEL \\((.+)\\)$",
+    "en": "⬇ यह मॉडल डाउनलोड करें ($1)"
+  },
+  {
+    "id": "p76",
+    "regex": "^✓ Backend OK · (\\d+)ms$",
+    "en": "✓ बैकएंड OK · $1ms"
+  },
+  {
+    "id": "p77",
+    "regex": "^✗ Backend HTTP (\\d+)$",
+    "en": "✗ बैकएंड HTTP $1"
+  },
+  {
+    "id": "p78",
+    "regex": "^✗ Backend: (.+)$",
+    "en": "✗ बैकएंड: $1"
+  },
+  {
+    "id": "p81",
+    "regex": "^Couldn't check for updates: (.+)$",
+    "en": "अपडेट की जाँच नहीं कर सके: $1"
+  },
+  {
+    "id": "p82",
+    "regex": "^Latest (.+): (.+)$",
+    "en": "नवीनतम $1: $2"
+  },
+  {
+    "id": "p83",
+    "regex": "^⚠ BATCH mode sends audio to (.+)\\. Audio leaves this device\\.$",
+    "en": "⚠ BATCH मोड ऑडियो को $1 पर भेजता है. ऑडियो इस डिवाइस से बाहर चला जाता है."
+  },
+  {
+    "id": "p84",
+    "regex": "^(.+) is loaded into the browser\\. Future transcriptions will be instant\\.$",
+    "en": "$1 ब्राउज़र में लोड है. भविष्य के ट्रांसक्रिप्शन तुरंत होंगे."
+  },
+  {
+    "id": "p85",
+    "regex": "^The (.+) model hasn't been loaded into the browser\\. Load it now — this only needs to happen once\\.$",
+    "en": "$1 मॉडल ब्राउज़र में लोड नहीं किया गया है. इसे अभी लोड करें — यह केवल एक बार करना आवश्यक है."
+  },
+  {
+    "id": "p86",
+    "regex": "^Loading (.+)$",
+    "en": "$1 लोड हो रहा है"
+  },
+  {
+    "id": "p87",
+    "regex": "^Open (.+)/health — you should see JSON\\.$",
+    "en": "$1/health खोलें — आपको JSON दिखाई देना चाहिए."
+  },
+  {
+    "id": "p88",
+    "regex": "^No file list – add GET /v1/recordings/list in server\\.py \\(port (\\d+)\\)$",
+    "en": "कोई फ़ाइल सूची नहीं – server.py में GET /v1/recordings/list जोड़ें (पोर्ट $1)"
+  },
+  {
+    "id": "p89",
+    "regex": "^Preview cleanup would affect (\\d+) words • WPM (.+) • Reading time ~(.+) min$",
+    "en": "प्रीव्यू की सफ़ाई $1 शब्दों को प्रभावित करेगी • WPM $2 • पढ़ने का समय ~$3 मिनट"
+  },
+  {
+    "id": "p90",
+    "regex": "^Last: Length (.+) • Processing (.+) • (.+)x • Transcription (.+) words • Transcription WPM (.+) • (.+) chars • (.+) sentences • Peak (.+) tok/s • Model (.+)$",
+    "en": "अंतिम: अवधि $1 • प्रोसेसिंग $2 • $3x • ट्रांसक्रिप्शन $4 शब्द • ट्रांसक्रिप्शन WPM $5 • $6 अक्षर • $7 वाक्य • अधिकतम $8 टोकन/सेकंड • मॉडल $9"
+  },
+  {
+    "id": "p91",
+    "regex": "^(.+) • (.+) tok/s • (.+)x(.*)$",
+    "en": "$1 • $2 tok/s • $3x$4"
+  },
+  {
+    "id": "p93",
+    "regex": "^(\\d+)h ago$",
+    "en": "$1 घंटे पहले"
+  },
+  {
+    "id": "p94",
+    "regex": "^(\\d+)mo ago$",
+    "en": "$1 महीने पहले"
+  },
+  {
+    "id": "p95",
+    "regex": "^About (\\d+) hr (\\d+) min left$",
+    "en": "लगभग $1 घंटे $2 मिनट बाकी"
+  },
+  {
+    "id": "p96",
+    "regex": "^LIVE speech is unavailable offline in this browser for (.+)\\. Connect to the internet or use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "इस ब्राउज़र में $1 के लिए LIVE स्पीच ऑफलाइन उपलब्ध नहीं है. इंटरनेट से कनेक्ट करें या ऑफलाइन ट्रांसक्रिप्शन के लिए BATCH/EasyWhisper का उपयोग करें."
+  },
+  {
+    "id": "p97",
+    "regex": "^RAM ≥(\\d+) GB$",
+    "en": "RAM ≥$1 GB"
+  },
+  {
+    "id": "p98",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB \\(user\\)$",
+    "en": "RAM $1–$2 GB (उपयोगकर्ता)"
+  },
+  {
+    "id": "p99",
+    "regex": "^RAM (\\d+)[–-](\\d+) GB$",
+    "en": "RAM $1–$2 GB"
+  },
+  {
+    "id": "p100",
+    "regex": "^RAM (\\d+)\\+ GB \\(user\\)$",
+    "en": "RAM $1+ GB (उपयोगकर्ता)"
+  },
+  {
+    "id": "p101",
+    "regex": "^RAM (\\d+) GB \\(user\\)$",
+    "en": "RAM $1 GB (उपयोगकर्ता)"
+  },
+  {
+    "id": "p102",
+    "regex": "^RAM (\\d+)\\+ GB$",
+    "en": "RAM $1+ GB"
+  },
+  {
+    "id": "p103",
+    "regex": "^Copied (\\d+) image(s?)\\. (\\d+) files still need Download All or ZIP\\.$",
+    "en": "$1 छवि$2 कॉपी हुई। $3 फ़ाइलों के लिए अभी भी Download All या ZIP ज़रूरी है।"
+  },
+  {
+    "id": "p104",
+    "regex": "^Copied (\\d+) image(s?)\\. No files were downloaded\\.$",
+    "en": "$1 छवि$2 कॉपी हुई। कोई फ़ाइल डाउनलोड नहीं हुई।"
+  },
+  {
+    "id": "p105",
+    "regex": "^Downloaded (\\d+) attachment(s?)\\.$",
+    "en": "$1 अटैचमेंट$2 डाउनलोड हुआ।"
+  },
+  {
+    "id": "p106",
+    "regex": "^(\\d+) recording(s?) deleted\\.$",
+    "en": "$1 रिकॉर्डिंग$2 हटाई गईं।"
+  },
+  {
+    "id": "p107",
+    "regex": "^1 recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "1 रिकॉर्डिंग हटाई गई; $1 विफल हुईं।"
+  },
+  {
+    "id": "p108",
+    "regex": "^(\\d+) model(s?) reset( · files purged)?$",
+    "en": "$1 मॉडल$2 रीसेट हुआ$3"
+  },
+  {
+    "id": "p109",
+    "regex": "^Live speech stopped unexpectedly( \\([^)]+\\)|\\.)$",
+    "en": "Live speech अप्रत्याशित रूप से रुक गया$1"
+  },
+  {
+    "id": "p110",
+    "regex": "^Switched to (.+) — testing…$",
+    "en": "$1 पर स्विच किया गया — परीक्षण जारी है…"
+  },
+  {
+    "id": "p111",
+    "regex": "^Could not switch: (.+)$",
+    "en": "स्विच नहीं हो सका: $1"
+  },
+  {
+    "id": "p112",
+    "regex": "^Opened (.+)$",
+    "en": "$1 खोला गया"
+  },
+  {
+    "id": "p114",
+    "regex": "^DEV LAB • (.+) • EXPERIMENTAL$",
+    "en": "DEV LAB • $1 • प्रायोगिक"
+  },
+  {
+    "id": "p115",
+    "regex": "^Copied (\\d+) image(s?)\\. 1 file still need Download All or ZIP\\.$",
+    "en": "$1 छवि$2 कॉपी हुई। 1 फ़ाइल के लिए अभी भी Download All या ZIP ज़रूरी है।"
+  },
+  {
+    "id": "p116",
+    "regex": "^ADVANCED • RAW SEGMENTS \\((\\d+)\\)$",
+    "en": "उन्नत • कच्चे सेगमेंट ($1)"
+  },
+  {
+    "id": "p117",
+    "regex": "^Long recording audio · (.+)$",
+    "en": "लंबी रिकॉर्डिंग का ऑडियो · $1"
+  },
+  {
+    "id": "p118",
+    "regex": "^(\\d+) selected · (\\d+) recordings$",
+    "en": "$1 चयनित · $2 रिकॉर्डिंग"
+  },
+  {
+    "id": "p119",
+    "regex": "^((?:[2-9]|[1-9]\\d+)) recording\\(s\\) deleted; (\\d+) failed\\.$",
+    "en": "$1 रिकॉर्डिंग हटाई गईं; $2 विफल हुईं।"
+  },
+  {
+    "id": "p120",
+    "regex": "^PLAYING · (.+)$",
+    "en": "चल रहा है · $1"
+  },
+  {
+    "id": "p121",
+    "regex": "^EasyWhisper · (.+)$",
+    "en": "EasyWhisper · $1"
+  },
+  {
+    "id": "p122",
+    "regex": "^• Spoken (.+) WPM • (.+)w$",
+    "en": "• बोले गए शब्द $1 WPM • $2w"
+  },
+  {
+    "id": "p123",
+    "regex": "^Already connected( · \\d+ ms)?$",
+    "en": "पहले से जुड़ा है$1"
+  },
+  {
+    "id": "p124",
+    "regex": "^Current status: (.+)$",
+    "en": "वर्तमान स्थिति: $1"
+  },
+  {
+    "id": "p125",
+    "regex": "^Latest\\s+v(.+)$",
+    "en": "नवीनतम v$1"
+  },
+  {
+    "id": "p126",
+    "regex": "^GPU renderer: (.+)$",
+    "en": "GPU रेंडरर: $1"
+  },
+  {
+    "id": "p127",
+    "regex": "^Worker OK\\. Empty result: \"([\\s\\S]+)\"$",
+    "en": "Worker ठीक है। खाली परिणाम: \"$1\""
+  },
+  {
+    "id": "p128",
+    "regex": "^FAILED: ([\\s\\S]+)$",
+    "en": "विफल: $1"
+  },
+  {
+    "id": "p129",
+    "regex": "^Cache keys: (.+)$",
+    "en": "कैश कुंजियाँ: $1"
+  },
+  {
+    "id": "p130",
+    "regex": "^Cache check failed: ([\\s\\S]+)$",
+    "en": "कैश जाँच विफल: $1"
+  },
+  {
+    "id": "p131",
+    "regex": "^worker\\.js fetched \\((\\d+) bytes\\)\\. See console\\.$",
+    "en": "worker.js प्राप्त हुआ ($1 बाइट)। Console देखें।"
+  },
+  {
+    "id": "p132",
+    "regex": "^worker\\.js fetch failed: ([\\s\\S]+)$",
+    "en": "worker.js प्राप्त नहीं हुआ: $1"
+  },
+  {
+    "id": "p133",
+    "regex": "^Manifest fetch failed: ([\\s\\S]+)$",
+    "en": "Manifest प्राप्त नहीं हुआ: $1"
+  },
+  {
+    "id": "p134",
+    "regex": "^Assembling (\\d+(?:\\.\\d+)?) min of captured audio$",
+    "en": "रिकॉर्ड किए गए ऑडियो के $1 मिनट जोड़े जा रहे हैं"
+  },
+  {
+    "id": "p135",
+    "regex": "^Assembling audio · (\\d+)%$",
+    "en": "ऑडियो जोड़ा जा रहा है · $1%"
+  },
+  {
+    "id": "p136",
+    "regex": "^Decoding recorded audio \\(([\\d.]+) MB\\)$",
+    "en": "रिकॉर्ड किए गए ऑडियो को डिकोड किया जा रहा है ($1 MB)"
+  },
+  {
+    "id": "p137",
+    "regex": "^Sending ([\\d.]+) min of audio to the transcription worker$",
+    "en": "ट्रांसक्रिप्शन worker को $1 मिनट ऑडियो भेजा जा रहा है"
+  },
+  {
+    "id": "p138",
+    "regex": "^((?:🌐 )?)Display language — (.+) \\(([^()]+)\\)$",
+    "en": "$1प्रदर्शन भाषा — $2 ($3)"
+  },
+  {
+    "id": "p139",
+    "regex": "^A required model file could not be fetched\\. This is a network/CDN CORS failure, not a WebGPU placement warning\\. The app did not repeat the same fetch using WASM\\. Please retry later or test the same model download in another browser/network; the site cannot add missing CORS headers to Hugging Face's response\\. Details: ([\\s\\S]*)$",
+    "en": "आवश्यक मॉडल फ़ाइल नहीं मिल सकी। यह नेटवर्क/CDN CORS विफलता है, WebGPU placement चेतावनी नहीं। ऐप ने WASM से वही फ़ाइल दोबारा नहीं माँगी। बाद में फिर कोशिश करें या दूसरे ब्राउज़र/नेटवर्क पर वही मॉडल डाउनलोड जाँचें; साइट Hugging Face की प्रतिक्रिया में अनुपस्थित CORS headers नहीं जोड़ सकती। विवरण: $1"
+  },
+  {
+    "id": "p141",
+    "regex": "^Permanently delete (\\d+) selected recording(s?)\\? This cannot be undone\\.$",
+    "en": "$1 चुनी हुई रिकॉर्डिंग$2 स्थायी रूप से हटाएँ? इसे वापस नहीं किया जा सकता।"
+  },
+  {
+    "id": "p142",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE preview needs an internet connection here\\. You can still use BATCH/EasyWhisper transcription offline\\.$",
+    "en": "इस ब्राउज़र में $1 के लिए ऑन-डिवाइस स्पीच पहचान तैयार नहीं है। यहाँ LIVE preview के लिए इंटरनेट कनेक्शन चाहिए। आप फिर भी ऑफ़लाइन BATCH/EasyWhisper ट्रांसक्रिप्शन इस्तेमाल कर सकते हैं।"
+  },
+  {
+    "id": "p143",
+    "regex": "^This browser does not have on-device speech recognition ready for (.+)\\. LIVE needs an internet connection here\\. Use BATCH/EasyWhisper for offline transcription\\.$",
+    "en": "इस ब्राउज़र में $1 के लिए ऑन-डिवाइस स्पीच पहचान तैयार नहीं है। यहाँ LIVE के लिए इंटरनेट चाहिए। ऑफ़लाइन ट्रांसक्रिप्शन के लिए BATCH/EasyWhisper इस्तेमाल करें।"
+  },
+  {
+    "id": "p144",
+    "regex": "^Your audio is safe\\. Save it now, then retry\\. Details: ([\\s\\S]*)$",
+    "en": "आपका ऑडियो सुरक्षित है। अभी सहेजें, फिर दोबारा कोशिश करें। विवरण: $1"
+  },
+  {
+    "id": "p145",
+    "regex": "^Duration: (.+)$",
+    "en": "अवधि: $1"
+  },
+  {
+    "id": "p146",
+    "regex": "^Segments: (\\d+)$",
+    "en": "सेगमेंट: $1"
+  },
+  {
+    "id": "p147",
+    "regex": "^Total: (.+)$",
+    "en": "कुल: $1"
+  },
+  {
+    "id": "p148",
+    "regex": "^Base: (.+) • Format: (.+)$",
+    "en": "बेस: $1 • फ़ॉर्मैट: $2"
+  },
+  {
+    "id": "p149",
+    "regex": "^Total fillers: (\\d+)$",
+    "en": "कुल भराव शब्द: $1"
+  },
+  {
+    "id": "p150",
+    "regex": "^(\\d+(?:\\.\\d+)?) (days|months|years)$",
+    "en": "$1 $2"
+  },
+  {
+    "id": "p151",
+    "regex": "^(\\d+) transcriptions • since (.+)$",
+    "en": "$1 ट्रांसक्रिप्शन • $2 से"
+  },
+  {
+    "id": "p152",
+    "regex": "^(\\d+(?:\\.\\d+)?)([smh])$",
+    "en": "$1$2"
+  },
+  {
+    "id": "p153",
+    "regex": "^port: (.+)$",
+    "en": "पोर्ट: $1"
+  },
+  {
+    "id": "p154",
+    "regex": "^latency: (.+)$",
+    "en": "विलंबता: $1"
+  }
+]

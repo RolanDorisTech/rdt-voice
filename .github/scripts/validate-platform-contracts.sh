@@ -61,6 +61,26 @@ run_suite() {
   fi
 }
 
+echo
+echo "===== Generate and verify embedded RDT Voice R82 resources ====="
+if "$VENV/bin/python" rdt_connect/scripts/generate-embedded-rdt-voice.py --repo-root "$ROOT"; then
+  echo "PASS: embedded RDT Voice resources generated before resource-dependent tests"
+else
+  rc=$?
+  echo "FAIL: embedded RDT Voice resource generation (exit $rc)"
+  failures=$((failures + 1))
+fi
+
+echo
+echo "===== Platform shared notice merge contracts ====="
+if "$VENV/bin/python" -m unittest discover -s backend/whisper_cpp/tests -p test_platform_shared_notice_merge.py -v; then
+  echo "PASS: Platform shared notice merge contracts"
+else
+  rc=$?
+  echo "FAIL: Platform shared notice merge contracts (exit $rc)"
+  failures=$((failures + 1))
+fi
+
 run_suite "Whisper / hardware / release contracts" \
   "$VENV/bin/python" -m unittest discover -s backend/whisper_cpp/tests -p 'test_*.py' -q
 

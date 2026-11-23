@@ -33,6 +33,11 @@ if not isinstance(alpha, dict) or not alpha:
 if not isinstance(transformed, dict):
     fail("manifest transformed-file map is invalid")
 
+if transformed.get("worker.js", {}).get("transform") != "rdt-offline-runtime-worker-v1":
+    fail("worker.js transform version is not the qualified offline-runtime transform")
+if transformed.get("index.html", {}).get("transform") != "rdt-connect-offline-easywhisper-v3-native-oom-bridge-v1":
+    fail("index.html is missing the qualified Connect native-OOM bridge transform")
+
 def locate(root, name):
     direct = root / name
     if direct.is_file():

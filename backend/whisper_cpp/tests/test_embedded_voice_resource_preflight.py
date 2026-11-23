@@ -1,4 +1,6 @@
+import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -18,16 +20,22 @@ class EmbeddedVoiceResourcePreflightTests(unittest.TestCase):
         self.assertIn("prepare-embedded-rdt-voice.mjs", source)
 
     def test_shared_preflight_passes_embedded_resource_contract(self):
-        result = subprocess.run(
-            ["node", str(SCRIPT)],
-            cwd=CONNECT,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        # Simulate a clean GitHub runner with no sibling Voice checkout.
+        with tempfile.TemporaryDirectory(prefix="rdt-preflight-clean-home-") as home:
+            env = os.environ.copy()
+            env["HOME"] = home
+            env.pop("RDT_VOICE_WEB_SOURCE", None)
+            result = subprocess.run(
+                ["node", str(SCRIPT)],
+                cwd=CONNECT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
         self.assertEqual(
             result.returncode, 0,
-            msg=(result.stdout + "\n" + result.stderr)[-5000:],
+            msg=(result.stdout + "\\n" + result.stderr)[-5000:],
         )
 
 if __name__ == "__main__":

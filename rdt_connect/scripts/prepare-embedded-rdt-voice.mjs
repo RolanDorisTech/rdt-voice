@@ -8,8 +8,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const connectRoot = path.resolve(scriptDir, "..");
 const resourceRoot = path.join(connectRoot, "src-tauri/resources/rdt_voice_web");
 const manifestPath = path.join(connectRoot, "src-tauri/resources/rdt_voice_web_manifest.json");
-const sourceRoot = process.env.RDT_VOICE_WEB_SOURCE ||
-  path.join(process.env.HOME || process.cwd(), "dev/rdt-voice/alpha_testing");
+const sourceRoot = process.env.RDT_VOICE_WEB_SOURCE || path.resolve(path.dirname(process.argv[1]), "..", "vendor", "rdt-voice-r82-alpha");
 
 function fail(message) {
   console.error(`Embedded RDT Voice preflight failed: ${message}`);

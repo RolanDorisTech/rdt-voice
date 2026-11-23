@@ -49,8 +49,7 @@ const missing = Object.keys(expected).filter(name => {
 });
 const extra = Object.keys(actual).filter(name => expected[name] === undefined);
 
-const alphaSourceRoot = process.env.RDT_VOICE_WEB_SOURCE ||
-  path.join(process.env.HOME || process.cwd(), "dev", "rdt-voice", "alpha_testing");
+const alphaSourceRoot = process.env.RDT_VOICE_WEB_SOURCE || path.resolve(path.dirname(process.argv[1]), "..", "vendor", "rdt-voice-r82-alpha");
 
 if (fs.existsSync(alphaSourceRoot)) {
   for (const required of ["index.html", "worker.js", "pcm-worklet.js", "models.manifest.json", "locales"]) {
@@ -189,7 +188,7 @@ if (fs.existsSync(alphaSourceRoot)) {
 } else if (process.env.RDT_VOICE_WEB_SOURCE) {
   throw new Error(`Configured RDT_VOICE_WEB_SOURCE does not exist: ${alphaSourceRoot}`);
 } else {
-  console.log("RDT Voice Alpha source cross-check: SKIP — source checkout not present; embedded manifest remains enforced.");
+  throw new Error(`Pinned RDT Voice Alpha source snapshot does not exist: ${alphaSourceRoot}`);
 }
 
 const connectSupport = manifest.connect_support_files || {};

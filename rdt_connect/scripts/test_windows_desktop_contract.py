@@ -6,6 +6,7 @@ reintroduction of source-known blockers in browser dispatch and TLS trust scope.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 import unittest
@@ -163,13 +164,52 @@ class WindowsTlsUiContractTests(unittest.TestCase):
 
 
 class WindowsPackagingContractTests(unittest.TestCase):
-    def test_ffmpeg_input_is_immutable_and_checksum_is_enforced(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "windows-arm64-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("autobuild-2026-10-19-13-06/ffmpeg-N-127696-g8b3525e718-winarm64-lgpl.zip", workflow)
-        self.assertNotIn("releases/download/latest/", workflow)
-        self.assertIn("$expectedSha256 = 'd4fd29fa9128fc1ba623e23b2ea1f13f283c646eb108c8583854371b2ba3d9d4'", workflow)
-        self.assertIn("if ($actualSha256 -ne $expectedSha256)", workflow)
-        self.assertIn('throw \"Pinned FFmpeg archive SHA-256 mismatch', workflow)
+    def test_ffmpeg_input_is_immutable_and_checksum_is_enforced(self):
+        root = Path(__file__).resolve().parents[2]
+        pins_path = root / ".github/config/windows-ffmpeg-pins.json"
+        downloader_path = root / ".github/scripts/download-pinned-ffmpeg.ps1"
+        pins = json.loads(pins_path.read_text(encoding="utf-8"))
+        downloader = downloader_path.read_text(encoding="utf-8")
+
+        self.assertEqual(pins["release"]["repository"], "FFmpeg-Builds/FFmpeg-Builds")
+        self.assertEqual(pins["release"]["tag"], "autobuild-2026-11-23-12-43")
+        self.assertEqual(
+            pins["release"]["checksum_sha256"],
+            "d0fb40099e1c98a5683457868da3ac7ddddc4ab155836b3cf8cc8b18cb00a96b",
+        )
+        self.assertEqual(pins["release"]["checksum_asset"], "checksums.sha256")
+        self.assertEqual(
+            pins["architectures"]["x64"]["asset"],
+            "ffmpeg-N-129241-g05c674c913-win64-lgpl-shared.zip",
+        )
+        self.assertEqual(
+            pins["architectures"]["arm64"]["asset"],
+            "ffmpeg-N-129241-g05c674c913-winarm64-lgpl-shared.zip",
+        )
+
+        base_url_line = '$baseUrl = "https://github.com/$repo/releases/download/$tag"'
+        self.assertIn(base_url_line, downloader)
+        self.assertNotIn("](https://", downloader)
+        self.assertIn("$release.checksum_asset", downloader)
+        self.assertIn("$checksumRows = @()", downloader)
+        self.assertIn("$checksumRows[0]", downloader)
+        self.assertIn("AllowAutoRedirect = $false", downloader)
+        self.assertIn("Assert-TrustedUri", downloader)
+        self.assertIn("Get-FileHash", downloader)
+        self.assertIn("--enable-shared", downloader)
+        self.assertIn("--enable-gpl|--enable-nonfree", downloader)
+
+        for workflow_name, arch in (
+            ("windows-x64-installer.yml", "x64"),
+            ("windows-arm64-installer.yml", "arm64"),
+        ):
+            workflow = (root / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
+            self.assertIn("download-pinned-ffmpeg.ps1", workflow)
+            self.assertIn("-Architecture", workflow)
+            self.assertIn(arch, workflow.lower())
+            self.assertNotIn("autobuild-2026-10-19-13-06", workflow)
+            self.assertNotIn("N-127696-g8b3525e718", workflow)
+            self.assertNotIn("$expectedSha256", workflow)
 
 
 

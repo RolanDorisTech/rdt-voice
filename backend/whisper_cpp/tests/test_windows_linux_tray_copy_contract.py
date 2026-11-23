@@ -67,7 +67,10 @@ class WindowsLinuxTrayCopyContractTests(unittest.TestCase):
         self.assertIn("libvulkan1", depends)
         self.assertIn("libayatana-appindicator3-1", depends)
         workflow = (ROOT / ".github/workflows/linux-native-qualification.yml").read_text(encoding="utf-8")
-        self.assertIn('assert "libayatana-appindicator3-1" in depends', workflow)
+        validator = Path(".github/scripts/validate-tauri-updater-config.py").read_text(encoding="utf-8")
+        self.assertIn("validate-tauri-updater-config.py --platform linux", workflow)
+        self.assertIn("libayatana-appindicator3-1", validator)
+        self.assertIn("libvulkan1", validator)
         self.assertIn("libayatana-appindicator3-1", workflow)
 
     def test_linux_watcher_guards_close_to_tray(self):

@@ -22,30 +22,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-      - name: Validate Tauri updater configuration
+      - name: Validate effective Tauri updater configuration
         shell: bash
-        run: |
-          python3 - <<'PYCONTRACT'
-          import json
-          from pathlib import Path
-
-          base = json.loads(Path("rdt_connect/src-tauri/tauri.conf.json").read_text())
-          config = json.loads(Path("rdt_connect/src-tauri/tauri.linux.conf.json").read_text())
-          bundle = config.get("bundle", {})
-          depends = bundle.get("linux", {}).get("deb", {}).get("depends", [])
-          updater = base.get("plugins", {}).get("updater", {})
-          assert bundle.get("createUpdaterArtifacts") is True, "Linux updater artifacts must be enabled"
-          assert "appimage" in bundle.get("targets", []), "Linux AppImage target is missing"
-          assert "deb" in bundle.get("targets", []), "Linux Debian target is missing"
-          assert "libvulkan1" in depends, "Debian package must declare libvulkan1"
-          assert "libayatana-appindicator3-1" in depends, "Debian package must declare AppIndicator runtime"
-          assert isinstance(updater.get("pubkey"), str) and updater["pubkey"].strip(), "Updater public key is missing"
-          workflow = Path(".github/workflows/linux-native-qualification.yml").read_text()
-          assert "--bundles deb,appimage" in workflow, "Linux CI must build both targets"
-          assert ".AppImage.sig" in workflow, "Linux updater signature must be verified"
-          assert "rdt_whisper_worker_dotprod" in workflow, "Linux ARM64 dotprod must be qualified"
-          print("PASS: Linux AppImage updater, Debian dependency and worker contract")
-          PYCONTRACT
+        run: python3 .github/scripts/validate-tauri-updater-config.py --platform linux
 
   signing-preflight:
     needs: updater-contract
@@ -438,7 +417,23 @@ jobs:
           APPIMAGE_DIR="rdt_connect/src-tauri/target/release/bundle/appimage"
           APPIMAGE="$(find "$APPIMAGE_DIR" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           test -n "$APPIMAGE"
+          if ! command -v minisign >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y minisign
+          fi
           test -s "$APPIMAGE.sig"
+          mkdir -p "$RUNNER_TEMP/rdt-linux-qualification"
+          PUBLIC_KEY_FILE="$RUNNER_TEMP/rdt-linux-qualification/tauri-updater.pub"
+          python3 - "$PUBLIC_KEY_FILE" <<'PY'
+          import base64, json, pathlib, sys
+          config = json.loads(pathlib.Path("rdt_connect/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+          encoded = "".join(config["plugins"]["updater"]["pubkey"].split())
+          public_key = base64.b64decode(encoded, validate=True)
+          pathlib.Path(sys.argv[1]).write_bytes(public_key)
+          PY
+          base64 --decode "$APPIMAGE.sig" > "$APPIMAGE.minisig"
+          minisign -V -m "$APPIMAGE" -x "$APPIMAGE.minisig" -p "$PUBLIC_KEY_FILE"
+          rm -f "$APPIMAGE.minisig" "$PUBLIC_KEY_FILE"
           APPIMAGE_OFFSET="$("$APPIMAGE" --appimage-offset)"
           test -n "$APPIMAGE_OFFSET"
           unsquashfs -ll -offset "$APPIMAGE_OFFSET" "$APPIMAGE" > "$RUNNER_TEMP/rdt-linux-qualification/appimage-files.txt"

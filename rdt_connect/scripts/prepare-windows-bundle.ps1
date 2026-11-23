@@ -238,6 +238,37 @@ if ($EnableCuda) {
 }
 Copy-Item (Join-Path $FfmpegDir 'ffmpeg.exe') $backendStage -Force
 Copy-Item (Join-Path $FfmpegDir 'ffprobe.exe') $backendStage -Force
+
+$ffmpegDlls = @(Get-ChildItem -LiteralPath $FfmpegDir -Filter '*.dll' -File -Recurse)
+if ($ffmpegDlls.Count -lt 3) {
+  throw "Verified FFmpeg shared distribution is missing runtime DLLs."
+}
+foreach ($requiredLibrary in @('avcodec', 'avformat', 'avutil')) {
+  if (-not ($ffmpegDlls | Where-Object { $_.Name -match "^$requiredLibrary-\d+\.dll$" })) {
+    throw "Required FFmpeg shared library is missing: $requiredLibrary"
+  }
+}
+$seenFfmpegDllNames = @{}
+foreach ($dll in $ffmpegDlls) {
+  if ($seenFfmpegDllNames.ContainsKey($dll.Name)) {
+    $existingHash = (Get-FileHash -LiteralPath $seenFfmpegDllNames[$dll.Name] -Algorithm SHA256).Hash
+    $newHash = (Get-FileHash -LiteralPath $dll.FullName -Algorithm SHA256).Hash
+    if ($existingHash -ne $newHash) {
+      throw "Conflicting FFmpeg DLL names detected: $($dll.Name)"
+    }
+    continue
+  }
+  $seenFfmpegDllNames[$dll.Name] = $dll.FullName
+  Copy-Item -LiteralPath $dll.FullName -Destination $backendStage -Force
+}
+foreach ($metadataFile in @('RDT-FFmpeg-PROVENANCE.json', 'RDT-FFmpeg-SOURCE-AND-LICENSE.txt')) {
+  $metadataPath = Join-Path $FfmpegDir $metadataFile
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
+    throw "Verified FFmpeg provenance/license metadata is missing: $metadataFile"
+  }
+  Copy-Item -LiteralPath $metadataPath -Destination $backendStage -Force
+}
+Write-Host "Staged $($seenFfmpegDllNames.Count) FFmpeg shared runtime DLLs and provenance files."
 Copy-Item (Join-Path $RepoRoot 'index.html') (Join-Path $web 'index.html') -Force
 Copy-Item (Join-Path $RepoRoot 'worker.js') (Join-Path $web 'worker.js') -Force
 Copy-Item (Join-Path $RepoRoot 'pcm-worklet.js') (Join-Path $web 'pcm-worklet.js') -Force

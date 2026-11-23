@@ -1,0 +1,30 @@
+{
+  "schema": "rdt-windows-ffmpeg-pin-v1",
+  "release": {
+    "repository": "FFmpeg-Builds/FFmpeg-Builds",
+    "tag": "autobuild-2026-11-23-12-43",
+    "release_commit": "b9ebe81995b58cd4e3177a6c0ad5dc2392f7f7fd",
+    "checksum_asset": "checksums.sha256",
+    "checksum_sha256": "d0fb40099e1c98a5683457868da3ac7ddddc4ab155836b3cf8cc8b18cb00a96b"
+  },
+  "ffmpeg": {
+    "version": "N-129241-g05c674c913",
+    "source_repository": "FFmpeg/FFmpeg",
+    "source_commit": "05c674c9132eb13e65e3fb6e9b4cf1cad1219fd5",
+    "build_variant": "LGPL shared",
+    "spdx_license": "LGPL-2.1-or-later",
+    "license_url": "https://ffmpeg.org/legal.html",
+    "minimum_asset_bytes": 40000000,
+    "maximum_asset_bytes": 200000000
+  },
+  "architectures": {
+    "x64": {
+      "asset": "ffmpeg-N-129241-g05c674c913-win64-lgpl-shared.zip",
+      "pe_machine": 34404
+    },
+    "arm64": {
+      "asset": "ffmpeg-N-129241-g05c674c913-winarm64-lgpl-shared.zip",
+      "pe_machine": 43620
+    }
+  }
+}

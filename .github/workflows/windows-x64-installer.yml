@@ -113,54 +113,16 @@ jobs:
         with:
           node-version: 22
 
-      - name: Prepare Windows x64 FFmpeg
+      - name: Prepare Windows x64 FFmpeg (pinned LGPL shared build)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-x64-lgpl.zip'
-          $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg-x64-extracted'
           $destination = Join-Path $env:RUNNER_TEMP 'rdt-ffmpeg-x64'
-          # Pin an immutable release asset and verify its SHA-256 before extraction.
-          # Source: BtbN/FFmpeg-Builds release autobuild-2026-10-19-13-06,
-          # checksums.sha256; never consume the mutable /download/latest/ alias.
-          $uri = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-19-13-06/ffmpeg-N-127696-g8b3525e718-win64-lgpl.zip'
-          $expectedSha256 = 'f6cfd42be37761089215ec4015146d7f0f679183fa966ac1a8cdf95b62e446dd'
-
-          Invoke-WebRequest -Uri $uri -OutFile $archive
-          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-            throw "Pinned FFmpeg archive SHA-256 mismatch: expected $expectedSha256; actual $actualSha256."
+          $downloader = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/download-pinned-ffmpeg.ps1'
+          & $downloader -Architecture 'x64' -Destination $destination
+          if (-not (Test-Path -LiteralPath (Join-Path $destination 'ffmpeg.exe'))) {
+            throw 'Verified FFmpeg executable was not staged.'
           }
-          Write-Host "FFMPEG_ARCHIVE_SHA256_VERIFIED=$actualSha256"
-
-          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
-          $ffmpeg = Get-ChildItem $extract -Filter ffmpeg.exe -File -Recurse | Select-Object -First 1
-          $ffprobe = Get-ChildItem $extract -Filter ffprobe.exe -File -Recurse | Select-Object -First 1
-          $license = Get-ChildItem $extract -File -Recurse |
-            Where-Object { $_.Name -in @('LICENSE.txt', 'LICENSE') } |
-            Select-Object -First 1
-
-          if (-not $ffmpeg -or -not $ffprobe -or -not $license) {
-            throw 'FFmpeg executables or license notice missing from downloaded archive.'
-          }
-
-          New-Item -ItemType Directory -Force $destination | Out-Null
-          Copy-Item $ffmpeg.FullName (Join-Path $destination 'ffmpeg.exe')
-          Copy-Item $ffprobe.FullName (Join-Path $destination 'ffprobe.exe')
-          Copy-Item $license.FullName (Join-Path $destination 'LICENSE.txt')
-
-          $ffmpegVersion = & (Join-Path $destination 'ffmpeg.exe') -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Prepared x64 ffmpeg.exe failed its version check with exit code $LASTEXITCODE."
-          }
-          $ffmpegVersion | Select-Object -First 1
-
-          $ffprobeVersion = & (Join-Path $destination 'ffprobe.exe') -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Prepared x64 ffprobe.exe failed its version check with exit code $LASTEXITCODE."
-          }
-          $ffprobeVersion | Select-Object -First 1
           "RDT_FFMPEG_DIR=$destination" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up native Rust x64 target

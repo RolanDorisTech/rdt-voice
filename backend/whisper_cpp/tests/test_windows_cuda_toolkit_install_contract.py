@@ -58,3 +58,43 @@ class WindowsCudaToolkitInstallContractTests(unittest.TestCase):
         script = (ROOT / ".github/scripts/build-windows-arm64-cuda-worker.ps1").read_text()
         self.assertIn("${FileName}: $($process.ExitCode)", script)
         self.assertNotIn("for $FileName: $($process.ExitCode)", script)
+
+
+class WindowsCudaInstallerDiagnosticsContractTests(unittest.TestCase):
+    def test_cuda_13_5_component_ids_and_diagnostics_capture_are_preserved(self):
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[3]
+        workflow = (
+            repo_root / ".github/workflows/windows-x64-installer.yml"
+        ).read_text(encoding="utf-8")
+
+        expected_components = (
+            "$installerArgs = @('-s', 'nvcc_13.5', 'cudart_13.5', "
+            "'cccl_13.5', 'crt_13.5', 'cublas_13.5', 'cublas_dev_13.5')"
+        )
+        self.assertIn(expected_components, workflow)
+        for component in (
+            "nvcc_13.5",
+            "cudart_13.5",
+            "cccl_13.5",
+            "crt_13.5",
+            "cublas_13.5",
+            "cublas_dev_13.5",
+        ):
+            self.assertIn(f"'{component}'", workflow)
+
+        self.assertIn("-RedirectStandardOutput $installerStdout", workflow)
+        self.assertIn("-RedirectStandardError $installerStderr", workflow)
+        self.assertIn("$installerStartedAt.AddHours(-24)", workflow)
+        self.assertIn("$env:ProgramData\\NVIDIA Corporation", workflow)
+        self.assertIn("$env:ProgramFiles\\NVIDIA Corporation\\Installer2", workflow)
+        self.assertIn("cuda-installer-diagnostics.txt", workflow)
+        self.assertIn("CUDA_INSTALLER_LOG_FILES_FOUND", workflow)
+        self.assertIn("CUDA_INSTALLER_LOG_FILES_COPIED", workflow)
+        self.assertIn("if: always()", workflow)
+        self.assertIn("actions/upload-artifact@v7.0.2", workflow)
+        self.assertIn(
+            "path: ${{ runner.temp }}/rdt-cuda-installer-logs/",
+            workflow,
+        )

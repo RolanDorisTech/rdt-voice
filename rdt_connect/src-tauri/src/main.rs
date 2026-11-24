@@ -2914,7 +2914,7 @@ fn save_local_tls_config(state: &BackendState, config: &LocalTlsConfig) -> Resul
     Ok(())
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn sha256_file_hex(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path)
         .map_err(|error| format!("Could not read a file for integrity verification: {error}"))?;
@@ -11174,6 +11174,19 @@ fn open_youtube_channel() -> Result<(), String> {
             format!("Could not open the Rolan & Doris Tech YouTube channel: {error}")
         })
     }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(URL)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| {
+                format!("Could not open the Rolan & Doris Tech YouTube channel: {error}")
+            })
+    }
 }
 
 fn native_benchmark_edit_distance<T: Eq>(left: &[T], right: &[T]) -> usize {
@@ -15693,6 +15706,7 @@ fn main() {
                             eprintln!("[RDT Connect] Could not open updater window: {error}");
                         }
                     }
+                    #[cfg(target_os = "macos")]
                     "about-app" => {
                         if let Err(error) = app.run_on_main_thread(|| show_about_panel_on_top()) {
                             eprintln!("[RDT Connect] Could not raise About panel: {error}");
@@ -15723,6 +15737,7 @@ fn main() {
                 .tooltip("RDT Connect")
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id().as_ref() {
+                    #[cfg(target_os = "macos")]
                     "tray-about-app" => {
                         if let Err(error) = app.run_on_main_thread(|| show_about_panel_on_top()) {
                             eprintln!("[RDT Connect] Could not raise About panel: {error}");

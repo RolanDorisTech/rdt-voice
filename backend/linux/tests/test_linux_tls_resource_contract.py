@@ -76,5 +76,32 @@ class LinuxTlsTauriResourceContractTests(unittest.TestCase):
         )
 
 
+    def test_sha256_file_helper_is_available_to_linux_tls(self):
+        import re
+        source = (ROOT / "rdt_connect/src-tauri/src/main.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            source,
+            r'#\[cfg\(any\(windows, target_os = "linux"\)\)\]\s*fn sha256_file_hex\(',
+        )
+        tls = (ROOT / "rdt_connect/src-tauri/src/linux_tls.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("sha256_file_hex", tls)
+
+    def test_macos_about_handlers_are_gated(self):
+        import re
+        source = (ROOT / "rdt_connect/src-tauri/src/main.rs").read_text(
+            encoding="utf-8"
+        )
+        for arm in ('"about-app" => {', '"tray-about-app" => {'):
+            self.assertRegex(
+                source,
+                r'#\[cfg\(target_os = "macos"\)\]\s*'
+                + re.escape(arm),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

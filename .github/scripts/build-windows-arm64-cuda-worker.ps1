@@ -143,11 +143,22 @@ $cudaRootCmake = $cudaRoot.Replace('\', '/')
 $clPath = $cl.Source.Replace('\', '/')
 $nvccPath = $nvcc.Replace('\', '/')
 $whisperPath = $whisperRoot.Replace('\', '/')
+$toolchainPath = Join-Path $env:RUNNER_TEMP 'rdt-windows-arm64-toolchain.cmake'
+$toolchainLines = @(
+  'set(CMAKE_SYSTEM_NAME Windows)'
+  'set(CMAKE_SYSTEM_PROCESSOR ARM64)'
+  "set(CMAKE_C_COMPILER `"$clPath`")"
+  "set(CMAKE_CXX_COMPILER `"$clPath`")"
+  'set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)'
+)
+Set-Content -LiteralPath $toolchainPath -Value $toolchainLines -Encoding ascii
 
 $configureArgs = @(
   '-S', $workerSource,
   '-B', $buildDir,
   '-G', 'Ninja',
+  "-DCMAKE_TOOLCHAIN_FILE:FILEPATH=$toolchainPath",
+  '-DCMAKE_SYSTEM_PROCESSOR:STRING=ARM64',
   "-DWHISPER_CPP_SOURCE=$whisperPath",
   "-DRDT_WHISPER_CPP_COMMIT=$sourceCommit",
   '-DRDT_ENABLE_CUDA=ON',
@@ -167,9 +178,18 @@ $configureArgs = @(
   "-DCUDA_cublas_LIBRARY:FILEPATH=$cudaLib/cublas.lib",
   "-DCUDA_cublasLt_LIBRARY:FILEPATH=$cudaLib/cublasLt.lib"
 )
+$configureLog = Join-Path $env:RUNNER_TEMP 'rdt-arm64-cuda-cmake-configure.log'
 Write-Host '===== CONFIGURE WINDOWS ARM64 CUDA WORKER (X64 HOST) ====='
-cmake @configureArgs
+cmake @configureArgs 2>&1 | Tee-Object -FilePath $configureLog
 if ($LASTEXITCODE -ne 0) { throw "ARM64 CUDA worker CMake configuration failed: $LASTEXITCODE" }
+
+$configureOutput = Get-Content -LiteralPath $configureLog -Raw
+if ($configureOutput -notmatch '(?m)^-- CMAKE_SYSTEM_PROCESSOR: ARM64$' -or
+    $configureOutput -notmatch '(?m)^-- GGML_SYSTEM_ARCH: ARM$') {
+  throw "CMake did not select ARM64 GGML sources. Expected CMAKE_SYSTEM_PROCESSOR=ARM64 and GGML_SYSTEM_ARCH=ARM. Inspect $configureLog"
+}
+Write-Host 'ARM64_CMAKE_TARGET_ARCHITECTURE=ARM64'
+Write-Host 'ARM64_GGML_SYSTEM_ARCH=ARM'
 
 Write-Host '===== BUILD WINDOWS ARM64 CUDA WORKER ====='
 cmake --build $buildDir --target rdt_whisper_worker --config Release --parallel 2 --verbose

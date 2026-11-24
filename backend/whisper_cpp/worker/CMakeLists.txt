@@ -97,11 +97,16 @@ set(GGML_METAL OFF CACHE BOOL "" FORCE)
 option(RDT_ENABLE_ARM_DOTPROD
   "Build an ARM64 worker optimized for ARM dot-product instructions" OFF)
 
-if(MSVC AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+if(MSVC AND (
+   CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64"
+   OR CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$"))
   # MSVC ARM requires GGML_NATIVE=ON. The portable worker keeps optional
   # instructions disabled. The separate optimized worker explicitly enables
   # dot-product code; Python selects it only after a Windows runtime CPU check.
   set(GGML_NATIVE ON CACHE BOOL "" FORCE)
+  # ARMv8-A mandates FMA. Preseed this capability because the x64 cross-build
+  # host cannot execute an ARM64 feature-probe binary.
+  set(GGML_MACHINE_SUPPORTS_fma ON CACHE BOOL "" FORCE)
   if(RDT_ENABLE_ARM_DOTPROD)
     # Test compiler/intrinsic support without executing dot-product code on
     # the build host. Runtime selection is separately gated by Windows.

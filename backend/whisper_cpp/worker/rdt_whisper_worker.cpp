@@ -389,12 +389,14 @@ static std::string safe_device_field(const char *value) {
 }
 
 static int list_provider_devices() {
+    const char *registry_name = nullptr;
+    const char *provider_name = nullptr;
 #if defined(RDT_ENABLE_CUDA) && RDT_ENABLE_CUDA
-    const char *registry_name = "CUDA";
-    const char *provider_name = "cuda";
+    registry_name = "CUDA";
+    provider_name = "cuda";
 #elif defined(RDT_ENABLE_VULKAN) && RDT_ENABLE_VULKAN
-    const char *registry_name = "Vulkan";
-    const char *provider_name = "vulkan";
+    registry_name = "Vulkan";
+    provider_name = "vulkan";
 #else
     std::cout << "DEVICE\t2\tcpu\t0\tCPU\tcpu\thost\t0" << std::endl;
     return 0;

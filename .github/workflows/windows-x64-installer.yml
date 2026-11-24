@@ -268,7 +268,7 @@ jobs:
                 Where-Object {
                   $_.FullName -notlike "$cudaLogDirectory\*" -and
                   $_.LastWriteTime -ge $scanCutoff -and
-                  ($_.Extension -match '^\.(log|txt|xml|json|nvi)$' -or
+                  ($_.Extension -match '^\.(log|txt|xml|json|nvi|nvx)$' -or
                    $_.Name -match '(?i)(setupapi|setup|install|cuda|nvidia|error|log)')
                 }
             }

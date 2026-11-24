@@ -90,6 +90,10 @@ class WindowsCudaInstallerDiagnosticsContractTests(unittest.TestCase):
         self.assertIn("$env:ProgramData\\NVIDIA Corporation", workflow)
         self.assertIn("$env:ProgramFiles\\NVIDIA Corporation\\Installer2", workflow)
         self.assertIn("cuda-installer-diagnostics.txt", workflow)
+        self.assertIn(
+            r"^\.(log|txt|xml|json|nvi|nvx)$",
+            workflow,
+        )
         self.assertIn("CUDA_INSTALLER_LOG_FILES_FOUND", workflow)
         self.assertIn("CUDA_INSTALLER_LOG_FILES_COPIED", workflow)
         self.assertIn("if: always()", workflow)

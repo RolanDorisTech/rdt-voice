@@ -12,6 +12,7 @@ class WindowsArm64CudaCrossCompileContractTests(unittest.TestCase):
         cls.cross_script = (ROOT / ".github/scripts/build-windows-arm64-cuda-worker.ps1").read_text(encoding="utf-8")
         cls.bundle = (ROOT / "rdt_connect/scripts/prepare-windows-bundle.ps1").read_text(encoding="utf-8")
         cls.stager = (ROOT / "backend/whisper_cpp/stage_cuda_runtime.py").read_text(encoding="utf-8")
+        cls.worker_cmake = (ROOT / "backend/whisper_cpp/worker/CMakeLists.txt").read_text(encoding="utf-8")
 
     def test_cross_worker_is_built_as_a_separate_x64_host_job(self):
         self.assertIn("build-cuda-arm64-worker:", self.workflow)
@@ -77,6 +78,26 @@ class WindowsArm64CudaCrossCompileContractTests(unittest.TestCase):
         self.assertIn("cuda_bin.rglob", self.stager)
         self.assertIn("expected_machine", self.stager)
         self.assertIn("resolve_windows_dll(name, search_dirs, expected_machine)", self.stager)
+
+
+    def test_ninja_cross_build_declares_arm64_target_architecture(self):
+        for value in (
+            "set(CMAKE_SYSTEM_NAME Windows)",
+            "set(CMAKE_SYSTEM_PROCESSOR ARM64)",
+            "-DCMAKE_TOOLCHAIN_FILE:FILEPATH=$toolchainPath",
+            "-DCMAKE_SYSTEM_PROCESSOR:STRING=ARM64",
+            "CMAKE_SYSTEM_PROCESSOR: ARM64",
+            "GGML_SYSTEM_ARCH: ARM",
+            "ARM64_CMAKE_TARGET_ARCHITECTURE=ARM64",
+        ):
+            self.assertIn(value, self.cross_script)
+
+        self.assertIn(
+            'CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$"',
+            self.worker_cmake,
+        )
+        self.assertIn("set(GGML_NATIVE ON CACHE BOOL", self.worker_cmake)
+        self.assertIn("set(GGML_MACHINE_SUPPORTS_fma ON CACHE BOOL", self.worker_cmake)
 
 
 if __name__ == "__main__":

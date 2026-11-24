@@ -55,5 +55,26 @@ class LinuxTlsTauriResourceContractTests(unittest.TestCase):
         )
 
 
+    def test_deep_link_trait_import_matches_supported_desktop_targets(self):
+        import re
+        source = (ROOT / "rdt_connect/src-tauri/src/main.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            source,
+            r'#\[cfg\(any\(target_os = "macos", windows, target_os = "linux"\)\)\]\s*use tauri_plugin_deep_link::DeepLinkExt;',
+        )
+
+    def test_about_item_is_guarded_for_macos(self):
+        import re
+        source = (ROOT / "rdt_connect/src-tauri/src/main.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            source,
+            r'#\[cfg\(target_os = "macos"\)\]\s+let about_item = MenuItem::with_id\(app, "tray-about-app"',
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

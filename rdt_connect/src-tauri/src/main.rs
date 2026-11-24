@@ -31,7 +31,7 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 use tauri_plugin_deep_link::DeepLinkExt;
 
 mod updater_version_policy;
@@ -10686,6 +10686,7 @@ fn build_tray_menu(app: &AppHandle, state: &BackendState) -> tauri::Result<Menu<
         "About RDT Connect",
         &[],
     );
+    #[cfg(target_os = "macos")]
     let about_item = MenuItem::with_id(app, "tray-about-app", &about_label, true, None::<&str>)?;
 
     let quit = MenuItem::with_id(

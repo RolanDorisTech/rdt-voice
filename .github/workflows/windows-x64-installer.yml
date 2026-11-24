@@ -215,7 +215,27 @@ jobs:
           if ($actual -ne $expected) { throw "CUDA installer checksum mismatch. Expected $expected; got $actual." }
           Write-Host "CUDA_INSTALLER_MD5=$actual"
           $installerArgs = @('-s', 'nvcc_13.5', 'cudart_13.5', 'cccl_13.5', 'crt_13.5', 'cublas_13.5', 'cublas_dev_13.5')
+          $installerStartedAt = (Get-Date).AddSeconds(-2)
           $installerProcess = Start-Process -FilePath $installer -ArgumentList $installerArgs -NoNewWindow -Wait -PassThru
+          $cudaLogDirectory = Join-Path $env:RUNNER_TEMP 'rdt-cuda-installer-logs'
+          New-Item -ItemType Directory -Force -Path $cudaLogDirectory | Out-Null
+          $logRoots = @(
+            $env:TEMP,
+            (Join-Path $env:LOCALAPPDATA 'Temp'),
+            (Join-Path $env:ProgramData 'NVIDIA Corporation'),
+            (Join-Path $env:ProgramFiles 'NVIDIA Corporation\Installer2')
+          ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) } | Select-Object -Unique
+          $installerLogs = foreach ($logRoot in $logRoots) {
+            Get-ChildItem -LiteralPath $logRoot -Filter '*.log' -File -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.LastWriteTime -ge $installerStartedAt }
+          }
+          $installerLogs = @($installerLogs | Sort-Object LastWriteTime -Descending | Select-Object -First 30)
+          foreach ($log in $installerLogs) {
+            $destination = Join-Path $cudaLogDirectory ("{0}-{1}" -f [guid]::NewGuid().ToString('N'), $log.Name)
+            try { Copy-Item -LiteralPath $log.FullName -Destination $destination -ErrorAction Stop }
+            catch { Write-Host "CUDA_LOG_COPY_WARNING=$($log.FullName): $($_.Exception.Message)" }
+          }
+          Write-Host "CUDA_INSTALLER_LOG_FILES_COPIED=$($installerLogs.Count)"
           Write-Host "CUDA_INSTALLER_EXIT_CODE=$($installerProcess.ExitCode)"
           if ($installerProcess.ExitCode -notin @(0, 3010)) { throw "CUDA toolkit installer failed: $($installerProcess.ExitCode)" }
           $defaultRoot = Join-Path $env:ProgramFiles 'NVIDIA GPU Computing Toolkit\CUDA\v13.5'
@@ -245,6 +265,14 @@ jobs:
           "CUDA_PATH_V13_5=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "CUDAToolkit_ROOT=$cudaRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "$((Split-Path -Path $nvcc -Parent))" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Upload CUDA installer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows-x64-cuda-installer-diagnostics
+          path: ${{ runner.temp }}/rdt-cuda-installer-logs/**
+          if-no-files-found: ignore
+          retention-days: 5
       - name: Prepare native Windows backend and web resources
         env:
           RDT_PYTHON: ${{ steps.setup-python.outputs.python-path }}

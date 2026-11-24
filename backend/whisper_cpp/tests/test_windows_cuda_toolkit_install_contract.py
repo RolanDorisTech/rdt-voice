@@ -18,6 +18,15 @@ class WindowsCudaToolkitInstallContractTests(unittest.TestCase):
         )[0]
         self.assertIn("Start-Process -FilePath $installer", step)
         self.assertIn("-Wait -PassThru", step)
+        args_line = next(line for line in step.splitlines() if "$installerArgs =" in line)
+        for component in ("nvcc_13.5", "cudart_13.5", "cccl_13.5", "crt_13.5", "cublas_13.5", "cublas_dev_13.5"):
+            self.assertIn(component, args_line)
+        self.assertIn("$installerStartedAt", step)
+        self.assertIn("rdt-cuda-installer-logs", step)
+        workflow = (ROOT / ".github/workflows/windows-x64-installer.yml").read_text()
+        self.assertIn("Upload CUDA installer diagnostics", workflow)
+        self.assertIn("actions/upload-artifact@v7.0.2", workflow)
+        self.assertIn("windows-x64-cuda-installer-diagnostics", workflow)
         self.assertIn("'nvcc_13.5'", step)
         self.assertIn("'cudart_13.5'", step)
         self.assertIn("'cccl_13.5'", step)

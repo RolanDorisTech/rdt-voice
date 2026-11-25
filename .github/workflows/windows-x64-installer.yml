@@ -215,6 +215,8 @@ jobs:
           if ($actual -ne $expected) { throw "CUDA installer checksum mismatch. Expected $expected; got $actual." }
           Write-Host "CUDA_INSTALLER_MD5=$actual"
           $installerArgs = @('-s', 'nvcc_13.5', 'cudart_13.5', 'cccl_13.5', 'crt_13.5', 'cublas_13.5', 'cublas_dev_13.5')
+$installerArgs += "-log:`"$cudaLogDirectory`""
+$installerArgs += '-loglevel:6'
           $cudaLogDirectory = Join-Path $env:RUNNER_TEMP 'rdt-cuda-installer-logs'
           New-Item -ItemType Directory -Path $cudaLogDirectory -Force | Out-Null
           $installerStdout = Join-Path $cudaLogDirectory 'cuda-installer.stdout.txt'
@@ -249,6 +251,7 @@ jobs:
           # 24-hour window so files with coarse or delayed timestamps are still captured.
           $scanCutoff = $installerStartedAt.AddHours(-24)
           $logRoots = @(
+            $cudaLogDirectory,
             $env:TEMP,
             "$env:LOCALAPPDATA\Temp",
             "$env:ProgramData\NVIDIA Corporation",
@@ -345,6 +348,32 @@ jobs:
             $roots += Get-ChildItem -LiteralPath $toolkitParent -Directory | Where-Object { $_.Name -match "13\.5" } | Select-Object -ExpandProperty FullName
           }
           $roots = @($roots | Select-Object -Unique)
+          $layoutLines = [System.Collections.Generic.List[string]]::new()
+          $layoutLines.Add("CUDA_DEFAULT_ROOT=$defaultRoot")
+          $inventoryPatterns = @(
+            $defaultRoot,
+            "$env:ProgramFiles\NVIDIA Corporation\Installer2\nvcc_13.5.*",
+            "$env:windir\Temp\*\cuda_nvcc\nvcc"
+          )
+          foreach ($pattern in $inventoryPatterns) {
+            $layoutLines.Add("SEARCH_PATTERN=$pattern")
+            try {
+              $entries = Get-ChildItem -Path $pattern -Force -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 400
+              foreach ($entry in $entries) {
+                if ($entry.PSIsContainer) {
+                  $layoutLines.Add("DIR=$($entry.FullName)")
+                } else {
+                  $layoutLines.Add("FILE=$($entry.FullName)|$($entry.Length)")
+                }
+              }
+            } catch {
+              $layoutLines.Add("SEARCH_ERROR=$($_.Exception.Message)")
+            }
+          }
+          $layoutPath = Join-Path $cudaLogDirectory 'nvcc-install-layout.txt'
+          Set-Content -LiteralPath $layoutPath -Value $layoutLines -Encoding utf8
+          Write-Host "CUDA_NVCC_LAYOUT_DIAGNOSTICS=$layoutPath"
           $cudaRoot = $null
           foreach ($candidate in $roots) {
             $compiler = Get-ChildItem -LiteralPath $candidate -Filter 'nvcc.exe' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1

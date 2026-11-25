@@ -180,6 +180,22 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     endforeach()
     message(STATUS "RDT Linux portable ARM64 baseline worker")
   endif()
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+  if(RDT_ENABLE_ARM_DOTPROD)
+    message(FATAL_ERROR
+      "RDT_ENABLE_ARM_DOTPROD requires MSVC ARM64 or Linux ARM64 with GCC/Clang")
+  endif()
+  set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+  # GGML 0.26 derives its option defaults from GGML_NATIVE_DEFAULT, which
+  # remains ON on a native x64 runner even when GGML_NATIVE is forced OFF.
+  # Explicitly pin every optional x86 feature OFF for the x86-64-v1 worker.
+  foreach(feature SSE42 AVX AVX_VNNI AVX2 BMI2 FMA F16C AVX512
+                  AVX512_VBMI AVX512_VNNI AVX512_BF16
+                  AMX_TILE AMX_INT8 AMX_BF16)
+    set("GGML_${feature}" OFF CACHE BOOL "" FORCE)
+  endforeach()
+  message(STATUS "RDT portable x86-64-v1 baseline worker")
 else()
   if(RDT_ENABLE_ARM_DOTPROD)
     message(FATAL_ERROR

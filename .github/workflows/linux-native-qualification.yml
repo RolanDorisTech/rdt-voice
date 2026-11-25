@@ -343,7 +343,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y libvulkan-dev glslc
+          sudo apt-get install -y libvulkan-dev glslc spirv-headers
           WHISPER_CPP_SOURCE="$RUNNER_TEMP/whisper.cpp" \
           RDT_LINUX_WORKER_BUILD_DIR="$RUNNER_TEMP/rdt-linux-workers" \
           RDT_BUILD_PYTHON="$RUNNER_TEMP/rdt-python/bin/python" \

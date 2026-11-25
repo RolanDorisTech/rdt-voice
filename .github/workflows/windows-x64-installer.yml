@@ -214,11 +214,9 @@ jobs:
           $actual = (Get-FileHash -LiteralPath $installer -Algorithm MD5).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "CUDA installer checksum mismatch. Expected $expected; got $actual." }
           Write-Host "CUDA_INSTALLER_MD5=$actual"
-          $installerArgs = @('-s', 'nvcc_13.5', 'cudart_13.5', 'cccl_13.5', 'crt_13.5', 'cublas_13.5', 'cublas_dev_13.5')
-$installerArgs += "-log:`"$cudaLogDirectory`""
-$installerArgs += '-loglevel:6'
           $cudaLogDirectory = Join-Path $env:RUNNER_TEMP 'rdt-cuda-installer-logs'
           New-Item -ItemType Directory -Path $cudaLogDirectory -Force | Out-Null
+          $installerArgs = @('-s', 'nvcc_13.5', 'cudart_13.5', 'cccl_13.5', 'crt_13.5', 'cublas_13.5', 'cublas_dev_13.5')
           $installerStdout = Join-Path $cudaLogDirectory 'cuda-installer.stdout.txt'
           $installerStderr = Join-Path $cudaLogDirectory 'cuda-installer.stderr.txt'
           $manifestPath = Join-Path $cudaLogDirectory 'cuda-installer-diagnostics.txt'

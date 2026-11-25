@@ -90,9 +90,12 @@ class WindowsCudaInstallerDiagnosticsContractTests(unittest.TestCase):
         self.assertIn("$env:ProgramData\\NVIDIA Corporation", workflow)
         self.assertIn("$env:ProgramFiles\\NVIDIA Corporation\\Installer2", workflow)
         self.assertIn("cuda-installer-diagnostics.txt", workflow)
-        self.assertIn('$installerArgs += "-log:`"$cudaLogDirectory`""', workflow)
-        self.assertIn("$installerArgs += '-loglevel:6'", workflow)
         self.assertIn("nvcc-install-layout.txt", workflow)
+        self.assertLess(
+            workflow.index("$cudaLogDirectory = Join-Path"),
+            workflow.index("$installerArgs = @("),
+        )
+        self.assertNotIn("$installerArgs += '-loglevel:", workflow)
         self.assertIn(r'"$env:ProgramFiles\NVIDIA Corporation\Installer2\nvcc_13.5.*"', workflow)
         self.assertIn(
             r"^\.(log|txt|xml|json|nvi|nvx)$",

@@ -3,6 +3,9 @@ run-name: Native Windows/Linux qualification — ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - "windows-linux-1d47-integration-20261122"
 
 permissions:
   contents: read
